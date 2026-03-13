@@ -86,7 +86,7 @@ const isStag = pce > 3.0 && gdp < 1.0;
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
-    version: '3.0.0',
+    version: '3.5.0',
     name: 'Druck Engine — Trifecta Analyzer',
     timestamp: new Date().toISOString(),
   });
@@ -165,6 +165,50 @@ app.get('/api/argentina', (_req, res) => {
   });
 });
 
+app.get('/api/global-markets', (_req, res) => {
+  // Simulated time series for global indices
+  const nzealand = randomWalk(8200, N, 0.001, 0.015);
+  const mexico = randomWalk(22500, N, 0.0015, 0.016);
+  const turkey = randomWalk(8500, N, 0.002, 0.025);
+  const skorea = randomWalk(2650, N, 0.0018, 0.018);
+  const china = randomWalk(3100, N, 0.0005, 0.020);
+  const uk = randomWalk(8100, N, 0.0010, 0.014);
+  const germany = randomWalk(20500, N, 0.0012, 0.016);
+  const japan = randomWalk(32800, N, 0.0008, 0.012);
+  const india = randomWalk(72500, N, 0.0020, 0.019);
+  const brazil = randomWalk(135000, N, 0.0015, 0.022);
+
+  const countries = [
+    { name: 'Argentina', etf: 'ARGT', index: 'Merval', pe: 6.5, fwdPe: 4.2, spread: 950, spread_prev: 980, proxyPrice: 68.5, proxyChg: 2.1, signal: 'RE-RATING', ytd_return: 28.5, breadth_pct: 72 },
+    { name: 'Brazil', etf: 'EWZ', index: 'Bovespa', pe: 11.2, fwdPe: 9.8, spread: 320, spread_prev: 315, proxyPrice: 52.3, proxyChg: 1.8, signal: 'STABLE', ytd_return: 15.2, breadth_pct: 65 },
+    { name: 'India', etf: 'INDA', index: 'Nifty 50', pe: 22.5, fwdPe: 19.2, spread: 180, spread_prev: 175, proxyPrice: 68.2, proxyChg: 0.9, signal: 'STABLE', ytd_return: 12.8, breadth_pct: 58 },
+    { name: 'Japan', etf: 'EWJ', index: 'Nikkei 225', pe: 18.5, fwdPe: 16.1, spread: 120, spread_prev: 118, proxyPrice: 125.6, proxyChg: 1.5, signal: 'RISING', ytd_return: 8.5, breadth_pct: 62 },
+    { name: 'Germany', etf: 'EWG', index: 'DAX', pe: 13.8, fwdPe: 12.1, spread: 95, spread_prev: 92, proxyPrice: 42.1, proxyChg: 0.8, signal: 'STABLE', ytd_return: 6.2, breadth_pct: 55 },
+    { name: 'UK', etf: 'EWU', index: 'FTSE 100', pe: 12.5, fwdPe: 11.2, spread: 110, spread_prev: 108, proxyPrice: 35.8, proxyChg: 0.5, signal: 'STABLE', ytd_return: 4.5, breadth_pct: 52 },
+    { name: 'China', etf: 'FXI', index: 'Hang Seng', pe: 9.8, fwdPe: 8.5, spread: 280, spread_prev: 275, proxyPrice: 22.3, proxyChg: -1.2, signal: 'DETERIORATING', ytd_return: -8.5, breadth_pct: 38 },
+    { name: 'South Korea', etf: 'EWY', index: 'KOSPI', pe: 10.5, fwdPe: 9.2, spread: 185, spread_prev: 182, proxyPrice: 78.5, proxyChg: 2.1, signal: 'RISING', ytd_return: 18.2, breadth_pct: 68 },
+    { name: 'Mexico', etf: 'EWW', index: 'IPC', pe: 14.2, fwdPe: 12.5, spread: 210, spread_prev: 215, proxyPrice: 88.3, proxyChg: 1.5, signal: 'STABLE', ytd_return: 10.8, breadth_pct: 60 },
+    { name: 'Turkey', etf: 'TUR', index: 'BIST 100', pe: 8.2, fwdPe: 6.8, spread: 550, spread_prev: 545, proxyPrice: 31.2, proxyChg: 3.5, signal: 'RE-RATING', ytd_return: 35.2, breadth_pct: 75 },
+  ];
+
+  const countryData = countries.map((c, idx) => {
+    const prices = [nzealand, mexico, turkey, skorea, china, uk, germany, japan, india, brazil][idx];
+    return {
+      ...c,
+      prices: prices.map(v => +v.toFixed(2)),
+    };
+  });
+
+  res.json({
+    dates,
+    countries: countryData,
+    time_series: {
+      dates,
+      countries: countries.map(c => ({ name: c.name, prices: countryData.find(cd => cd.name === c.name)?.prices || [] })),
+    },
+  });
+});
+
 app.get('/api/macro', (_req, res) => {
   res.json({
     dates,
@@ -174,19 +218,194 @@ app.get('/api/macro', (_req, res) => {
     hy_spreads: hySpreads.map(v => +v.toFixed(2)),
     m2: m2.map(v => +v.toFixed(2)),
     indicators: {
-      pce, gdp, cap_util: 78.2,
-      yield_curve_bps: 18,
-      m2_yoy: 0.8,
+      pce: { trailing_12m: 2.8, latest: 2.6, trend: 'FALLING' },
+      gdp: { trailing_12m: 2.1, latest: 2.4, trend: 'RISING' },
+      cap_util: { trailing_12m: 78.2, latest: 77.8, trend: 'FALLING' },
+      yield_curve_bps: { trailing_12m: 18, latest: 25, trend: 'STEEPENING' },
+      unemployment: { trailing_12m: 3.9, latest: 4.1, trend: 'RISING' },
+      cpi_yoy: { trailing_12m: 3.2, latest: 2.9, trend: 'FALLING' },
+      ism_mfg: { trailing_12m: 48.5, latest: 50.2, trend: 'RISING' },
+      m2_yoy: { trailing_12m: 0.8, latest: 1.2, trend: 'RISING' },
       is_stagflation: isStag,
     },
+  });
+});
+
+app.get('/api/gurus', (_req, res) => {
+  const gurus = [
+    {
+      name: 'Bill Ackman',
+      fund: 'Pershing Square',
+      aum: '$12B',
+      style: 'Concentrated Activist',
+      holdings: [
+        { ticker: 'HHH', action: 'BUY', shares_chg: '+500K', pct_portfolio: 18.5, sector: 'Real Estate' },
+        { ticker: 'UMC', action: 'BUY', shares_chg: '+300K', pct_portfolio: 12.3, sector: 'Technology' },
+        { ticker: 'IQ', action: 'HOLD', shares_chg: '+50K', pct_portfolio: 8.7, sector: 'Technology' },
+        { ticker: 'PHM', action: 'BUY', shares_chg: '+200K', pct_portfolio: 10.2, sector: 'Consumer Disc' },
+        { ticker: 'XOM', action: 'BUY', shares_chg: '+100K', pct_portfolio: 6.8, sector: 'Energy' },
+      ],
+      quarterly_moves: { new_positions: 2, increased: 3, decreased: 1, sold_out: 0 },
+      conviction_score: 0.85,
+    },
+    {
+      name: 'David Tepper',
+      fund: 'Appaloosa Management',
+      aum: '$18B',
+      style: 'Multi-Strategy',
+      holdings: [
+        { ticker: 'BAC', action: 'BUY', shares_chg: '+1.5M', pct_portfolio: 14.2, sector: 'Financials' },
+        { ticker: 'GS', action: 'BUY', shares_chg: '+800K', pct_portfolio: 10.5, sector: 'Financials' },
+        { ticker: 'PLD', action: 'SELL', shares_chg: '-300K', pct_portfolio: -5.2, sector: 'Real Estate' },
+        { ticker: 'NVDA', action: 'BUY', shares_chg: '+200K', pct_portfolio: 9.8, sector: 'Technology' },
+        { ticker: 'AAPL', action: 'HOLD', shares_chg: '+100K', pct_portfolio: 7.3, sector: 'Technology' },
+      ],
+      quarterly_moves: { new_positions: 1, increased: 4, decreased: 2, sold_out: 1 },
+      conviction_score: 0.78,
+    },
+    {
+      name: 'Stanley Druckenmiller',
+      fund: 'Duquesne Family Office',
+      aum: '$6.5B',
+      style: 'Macro Systematic',
+      holdings: [
+        { ticker: 'TLT', action: 'BUY', shares_chg: '+400K', pct_portfolio: 16.8, sector: 'Fixed Income' },
+        { ticker: 'GLD', action: 'BUY', shares_chg: '+600K', pct_portfolio: 13.2, sector: 'Commodities' },
+        { ticker: 'EEM', action: 'BUY', shares_chg: '+500K', pct_portfolio: 11.5, sector: 'Equities' },
+        { ticker: 'SPY', action: 'HOLD', shares_chg: '+200K', pct_portfolio: 9.8, sector: 'Equities' },
+        { ticker: 'EWY', action: 'BUY', shares_chg: '+300K', pct_portfolio: 8.5, sector: 'Equities' },
+      ],
+      quarterly_moves: { new_positions: 2, increased: 2, decreased: 1, sold_out: 0 },
+      conviction_score: 0.82,
+    },
+    {
+      name: 'George Soros',
+      fund: 'Soros Fund Management',
+      aum: '$8.2B',
+      style: 'Macro Discretionary',
+      holdings: [
+        { ticker: 'EWA', action: 'BUY', shares_chg: '+700K', pct_portfolio: 15.5, sector: 'Equities' },
+        { ticker: 'FXI', action: 'SELL', shares_chg: '-900K', pct_portfolio: -12.3, sector: 'Equities' },
+        { ticker: 'TLT', action: 'BUY', shares_chg: '+500K', pct_portfolio: 14.8, sector: 'Fixed Income' },
+        { ticker: 'GLD', action: 'BUY', shares_chg: '+400K', pct_portfolio: 11.2, sector: 'Commodities' },
+        { ticker: 'EWG', action: 'BUY', shares_chg: '+300K', pct_portfolio: 9.1, sector: 'Equities' },
+      ],
+      quarterly_moves: { new_positions: 1, increased: 3, decreased: 2, sold_out: 1 },
+      conviction_score: 0.75,
+    },
+    {
+      name: 'Seth Klarman',
+      fund: 'Baupost Group',
+      aum: '$35B',
+      style: 'Value / Distressed',
+      holdings: [
+        { ticker: 'BAC', action: 'BUY', shares_chg: '+1.2M', pct_portfolio: 11.8, sector: 'Financials' },
+        { ticker: 'C', action: 'BUY', shares_chg: '+800K', pct_portfolio: 9.5, sector: 'Financials' },
+        { ticker: 'PG', action: 'HOLD', shares_chg: '+100K', pct_portfolio: 7.2, sector: 'Consumer Staples' },
+        { ticker: 'KO', action: 'HOLD', shares_chg: '+50K', pct_portfolio: 6.8, sector: 'Consumer Staples' },
+        { ticker: 'MCD', action: 'BUY', shares_chg: '+300K', pct_portfolio: 8.5, sector: 'Consumer Disc' },
+      ],
+      quarterly_moves: { new_positions: 0, increased: 2, decreased: 1, sold_out: 0 },
+      conviction_score: 0.88,
+    },
+    {
+      name: 'Glenn Greenberg',
+      fund: 'Brave Warrior Advisors',
+      aum: '$3.5B',
+      style: 'Deep Value',
+      holdings: [
+        { ticker: 'WFC', action: 'BUY', shares_chg: '+500K', pct_portfolio: 13.2, sector: 'Financials' },
+        { ticker: 'JPM', action: 'BUY', shares_chg: '+300K', pct_portfolio: 10.8, sector: 'Financials' },
+        { ticker: 'IBM', action: 'HOLD', shares_chg: '+100K', pct_portfolio: 7.5, sector: 'Technology' },
+        { ticker: 'KMB', action: 'HOLD', shares_chg: '+50K', pct_portfolio: 6.2, sector: 'Consumer Staples' },
+        { ticker: 'COP', action: 'BUY', shares_chg: '+200K', pct_portfolio: 8.9, sector: 'Energy' },
+      ],
+      quarterly_moves: { new_positions: 1, increased: 2, decreased: 0, sold_out: 0 },
+      conviction_score: 0.81,
+    },
+    {
+      name: 'David Einhorn',
+      fund: 'Greenlight Capital',
+      aum: '$3.2B',
+      style: 'Long/Short Activist',
+      holdings: [
+        { ticker: 'MU', action: 'BUY', shares_chg: '+400K', pct_portfolio: 12.5, sector: 'Technology' },
+        { ticker: 'SCHW', action: 'BUY', shares_chg: '+300K', pct_portfolio: 9.8, sector: 'Financials' },
+        { ticker: 'BLK', action: 'HOLD', shares_chg: '+100K', pct_portfolio: 7.5, sector: 'Financials' },
+        { ticker: 'APE', action: 'SELL', shares_chg: '-500K', pct_portfolio: -11.2, sector: 'Consumer Disc' },
+        { ticker: 'EQR', action: 'HOLD', shares_chg: '+50K', pct_portfolio: 6.5, sector: 'Real Estate' },
+      ],
+      quarterly_moves: { new_positions: 1, increased: 2, decreased: 2, sold_out: 1 },
+      conviction_score: 0.72,
+    },
+    {
+      name: 'David Adams',
+      fund: 'Adams Capital',
+      aum: '$1.8B',
+      style: 'Growth at Value',
+      holdings: [
+        { ticker: 'MSFT', action: 'BUY', shares_chg: '+200K', pct_portfolio: 14.2, sector: 'Technology' },
+        { ticker: 'V', action: 'BUY', shares_chg: '+250K', pct_portfolio: 11.8, sector: 'Financials' },
+        { ticker: 'MA', action: 'BUY', shares_chg: '+200K', pct_portfolio: 10.5, sector: 'Financials' },
+        { ticker: 'PG', action: 'HOLD', shares_chg: '+100K', pct_portfolio: 8.2, sector: 'Consumer Staples' },
+        { ticker: 'COST', action: 'BUY', shares_chg: '+150K', pct_portfolio: 9.8, sector: 'Consumer Staples' },
+      ],
+      quarterly_moves: { new_positions: 1, increased: 3, decreased: 0, sold_out: 0 },
+      conviction_score: 0.83,
+    },
+  ];
+
+  // Aggregate data
+  const allTickers = gurus.flatMap(g => g.holdings.map(h => h.ticker));
+  const tickerCounts: Record<string, { buy: number; sell: number }> = {};
+  allTickers.forEach(ticker => {
+    if (!tickerCounts[ticker]) tickerCounts[ticker] = { buy: 0, sell: 0 };
+  });
+  gurus.forEach(g => {
+    g.holdings.forEach(h => {
+      if (h.action === 'BUY') tickerCounts[h.ticker].buy++;
+      else if (h.action === 'SELL') tickerCounts[h.ticker].sell++;
+    });
+  });
+
+  const most_bought = Object.entries(tickerCounts)
+    .filter(([, v]) => v.buy >= 2)
+    .sort((a, b) => b[1].buy - a[1].buy)
+    .slice(0, 10)
+    .map(([ticker, v]) => ({ ticker, guru_count: v.buy }));
+
+  const most_sold = Object.entries(tickerCounts)
+    .filter(([, v]) => v.sell >= 1)
+    .sort((a, b) => b[1].sell - a[1].sell)
+    .slice(0, 5)
+    .map(([ticker, v]) => ({ ticker, guru_count: v.sell }));
+
+  const sectorConcentration: Record<string, number> = {};
+  gurus.forEach(g => {
+    g.holdings.forEach(h => {
+      if (!sectorConcentration[h.sector]) sectorConcentration[h.sector] = 0;
+      sectorConcentration[h.sector]++;
+    });
+  });
+
+  const consensus_picks = Object.entries(tickerCounts)
+    .filter(([, v]) => v.buy >= 3)
+    .map(([ticker]) => ticker);
+
+  res.json({
+    gurus,
+    aggregate: {
+      most_bought_tickers: most_bought,
+      most_sold_tickers: most_sold,
+      sector_concentration: sectorConcentration,
+    },
+    consensus_picks,
   });
 });
 
 app.get('/api/sectors', (_req, res) => {
   res.json({
     sectors: [
-      { name: 'Airlines', fwd18m: -0.15, inst_conc: 0.12, pe: 8.2, fwd_pe: 6.1, capacity: 'Low' },
-      { name: 'Chemicals', fwd18m: -0.08, inst_conc: 0.18, pe: 14.5, fwd_pe: 11.2, capacity: 'Low' },
       { name: 'Financials', fwd18m: 0.12, inst_conc: 0.42, pe: 12.8, fwd_pe: 10.5, capacity: 'Med' },
       { name: 'Technology', fwd18m: 0.35, inst_conc: 0.68, pe: 28.5, fwd_pe: 24.1, capacity: 'High' },
       { name: 'Energy', fwd18m: 0.05, inst_conc: 0.35, pe: 10.2, fwd_pe: 9.8, capacity: 'Med' },
@@ -194,14 +413,17 @@ app.get('/api/sectors', (_req, res) => {
       { name: 'Industrials', fwd18m: 0.08, inst_conc: 0.30, pe: 16.7, fwd_pe: 13.9, capacity: 'Med' },
       { name: 'Materials', fwd18m: -0.05, inst_conc: 0.15, pe: 11.8, fwd_pe: 9.5, capacity: 'Low' },
       { name: 'Consumer Disc', fwd18m: 0.22, inst_conc: 0.52, pe: 22.1, fwd_pe: 18.4, capacity: 'High' },
+      { name: 'Consumer Staples', fwd18m: 0.08, inst_conc: 0.38, pe: 19.2, fwd_pe: 17.1, capacity: 'Med' },
       { name: 'Utilities', fwd18m: 0.02, inst_conc: 0.20, pe: 16.0, fwd_pe: 15.2, capacity: 'Med' },
       { name: 'Real Estate', fwd18m: -0.12, inst_conc: 0.10, pe: 19.5, fwd_pe: 14.8, capacity: 'Low' },
-      { name: 'Argentina', fwd18m: 0.28, inst_conc: 0.08, pe: 6.5, fwd_pe: 4.2, capacity: 'Low' },
+      { name: 'Communication Services', fwd18m: 0.15, inst_conc: 0.55, pe: 24.3, fwd_pe: 21.5, capacity: 'High' },
+      { name: 'Airlines', fwd18m: -0.15, inst_conc: 0.12, pe: 8.2, fwd_pe: 6.1, capacity: 'Low' },
+      { name: 'Chemicals', fwd18m: -0.08, inst_conc: 0.18, pe: 14.5, fwd_pe: 11.2, capacity: 'Low' },
     ],
     smart_money: {
-      sectors: ['Financials', 'Energy', 'Tech', 'Healthcare', 'Airlines', 'Materials', 'Argentina'],
-      buying: [72, 58, 45, 52, 38, 41, 65],
-      selling: [28, 35, 62, 40, 18, 30, 12],
+      sectors: ['Financials', 'Energy', 'Technology', 'Healthcare', 'Airlines', 'Materials', 'Industrials'],
+      buying: [72, 58, 45, 52, 38, 41, 52],
+      selling: [28, 35, 62, 40, 18, 30, 25],
     },
   });
 });
@@ -270,12 +492,26 @@ const industryStocks: Record<string, Array<{ticker: string, name: string, pe: nu
     { ticker: 'DOW', name: 'Dow Inc', pe: 18.5, fwdPe: 14.1, mktCap: '$38B', above50d: false, insiderBuy: 5, insiderSell: 1, guruBuy: 5, guruSell: 2, dayChg: -1.2, weekChg: -2.5, monthChg: -3.8 },
     { ticker: 'LIN', name: 'Linde', pe: 32.1, fwdPe: 28.5, mktCap: '$210B', above50d: true, insiderBuy: 1, insiderSell: 1, guruBuy: 7, guruSell: 4, dayChg: 0.3, weekChg: 1.1, monthChg: 3.2 },
   ],
-  argentina: [
-    { ticker: 'GGAL', name: 'Grupo Galicia', pe: 5.8, fwdPe: 3.5, mktCap: '$8.5B', above50d: true, insiderBuy: 10, insiderSell: 0, guruBuy: 6, guruSell: 1, dayChg: 1.5, weekChg: 5.8, monthChg: 18.5 },
-    { ticker: 'YPF', name: 'YPF SA', pe: 4.2, fwdPe: 3.1, mktCap: '$12B', above50d: true, insiderBuy: 8, insiderSell: 0, guruBuy: 4, guruSell: 0, dayChg: 2.8, weekChg: 7.2, monthChg: 22.1 },
-    { ticker: 'BMA', name: 'Banco Macro', pe: 6.1, fwdPe: 4.2, mktCap: '$5.2B', above50d: true, insiderBuy: 6, insiderSell: 0, guruBuy: 3, guruSell: 0, dayChg: 1.2, weekChg: 4.5, monthChg: 15.8 },
-    { ticker: 'PAM', name: 'Pampa Energia', pe: 7.5, fwdPe: 5.1, mktCap: '$6.8B', above50d: true, insiderBuy: 5, insiderSell: 0, guruBuy: 2, guruSell: 0, dayChg: 0.8, weekChg: 3.2, monthChg: 12.5 },
-    { ticker: 'TECO2', name: 'Telecom Arg', pe: 8.2, fwdPe: 5.5, mktCap: '$4.5B', above50d: true, insiderBuy: 7, insiderSell: 0, guruBuy: 3, guruSell: 0, dayChg: 2.1, weekChg: 6.1, monthChg: 20.2 },
+  consumer_staples: [
+    { ticker: 'PG', name: 'Procter & Gamble', pe: 24.5, fwdPe: 22.1, mktCap: '$380B', above50d: true, insiderBuy: 2, insiderSell: 1, guruBuy: 14, guruSell: 3, dayChg: 0.3, weekChg: 1.2, monthChg: 3.8 },
+    { ticker: 'KO', name: 'Coca-Cola', pe: 26.2, fwdPe: 23.5, mktCap: '$285B', above50d: true, insiderBuy: 1, insiderSell: 0, guruBuy: 10, guruSell: 2, dayChg: 0.1, weekChg: 0.8, monthChg: 2.5 },
+    { ticker: 'MCD', name: 'McDonald\'s', pe: 28.8, fwdPe: 25.2, mktCap: '$215B', above50d: true, insiderBuy: 3, insiderSell: 1, guruBuy: 12, guruSell: 4, dayChg: 0.5, weekChg: 1.5, monthChg: 4.2 },
+    { ticker: 'WMT', name: 'Walmart', pe: 22.5, fwdPe: 20.8, mktCap: '$420B', above50d: true, insiderBuy: 2, insiderSell: 0, guruBuy: 13, guruSell: 2, dayChg: 0.2, weekChg: 1.1, monthChg: 3.5 },
+    { ticker: 'KMB', name: 'Kimberly-Clark', pe: 19.8, fwdPe: 18.5, mktCap: '$48B', above50d: true, insiderBuy: 1, insiderSell: 1, guruBuy: 6, guruSell: 2, dayChg: -0.1, weekChg: 0.5, monthChg: 2.1 },
+  ],
+  communication_services: [
+    { ticker: 'GOOGL', name: 'Alphabet', pe: 25.1, fwdPe: 21.8, mktCap: '$2.1T', above50d: true, insiderBuy: 0, insiderSell: 3, guruBuy: 16, guruSell: 5, dayChg: -0.2, weekChg: 0.8, monthChg: 2.8 },
+    { ticker: 'META', name: 'Meta Platforms', pe: 28.3, fwdPe: 23.5, mktCap: '$1.4T', above50d: false, insiderBuy: 0, insiderSell: 6, guruBuy: 12, guruSell: 4, dayChg: -1.8, weekChg: -2.5, monthChg: -1.2 },
+    { ticker: 'NFLX', name: 'Netflix', pe: 38.5, fwdPe: 32.2, mktCap: '$280B', above50d: true, insiderBuy: 0, insiderSell: 4, guruBuy: 8, guruSell: 3, dayChg: 1.2, weekChg: 3.5, monthChg: 8.2 },
+    { ticker: 'DIS', name: 'The Walt Disney Company', pe: 32.1, fwdPe: 28.5, mktCap: '$210B', above50d: false, insiderBuy: 1, insiderSell: 2, guruBuy: 7, guruSell: 5, dayChg: -0.8, weekChg: -1.5, monthChg: -0.5 },
+    { ticker: 'CMCSA', name: 'Comcast', pe: 15.8, fwdPe: 14.2, mktCap: '$195B', above50d: true, insiderBuy: 2, insiderSell: 1, guruBuy: 5, guruSell: 2, dayChg: 0.3, weekChg: 1.2, monthChg: 3.1 },
+  ],
+  industrials: [
+    { ticker: 'BA', name: 'Boeing', pe: 18.5, fwdPe: 14.2, mktCap: '$195B', above50d: false, insiderBuy: 8, insiderSell: 2, guruBuy: 9, guruSell: 5, dayChg: -2.5, weekChg: -5.2, monthChg: -8.5 },
+    { ticker: 'GE', name: 'General Electric', pe: 22.5, fwdPe: 19.8, mktCap: '$205B', above50d: true, insiderBuy: 3, insiderSell: 1, guruBuy: 8, guruSell: 3, dayChg: 0.5, weekChg: 1.8, monthChg: 4.2 },
+    { ticker: 'CAT', name: 'Caterpillar', pe: 19.2, fwdPe: 16.5, mktCap: '$125B', above50d: true, insiderBuy: 2, insiderSell: 1, guruBuy: 7, guruSell: 3, dayChg: 0.8, weekChg: 2.1, monthChg: 5.5 },
+    { ticker: 'RTX', name: 'Raytheon Technologies', pe: 20.5, fwdPe: 18.2, mktCap: '$235B', above50d: true, insiderBuy: 1, insiderSell: 1, guruBuy: 6, guruSell: 2, dayChg: 0.3, weekChg: 1.5, monthChg: 3.8 },
+    { ticker: 'MMM', name: '3M Company', pe: 18.8, fwdPe: 16.5, mktCap: '$98B', above50d: false, insiderBuy: 5, insiderSell: 2, guruBuy: 4, guruSell: 3, dayChg: -0.5, weekChg: -1.2, monthChg: 0.8 },
   ],
 };
 
@@ -318,7 +554,7 @@ app.get('/api/industries/:sector', (req, res) => {
       prices: sectorPrices.map(v => +v.toFixed(2)),
     },
     regime_tag: isStag ? (
-      sector === 'financials' || sector === 'argentina' || sector === 'materials' ? 'Core Survivor' :
+      sector === 'financials' || sector === 'materials' || sector === 'consumer_staples' ? 'Core Survivor' :
       sector === 'airlines' ? 'HIGH RISK' :
       sector === 'technology' ? 'Grey Out' : 'Neutral'
     ) : 'Standard',
