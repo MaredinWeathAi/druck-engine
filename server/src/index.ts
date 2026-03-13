@@ -86,7 +86,7 @@ const isStag = pce > 3.0 && gdp < 1.0;
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
-    version: '3.5.0',
+    version: '4.0.0',
     name: 'Druck Engine — Trifecta Analyzer',
     timestamp: new Date().toISOString(),
   });
