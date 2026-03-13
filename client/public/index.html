@@ -44,15 +44,26 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
 .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
 .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
-/* Dual Metric (for regime indicators) */
-.dual-metric{background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:10px}
-.dual-metric-row{display:flex;justify-content:space-between;align-items:center;font-size:12px}
-.dual-metric-row .label{color:var(--dim);text-transform:uppercase;letter-spacing:0.5px;font-weight:600}
-.dual-metric-row .value{font-size:16px;font-weight:700;color:var(--text)}
-.trend-arrow{display:inline-block;margin-left:6px;font-size:14px}
-.trend-arrow.rising{color:var(--green)}
-.trend-arrow.falling{color:var(--red)}
-.trend-arrow.flat{color:var(--accent)}
+/* Regime Indicator Cards */
+.regime-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;position:relative;overflow:hidden}
+.regime-card .regime-status-bar{position:absolute;top:0;left:0;right:0;height:3px}
+.regime-card .regime-status-bar.healthy{background:var(--green)}
+.regime-card .regime-status-bar.warning{background:var(--accent)}
+.regime-card .regime-status-bar.danger{background:var(--red)}
+.regime-card .regime-title{font-size:13px;font-weight:700;color:var(--text);letter-spacing:0.3px;margin-top:4px}
+.regime-card .regime-context{font-size:10px;color:var(--dim);line-height:1.4;margin-bottom:4px;font-style:italic}
+.regime-readings{display:flex;gap:12px}
+.regime-reading{flex:1;background:rgba(255,255,255,0.03);border-radius:6px;padding:10px;text-align:center}
+.regime-reading .reading-label{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:600;margin-bottom:4px}
+.regime-reading .reading-value{font-size:20px;font-weight:800;color:var(--text)}
+.regime-reading .reading-value.healthy{color:var(--green)}
+.regime-reading .reading-value.warning{color:var(--accent)}
+.regime-reading .reading-value.danger{color:var(--red)}
+.regime-reading .reading-trend{font-size:11px;margin-top:3px;font-weight:600}
+.regime-reading .reading-trend.rising{color:var(--green)}
+.regime-reading .reading-trend.falling{color:var(--red)}
+.regime-reading .reading-trend.flat{color:var(--accent)}
+.regime-section-intro{font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:16px;padding:12px 16px;background:rgba(245,158,11,0.05);border-left:3px solid var(--accent);border-radius:0 6px 6px 0}
 /* Tables and Lists */
 table{width:100%;border-collapse:collapse}
 th{text-align:left;padding:12px;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:600}
@@ -238,7 +249,10 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       </div>
 
       <div class="card">
-        <h3>Regime Indicators</h3>
+        <h3>Macro Regime Indicators</h3>
+        <div class="regime-section-intro">
+          These 8 indicators define the current economic regime. Each shows the <strong>trailing 12-month average</strong> (baseline trend) vs. the <strong>latest reading</strong> (current direction). Color bars signal health: <span style="color:var(--green);font-weight:700">green</span> = favorable for risk assets, <span style="color:var(--accent);font-weight:700">amber</span> = monitor closely, <span style="color:var(--red);font-weight:700">red</span> = caution.
+        </div>
         <div class="grid-4" id="regime-indicators">
           <!-- Populated by JS -->
         </div>
@@ -681,27 +695,38 @@ function loadDashboard() {
   apiCall('/api/macro').then(function(data) {
     var indicators = data.indicators;
     var indicatorList = ['pce', 'gdp', 'unemployment', 'cpi_yoy', 'ism_mfg', 'cap_util', 'yield_curve_bps', 'm2_yoy'];
-    var labels = {
-      pce: 'PCE',
-      gdp: 'GDP',
-      unemployment: 'Unemployment',
-      cpi_yoy: 'CPI YoY',
-      ism_mfg: 'ISM Mfg',
-      cap_util: 'Cap Util',
-      yield_curve_bps: 'Yield Curve',
-      m2_yoy: 'M2 YoY'
+    var meta = {
+      pce: { name: 'PCE Inflation', unit: '%', context: 'Fed\'s preferred inflation gauge. Above 3% = hawkish pressure, below 2% = dovish tailwind.', healthFn: function(v){ return v < 2.5 ? 'healthy' : v < 3.0 ? 'warning' : 'danger'; } },
+      gdp: { name: 'GDP Growth', unit: '%', context: 'Real economic output. Below 1% = recession risk, above 2.5% = expansion.', healthFn: function(v){ return v >= 2.0 ? 'healthy' : v >= 1.0 ? 'warning' : 'danger'; } },
+      unemployment: { name: 'Unemployment Rate', unit: '%', context: 'Labor market slack. Rising unemployment signals slowdown; watch for 0.5%+ jumps (Sahm Rule).', healthFn: function(v){ return v < 4.0 ? 'healthy' : v < 5.0 ? 'warning' : 'danger'; } },
+      cpi_yoy: { name: 'CPI Year-over-Year', unit: '%', context: 'Headline consumer inflation. Above 3.5% erodes purchasing power and forces Fed tightening.', healthFn: function(v){ return v < 2.5 ? 'healthy' : v < 3.5 ? 'warning' : 'danger'; } },
+      ism_mfg: { name: 'ISM Manufacturing', unit: '', context: 'Factory activity pulse. Above 50 = expansion, below 50 = contraction. Leads earnings by ~3 months.', healthFn: function(v){ return v >= 50 ? 'healthy' : v >= 47 ? 'warning' : 'danger'; } },
+      cap_util: { name: 'Capacity Utilization', unit: '%', context: 'How much industrial capacity is in use. Above 80% = inflationary pressure, below 75% = slack.', healthFn: function(v){ return v >= 75 && v <= 80 ? 'healthy' : (v > 80 || v < 72) ? 'danger' : 'warning'; } },
+      yield_curve_bps: { name: 'Yield Curve (10Y-2Y)', unit: 'bps', context: 'Spread between long and short rates. Inverted (negative) = recession signal. Steepening = recovery.', healthFn: function(v){ return v > 50 ? 'healthy' : v > 0 ? 'warning' : 'danger'; } },
+      m2_yoy: { name: 'M2 Money Supply YoY', unit: '%', context: 'Liquidity growth rate. Positive = fuel for assets. Negative = monetary contraction headwind.', healthFn: function(v){ return v > 3 ? 'healthy' : v > 0 ? 'warning' : 'danger'; } }
     };
 
     var html = '';
     indicatorList.forEach(function(key) {
       var ind = indicators[key];
-      if (!ind) return;
+      var m = meta[key];
+      if (!ind || !m) return;
       var trend = ind.trend.toLowerCase();
-      var arrow = trend === 'rising' ? '↑' : trend === 'falling' ? '↓' : '→';
-      var arrowClass = trend === 'rising' ? 'rising' : trend === 'falling' ? 'falling' : 'flat';
-      html += '<div class="dual-metric">';
-      html += '<div class="dual-metric-row"><span class="label">12M AVG</span><span class="value">' + ind.trailing_12m.toFixed(1) + '</span></div>';
-      html += '<div class="dual-metric-row"><span class="label">LATEST</span><span class="value">' + ind.latest.toFixed(1) + ' <span class="trend-arrow ' + arrowClass + '">' + arrow + '</span></span></div>';
+      var trendLabel = trend === 'rising' ? '↑ Rising' : trend === 'falling' ? '↓ Falling' : trend === 'steepening' ? '↑ Steepening' : trend === 'flattening' ? '↓ Flattening' : '→ Flat';
+      var trendClass = (trend === 'rising' || trend === 'steepening') ? 'rising' : (trend === 'falling' || trend === 'flattening') ? 'falling' : 'flat';
+      var latestHealth = m.healthFn(ind.latest);
+      var avgHealth = m.healthFn(ind.trailing_12m);
+      var barHealth = latestHealth;
+      var suffix = m.unit ? m.unit : '';
+
+      html += '<div class="regime-card">';
+      html += '<div class="regime-status-bar ' + barHealth + '"></div>';
+      html += '<div class="regime-title">' + m.name + '</div>';
+      html += '<div class="regime-context">' + m.context + '</div>';
+      html += '<div class="regime-readings">';
+      html += '<div class="regime-reading"><div class="reading-label">12M Avg</div><div class="reading-value ' + avgHealth + '">' + ind.trailing_12m.toFixed(1) + (suffix ? '<span style="font-size:12px;font-weight:600"> ' + suffix + '</span>' : '') + '</div></div>';
+      html += '<div class="regime-reading"><div class="reading-label">Latest</div><div class="reading-value ' + latestHealth + '">' + ind.latest.toFixed(1) + (suffix ? '<span style="font-size:12px;font-weight:600"> ' + suffix + '</span>' : '') + '</div><div class="reading-trend ' + trendClass + '">' + trendLabel + '</div></div>';
+      html += '</div>';
       html += '</div>';
     });
     document.getElementById('regime-indicators').innerHTML = html;
