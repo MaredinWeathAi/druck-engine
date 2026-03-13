@@ -64,6 +64,56 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .regime-reading .reading-trend.falling{color:var(--red)}
 .regime-reading .reading-trend.flat{color:var(--accent)}
 .regime-section-intro{font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:16px;padding:12px 16px;background:rgba(245,158,11,0.05);border-left:3px solid var(--accent);border-radius:0 6px 6px 0}
+/* Action Signal Banner */
+.action-banner{display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:8px;margin-bottom:20px;border:1px solid}
+.action-banner.green{background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25)}
+.action-banner.blue{background:rgba(59,130,246,0.08);border-color:rgba(59,130,246,0.25)}
+.action-banner.amber{background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.25)}
+.action-banner.orange{background:rgba(249,115,22,0.08);border-color:rgba(249,115,22,0.25)}
+.action-banner.red{background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.25)}
+.action-signal{font-size:14px;font-weight:800;letter-spacing:1px;text-transform:uppercase;white-space:nowrap}
+.action-banner.green .action-signal{color:#22c55e}
+.action-banner.blue .action-signal{color:#3b82f6}
+.action-banner.amber .action-signal{color:#f59e0b}
+.action-banner.orange .action-signal{color:#f97316}
+.action-banner.red .action-signal{color:#ef4444}
+.action-rationale{font-size:12px;color:#94a3b8;line-height:1.5}
+.action-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.action-banner.green .action-dot{background:#22c55e}
+.action-banner.blue .action-dot{background:#3b82f6}
+.action-banner.amber .action-dot{background:#f59e0b}
+.action-banner.orange .action-dot{background:#f97316}
+.action-banner.red .action-dot{background:#ef4444}
+/* Rotation Radar Page */
+.cycle-clock{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+.cycle-phase-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:18px;text-align:center;position:relative;transition:all 0.2s}
+.cycle-phase-card.active-phase{border-color:var(--accent);background:rgba(245,158,11,0.08);box-shadow:0 0 20px rgba(245,158,11,0.1)}
+.cycle-phase-card .phase-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px}
+.cycle-phase-card .phase-desc{font-size:11px;color:var(--dim);line-height:1.4}
+.cycle-phase-card .phase-arrow{position:absolute;right:-12px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:16px}
+.cycle-phase-card.active-phase .phase-name{color:var(--accent)}
+.rotation-list{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:24px}
+.rotation-group{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:18px}
+.rotation-group h4{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.rotation-group.accumulate h4{color:#22c55e}
+.rotation-group.hold h4{color:#3b82f6}
+.rotation-group.reduce h4{color:#ef4444}
+.rotation-item{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.03);font-size:12px}
+.rotation-item:last-child{border-bottom:none}
+.rotation-item .ri-sector{font-weight:700;color:var(--text);margin-bottom:3px}
+.rotation-item .ri-reason{color:var(--dim);font-size:11px;line-height:1.4}
+.rotation-item .ri-sweet{font-size:10px;color:var(--accent);margin-top:3px;font-weight:600}
+.timeline-list{display:flex;flex-direction:column;gap:0}
+.timeline-item{display:flex;gap:16px;padding:16px 0;border-bottom:1px solid var(--border)}
+.timeline-item:last-child{border-bottom:none}
+.timeline-marker{display:flex;flex-direction:column;align-items:center;min-width:100px}
+.timeline-marker .tm-label{font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap}
+.timeline-marker .tm-dot{width:12px;height:12px;border-radius:50%;background:var(--accent);margin-top:6px}
+.timeline-content{flex:1}
+.timeline-content .tc-action{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px}
+.timeline-content .tc-rationale{font-size:11px;color:var(--dim);line-height:1.4}
+.watchpoint-list{display:flex;flex-direction:column;gap:8px}
+.watchpoint{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:rgba(245,158,11,0.04);border-radius:6px;border-left:3px solid var(--accent);font-size:12px;color:var(--dim);line-height:1.5}
 /* Tables and Lists */
 table{width:100%;border-collapse:collapse}
 th{text-align:left;padding:12px;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:600}
@@ -149,7 +199,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 <div class="sidebar">
   <div class="sidebar-logo">
     <h1>DRUCK</h1>
-    <div class="ver">v3.5 — Trifecta</div>
+    <div class="ver">v4.0</div>
   </div>
   <div class="sidebar-nav">
     <!-- Overview -->
@@ -188,6 +238,10 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div class="icon">⚡</div>
       <div>Commodities</div>
     </div>
+    <div class="nav-item" data-page="rotation">
+      <div class="icon">🔄</div>
+      <div>Rotation Radar</div>
+    </div>
 
     <!-- Risk -->
     <div class="nav-section">Risk</div>
@@ -222,6 +276,11 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
     <!-- Dashboard Page -->
     <div class="page active" id="page-dashboard">
+      <div class="action-banner" id="signal-dashboard">
+        <div class="action-dot"></div>
+        <div class="action-signal">Loading...</div>
+        <div class="action-rationale"></div>
+      </div>
       <div class="card">
         <h3>Trifecta Status</h3>
         <div class="metric-row">
@@ -283,6 +342,11 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
     <!-- Liquidity Page -->
     <div class="page" id="page-liquidity">
+      <div class="action-banner" id="signal-liquidity">
+        <div class="action-dot"></div>
+        <div class="action-signal">Loading...</div>
+        <div class="action-rationale"></div>
+      </div>
       <div class="card">
         <h3>Liquidity Deep Dive</h3>
         <div class="metric-row">
@@ -311,6 +375,11 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
     <!-- Market Breadth Page -->
     <div class="page" id="page-breadth">
+      <div class="action-banner" id="signal-breadth">
+        <div class="action-dot"></div>
+        <div class="action-signal">Loading...</div>
+        <div class="action-rationale"></div>
+      </div>
       <div class="card">
         <h3>Market Breadth</h3>
         <div class="metric-row">
@@ -339,6 +408,11 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
     <!-- Smart Money (Gurus) Page -->
     <div class="page" id="page-gurus">
+      <div class="action-banner" id="signal-gurus">
+        <div class="action-dot"></div>
+        <div class="action-signal">Loading...</div>
+        <div class="action-rationale"></div>
+      </div>
       <div class="card">
         <h3>Smart Money Gurus</h3>
         <div class="metric-row">
@@ -400,6 +474,11 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
     <!-- Industry Scanner Page -->
     <div class="page" id="page-industries">
+      <div class="action-banner" id="signal-industries">
+        <div class="action-dot"></div>
+        <div class="action-signal">Loading...</div>
+        <div class="action-rationale"></div>
+      </div>
       <div class="card">
         <h3>Industry Scanner</h3>
         <div class="sector-pills" id="sector-pills">
@@ -415,6 +494,11 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
     <!-- Global Markets Page -->
     <div class="page" id="page-globalmarkets">
+      <div class="action-banner" id="signal-globalmarkets">
+        <div class="action-dot"></div>
+        <div class="action-signal">Loading...</div>
+        <div class="action-rationale"></div>
+      </div>
       <div class="card">
         <h3>Global Markets</h3>
         <div class="metric-row">
@@ -488,6 +572,11 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
     <!-- Commodities Page -->
     <div class="page" id="page-commodities">
+      <div class="action-banner" id="signal-commodities">
+        <div class="action-dot"></div>
+        <div class="action-signal">Loading...</div>
+        <div class="action-rationale"></div>
+      </div>
       <div class="card">
         <h3>Commodities</h3>
         <div class="metric-row">
@@ -518,8 +607,62 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       </div>
     </div>
 
+    <!-- Rotation Radar Page -->
+    <div class="page" id="page-rotation">
+      <div class="action-banner" id="signal-rotation">
+        <div class="action-dot"></div>
+        <div class="action-signal">Loading...</div>
+        <div class="action-rationale"></div>
+      </div>
+
+      <div class="card">
+        <h3>Economic Cycle Clock</h3>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:16px">Druckenmiller's macro cycle framework — where we are now and what comes next.</p>
+        <div class="cycle-clock" id="cycle-clock">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Sector Rotation Map</h3>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:16px">Based on current cycle positioning — what to accumulate, hold, or reduce.</p>
+        <div class="rotation-list" id="rotation-sectors">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Rotation Timeline</h3>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:16px">Forward-looking rotation plan — when to make moves and what triggers them.</p>
+        <div class="timeline-list" id="rotation-timeline">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Druckenmiller Framework Scores</h3>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:16px">The 4 pillars Druckenmiller evaluates before committing capital.</p>
+        <div class="grid-4" id="druck-scores">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Key Watchpoints</h3>
+        <p style="font-size:12px;color:var(--dim);margin-bottom:16px">These are the signals that would trigger a rotation — monitor these closely.</p>
+        <div class="watchpoint-list" id="watchpoints">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
     <!-- Hedge Tracker Page -->
     <div class="page" id="page-hedges">
+      <div class="action-banner" id="signal-hedges">
+        <div class="action-dot"></div>
+        <div class="action-signal">Loading...</div>
+        <div class="action-rationale"></div>
+      </div>
       <div class="card">
         <h3>Hedge Tracker</h3>
         <table>
@@ -542,6 +685,11 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
     <!-- Portfolio Page -->
     <div class="page" id="page-portfolio">
+      <div class="action-banner" id="signal-portfolio">
+        <div class="action-dot"></div>
+        <div class="action-signal">Loading...</div>
+        <div class="action-rationale"></div>
+      </div>
       <div class="card">
         <h3>Portfolio Positions</h3>
         <table>
@@ -631,6 +779,7 @@ function showPage(page) {
     industries: 'Industry Scanner',
     globalmarkets: 'Global Markets',
     commodities: 'Commodities',
+    rotation: 'Rotation Radar',
     hedges: 'Hedge Tracker',
     portfolio: 'Portfolio',
     review: 'Position Review',
@@ -653,6 +802,7 @@ function loadPageData(page) {
   else if (page === 'commodities') loadCommodities();
   else if (page === 'hedges') loadHedges();
   else if (page === 'portfolio') loadPortfolio();
+  else if (page === 'rotation') loadRotation();
   else if (page === 'review') loadReviewSetup();
   else if (page === 'settings') loadSettings();
 }
@@ -666,6 +816,27 @@ function apiCall(endpoint, method, data) {
   if (data) options.body = JSON.stringify(data);
   return fetch(endpoint, options).then(function(res) {
     return res.json();
+  });
+}
+
+// Action Signals
+var cachedSignals = null;
+function loadActionSignals() {
+  apiCall('/api/action-signals').then(function(data) {
+    cachedSignals = data;
+    applySignals(data);
+  });
+}
+
+function applySignals(data) {
+  var pages = ['dashboard', 'liquidity', 'breadth', 'gurus', 'industries', 'globalmarkets', 'commodities', 'hedges', 'portfolio', 'rotation'];
+  pages.forEach(function(p) {
+    var el = document.getElementById('signal-' + p);
+    var sig = data[p];
+    if (el && sig) {
+      el.className = 'action-banner ' + sig.color;
+      el.innerHTML = '<div class="action-dot"></div><div class="action-signal">' + sig.signal + '</div><div class="action-rationale">' + sig.rationale + '</div>';
+    }
   });
 }
 
@@ -1115,6 +1286,93 @@ function loadCommodities() {
   });
 }
 
+// Rotation Radar
+function loadRotation() {
+  apiCall('/api/cycle-position').then(function(data) {
+    // Cycle Clock
+    var phases = [
+      { key: 'EARLY_RECOVERY', name: 'Early Recovery', desc: 'ISM bottoming, curve steepening, M2 growing. Financials & Tech lead.' },
+      { key: 'MID_CYCLE', name: 'Mid Cycle', desc: 'ISM above 50, GDP healthy, moderate inflation. Industrials & Materials join.' },
+      { key: 'LATE_CYCLE', name: 'Late Cycle', desc: 'ISM decelerating, capacity maxed, CPI rising. Energy leads, reduce growth.' },
+      { key: 'RECESSION', name: 'Recession', desc: 'ISM below 47, curve inverted, unemployment surging. Staples & Gold only.' }
+    ];
+    var clockHtml = '';
+    phases.forEach(function(p, i) {
+      var isActive = data.current_phase === p.key;
+      clockHtml += '<div class="cycle-phase-card ' + (isActive ? 'active-phase' : '') + '">';
+      clockHtml += '<div class="phase-name">' + (isActive ? '► ' : '') + p.name + '</div>';
+      clockHtml += '<div class="phase-desc">' + p.desc + '</div>';
+      if (i < 3) clockHtml += '<div class="phase-arrow">→</div>';
+      clockHtml += '</div>';
+    });
+    document.getElementById('cycle-clock').innerHTML = clockHtml;
+
+    // Sector Rotation
+    var rot = data.sector_rotation;
+    var rotHtml = '';
+
+    rotHtml += '<div class="rotation-group accumulate"><h4>▲ Accumulate</h4>';
+    (rot.accumulate || []).forEach(function(s) {
+      rotHtml += '<div class="rotation-item"><div class="ri-sector">' + s.sector + '</div><div class="ri-reason">' + s.reason + '</div><div class="ri-sweet">Sweet spot: ' + s.cycle_sweet_spot + '</div></div>';
+    });
+    rotHtml += '</div>';
+
+    rotHtml += '<div class="rotation-group hold"><h4>● Hold</h4>';
+    (rot.hold || []).forEach(function(s) {
+      rotHtml += '<div class="rotation-item"><div class="ri-sector">' + s.sector + '</div><div class="ri-reason">' + s.reason + '</div><div class="ri-sweet">Sweet spot: ' + s.cycle_sweet_spot + '</div></div>';
+    });
+    rotHtml += '</div>';
+
+    rotHtml += '<div class="rotation-group reduce"><h4>▼ Reduce</h4>';
+    (rot.reduce || []).forEach(function(s) {
+      rotHtml += '<div class="rotation-item"><div class="ri-sector">' + s.sector + '</div><div class="ri-reason">' + s.reason + '</div><div class="ri-sweet">Sweet spot: ' + s.cycle_sweet_spot + '</div></div>';
+    });
+    rotHtml += '</div>';
+
+    document.getElementById('rotation-sectors').innerHTML = rotHtml;
+
+    // Timeline
+    var tlHtml = '';
+    (data.rotation_timeline || []).forEach(function(t) {
+      tlHtml += '<div class="timeline-item">';
+      tlHtml += '<div class="timeline-marker"><div class="tm-label">' + t.timeframe + '</div><div class="tm-dot"></div></div>';
+      tlHtml += '<div class="timeline-content"><div class="tc-action">' + t.action + '</div><div class="tc-rationale">' + t.rationale + '</div></div>';
+      tlHtml += '</div>';
+    });
+    document.getElementById('rotation-timeline').innerHTML = tlHtml;
+
+    // Framework Scores
+    var fw = data.druckenmiller_framework;
+    var scoreItems = [
+      { label: 'Liquidity', score: fw.liquidity_score, desc: 'Fed balance sheet + M2 growth' },
+      { label: 'Earnings Cycle', score: fw.earnings_cycle_score, desc: 'Forward estimates + revisions' },
+      { label: 'Sentiment', score: fw.sentiment_score, desc: 'Positioning + fund flows' },
+      { label: 'Macro Regime', score: fw.macro_regime_score, desc: 'GDP, inflation, employment' }
+    ];
+    var scHtml = '';
+    scoreItems.forEach(function(s) {
+      var color = s.score > 0 ? 'var(--green)' : s.score < 0 ? 'var(--red)' : 'var(--accent)';
+      var label = s.score > 0 ? '+' + s.score + ' Bullish' : s.score < 0 ? s.score + ' Bearish' : '0 Neutral';
+      scHtml += '<div class="metric-card">';
+      scHtml += '<div class="metric-label">' + s.label + '</div>';
+      scHtml += '<div class="metric-value" style="color:' + color + '">' + label + '</div>';
+      scHtml += '<div class="metric-sub">' + s.desc + '</div>';
+      scHtml += '</div>';
+    });
+    scHtml += '<div style="grid-column:1/-1;text-align:center;padding:12px;font-size:14px;font-weight:700;color:' + (fw.overall_bias === 'RISK-ON' ? 'var(--green)' : fw.overall_bias === 'RISK-OFF' ? 'var(--red)' : 'var(--accent)') + '">';
+    scHtml += 'Overall Bias: ' + fw.overall_bias;
+    scHtml += '</div>';
+    document.getElementById('druck-scores').innerHTML = scHtml;
+
+    // Watchpoints
+    var wpHtml = '';
+    (fw.key_watchpoints || []).forEach(function(w) {
+      wpHtml += '<div class="watchpoint">⚠ ' + w + '</div>';
+    });
+    document.getElementById('watchpoints').innerHTML = wpHtml;
+  });
+}
+
 // Hedges
 function loadHedges() {
   apiCall('/api/positions').then(function(data) {
@@ -1293,6 +1551,7 @@ window.saveApiKey = function() {
 
 // Load initial page
 loadPageData('dashboard');
+loadActionSignals();
 </script>
 </body>
 </html>

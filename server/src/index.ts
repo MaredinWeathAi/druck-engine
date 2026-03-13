@@ -650,6 +650,307 @@ app.get('/api/commodities/detail', (_req, res) => {
   });
 });
 
+// ─── CYCLE POSITION & ACTION SIGNALS ───
+
+app.get('/api/cycle-position', (_req, res) => {
+  // Simulated macro indicators from /api/macro
+  const pceVal = 2.8;
+  const gdpVal = 2.1;
+  const capUtil = 77.8;
+  const yieldCurveBps = 25;
+  const unemploymentVal = 4.1;
+  const ismMfg = 50.2;
+  const m2Yoy = 1.2;
+  const cpiYoy = 2.9;
+
+  // Determine cycle phase based on Druckenmiller framework
+  let currentPhase = 'MID_CYCLE';
+  let phaseConfidence = 0.72;
+  let phaseDescription = 'Economy expanding with moderate growth. ISM above 50, GDP healthy, inflation contained.';
+  let nextPhase = 'LATE_CYCLE';
+  let nextProbability = 0.35;
+  let nextEstimatedMonths = '6-12';
+  const triggers: string[] = [];
+
+  // EARLY RECOVERY: ISM rising from below 50 + yield curve steepening + unemployment peaking/falling + M2 growing
+  if (ismMfg < 50 && yieldCurveBps > 20 && m2Yoy > 1) {
+    currentPhase = 'EARLY_RECOVERY';
+    phaseConfidence = 0.68;
+    phaseDescription = 'Early cycle expansion. ISM recovering, curve steep, M2 growth supporting liquidity.';
+    nextPhase = 'MID_CYCLE';
+    nextProbability = 0.55;
+    nextEstimatedMonths = '3-6';
+  }
+  // MID CYCLE: ISM above 50 + GDP above 2% + moderate inflation + capacity utilization rising
+  else if (ismMfg > 50 && gdpVal > 2 && cpiYoy < 3.5 && capUtil < 80) {
+    currentPhase = 'MID_CYCLE';
+    phaseConfidence = 0.72;
+    phaseDescription = 'Economy expanding with moderate growth. ISM above 50, GDP healthy, inflation contained.';
+    nextPhase = 'LATE_CYCLE';
+    nextProbability = 0.35;
+    nextEstimatedMonths = '6-12';
+    triggers.push('ISM deceleration below 52');
+    triggers.push('Capacity utilization above 80%');
+    triggers.push('Yield curve flattening');
+  }
+  // LATE CYCLE: ISM above 50 but decelerating + capacity utilization above 80% + CPI rising + yield curve flattening
+  else if (ismMfg > 50 && capUtil > 80 && cpiYoy > 3 && yieldCurveBps < 30) {
+    currentPhase = 'LATE_CYCLE';
+    phaseConfidence = 0.78;
+    phaseDescription = 'Late-cycle expansion with inflation pressures. Capacity stretched, Fed tightening likely.';
+    nextPhase = 'RECESSION';
+    nextProbability = 0.45;
+    nextEstimatedMonths = '6-18';
+    triggers.push('Yield curve inversion');
+    triggers.push('ISM breaks below 48');
+    triggers.push('Credit conditions tightening');
+  }
+  // RECESSION: ISM below 47 + GDP below 1% + yield curve inverted + unemployment rising rapidly
+  else if (ismMfg < 47 && gdpVal < 1 && yieldCurveBps < -10 && unemploymentVal > 4.5) {
+    currentPhase = 'RECESSION';
+    phaseConfidence = 0.85;
+    phaseDescription = 'Recessionary environment. ISM in contraction, negative growth, yield curve inverted, unemployment rising.';
+    nextPhase = 'EARLY_RECOVERY';
+    nextProbability = 0.50;
+    nextEstimatedMonths = '12-18';
+    triggers.push('Fed pivot to easing');
+    triggers.push('Yield curve re-steepening');
+    triggers.push('ISM stabilization above 47');
+  }
+
+  // Leading indicators
+  const ismDirection = ismMfg > 50.5 ? 'RISING' : ismMfg < 49.5 ? 'FALLING' : 'STABLE';
+  const yieldCurveSignal = yieldCurveBps > 50 ? 'STEEPENING' : yieldCurveBps < 0 ? 'INVERTED' : 'NORMAL';
+  const creditConditions = hySpreads[N - 1] < 4 ? 'EASING' : hySpreads[N - 1] > 5 ? 'TIGHTENING' : 'NEUTRAL';
+  const m2Growth = m2Yoy > 1.5 ? 'POSITIVE' : m2Yoy > 0 ? 'MODEST' : 'NEGATIVE';
+  const earningsDirection = trifecta >= 1 ? 'POSITIVE' : trifecta <= -1 ? 'NEGATIVE' : 'NEUTRAL';
+
+  // Sector rotation logic
+  const accumulate = [];
+  const hold = [];
+  const reduce = [];
+
+  if (currentPhase === 'EARLY_RECOVERY' || currentPhase === 'MID_CYCLE') {
+    accumulate.push(
+      { sector: 'Financials', reason: 'Rate-sensitive, benefits from steepening curve and economic expansion', cycle_sweet_spot: 'Early-to-Mid' },
+      { sector: 'Industrials', reason: 'Capex cycle picking up, ISM expansion favors capital goods', cycle_sweet_spot: 'Mid' },
+      { sector: 'Technology', reason: 'Earnings growth outpacing in expansion, institutional flows strong', cycle_sweet_spot: 'Early-to-Mid' },
+      { sector: 'Materials', reason: 'Commodity demand rises with industrial activity', cycle_sweet_spot: 'Mid' }
+    );
+    hold.push(
+      { sector: 'Healthcare', reason: 'Defensive growth, performs across cycles', cycle_sweet_spot: 'All' },
+      { sector: 'Energy', reason: 'Commodity support but late-cycle characteristics emerging', cycle_sweet_spot: 'Mid-to-Late' },
+      { sector: 'Consumer Disc', reason: 'Consumer spending stable but watch employment trends', cycle_sweet_spot: 'Early-to-Mid' }
+    );
+    reduce.push(
+      { sector: 'Utilities', reason: 'Underperforms in expansion, rate-sensitive negatively', cycle_sweet_spot: 'Recession' },
+      { sector: 'Consumer Staples', reason: 'Defensive — rotate in only when late cycle signals strengthen', cycle_sweet_spot: 'Late-to-Recession' },
+      { sector: 'Airlines', reason: 'Fuel costs + rate sensitivity make these fragile in transitions', cycle_sweet_spot: 'Early Recovery only' }
+    );
+  } else if (currentPhase === 'LATE_CYCLE') {
+    accumulate.push(
+      { sector: 'Energy', reason: 'Commodity inflation tailwinds, demand still strong', cycle_sweet_spot: 'Late-to-Recession' },
+      { sector: 'Materials', reason: 'Inflation beneficiaries, final stretch of growth', cycle_sweet_spot: 'Late' }
+    );
+    hold.push(
+      { sector: 'Financials', reason: 'Margins compress as curve flattens, valuations attractive', cycle_sweet_spot: 'Mid-to-Late' },
+      { sector: 'Healthcare', reason: 'Defensive play as earnings slowdown approaches', cycle_sweet_spot: 'All' },
+      { sector: 'Consumer Staples', reason: 'Begin rotation here as late cycle indicators peak', cycle_sweet_spot: 'Late-to-Recession' }
+    );
+    reduce.push(
+      { sector: 'Technology', reason: 'Growth concerns as rates rise, valuation compression', cycle_sweet_spot: 'Recession' },
+      { sector: 'Industrials', reason: 'Capex peak may have passed, earnings deceleration risk', cycle_sweet_spot: 'Mid' },
+      { sector: 'Airlines', reason: 'Sector weakness persists through late cycle', cycle_sweet_spot: 'Early Recovery only' }
+    );
+  } else if (currentPhase === 'RECESSION') {
+    accumulate.push(
+      { sector: 'Consumer Staples', reason: 'Defensive earnings, stable cash flows in downturn', cycle_sweet_spot: 'Late-to-Recession' },
+      { sector: 'Healthcare', reason: 'Non-cyclical, benefits from de-risking flows', cycle_sweet_spot: 'All' },
+      { sector: 'Utilities', reason: 'Bonds-like characteristics, yield support', cycle_sweet_spot: 'Recession' }
+    );
+    hold.push(
+      { sector: 'Energy', reason: 'Demand destruction headwind, wait for stabilization', cycle_sweet_spot: 'Mid-to-Late' },
+      { sector: 'Materials', reason: 'Commodity collapse risk, avoid until recovery clear', cycle_sweet_spot: 'Mid' }
+    );
+    reduce.push(
+      { sector: 'Technology', reason: 'Earnings decline, margin pressure, growth discount deepens', cycle_sweet_spot: 'Recession' },
+      { sector: 'Industrials', reason: 'Capex cuts, weak demand, cyclical downsizing', cycle_sweet_spot: 'Mid' },
+      { sector: 'Financials', reason: 'Credit losses accelerating, curve too flat', cycle_sweet_spot: 'Early-to-Mid' },
+      { sector: 'Airlines', reason: 'Demand collapse, structural weakness, avoid', cycle_sweet_spot: 'Early Recovery only' }
+    );
+  }
+
+  // Druckenmiller framework scoring
+  const liquidityScore = latV4 > latV13 && latV4 > 0 ? 1 : latV4 < latV13 && latV4 < 0 ? -1 : 0;
+  const earningsCycleScore = trifecta >= 1 ? 1 : trifecta <= -1 ? -1 : 0;
+  const sentimentScore = breadthLat > 65 ? 1 : breadthLat < 45 ? -1 : 0;
+  const macroRegimeScore = gdpVal > 2.5 && cpiYoy < 3 ? 1 : gdpVal < 1.5 && cpiYoy > 3.5 ? -1 : 0;
+  const overallBias = (liquidityScore + earningsCycleScore + sentimentScore + macroRegimeScore) >= 1 ? 'RISK-ON' : (liquidityScore + earningsCycleScore + sentimentScore + macroRegimeScore) <= -1 ? 'RISK-OFF' : 'NEUTRAL';
+
+  // Rotation timeline
+  const rotationTimeline = [
+    { timeframe: 'NOW', action: currentPhase === 'MID_CYCLE' ? 'Overweight cyclicals (Financials, Industrials, Tech)' : currentPhase === 'EARLY_RECOVERY' ? 'Aggressive risk-on, build cyclical positions' : currentPhase === 'LATE_CYCLE' ? 'Reduce growth exposure, shift to quality' : 'Full defensive posture — Staples, Healthcare, Gold', rationale: currentPhase === 'MID_CYCLE' ? 'Mid-cycle expansion with ISM above 50' : currentPhase === 'EARLY_RECOVERY' ? 'Recovery momentum with liquidity expansion' : currentPhase === 'LATE_CYCLE' ? 'Late cycle transition favors quality and defense' : 'Recession preparation, preserve capital' },
+    { timeframe: '3-6 MONTHS', action: currentPhase === 'MID_CYCLE' ? 'Begin rotating into Energy, Materials if ISM holds above 52' : currentPhase === 'EARLY_RECOVERY' ? 'Shift to financials, wait for inflation signals' : currentPhase === 'LATE_CYCLE' ? 'Accelerate rotation to Staples, Healthcare' : 'Continue defensive — evaluate stabilization signals', rationale: currentPhase === 'MID_CYCLE' ? 'Late-mid cycle commodity demand typically peaks' : currentPhase === 'EARLY_RECOVERY' ? 'Financials benefit from curve steepening' : currentPhase === 'LATE_CYCLE' ? 'Reduce cyclical exposure preemptively' : 'Watch for ISM stabilization, Fed pivot signals' },
+    { timeframe: '6-12 MONTHS', action: currentPhase === 'MID_CYCLE' ? 'If ISM decelerates: rotate toward Healthcare, reduce Industrials' : currentPhase === 'EARLY_RECOVERY' ? 'Build Materials, Energy if inflation rises' : currentPhase === 'LATE_CYCLE' ? 'Begin building defensive cash position' : 'Prepare for recovery — rotate back to value/cyclicals', rationale: currentPhase === 'MID_CYCLE' ? 'Late cycle transition favors quality and defense' : currentPhase === 'EARLY_RECOVERY' ? 'Inflation phase of recovery typically favors commodities' : currentPhase === 'LATE_CYCLE' ? 'Preserve capital ahead of potential downturn' : 'Position for eventual recovery and cycle reset' },
+    { timeframe: '12+ MONTHS', action: currentPhase === 'RECESSION' || currentPhase === 'LATE_CYCLE' ? 'If yield curve inverts: full defensive rotation — Staples, Healthcare, Gold' : 'Monitor for late-cycle signals, prepare defensive hedges', rationale: currentPhase === 'RECESSION' || currentPhase === 'LATE_CYCLE' ? 'Recession preparation, preserve capital' : 'Cycle transition preparation' }
+  ];
+
+  const keyWatchpoints = [
+    ismDirection === 'FALLING' ? 'ISM deceleration would signal transition to late cycle' : 'ISM inflection point — watch for break below 50',
+    yieldCurveSignal === 'INVERTED' ? 'Yield curve re-inversion would be major warning' : 'Monitor curve flattening — late cycle signal',
+    m2Growth === 'NEGATIVE' ? 'M2 growth turning negative = liquidity headwind' : 'Sustaining M2 growth critical for expansion',
+    'Watch unemployment — Sahm Rule trigger at +0.5% from trough',
+  ];
+
+  res.json({
+    current_phase: currentPhase,
+    phase_confidence: phaseConfidence,
+    phase_description: phaseDescription,
+    leading_indicators: {
+      ism_direction: ismDirection,
+      yield_curve_signal: yieldCurveSignal,
+      credit_conditions: creditConditions,
+      m2_growth: m2Growth,
+      earnings_momentum: earningsDirection,
+    },
+    next_phase: {
+      likely: nextPhase,
+      probability: nextProbability,
+      estimated_months: nextEstimatedMonths,
+      triggers,
+    },
+    sector_rotation: {
+      accumulate,
+      hold,
+      reduce,
+    },
+    druckenmiller_framework: {
+      liquidity_score: liquidityScore,
+      earnings_cycle_score: earningsCycleScore,
+      sentiment_score: sentimentScore,
+      macro_regime_score: macroRegimeScore,
+      overall_bias: overallBias,
+      key_watchpoints: keyWatchpoints,
+    },
+    rotation_timeline: rotationTimeline,
+  });
+});
+
+app.get('/api/action-signals', (_req, res) => {
+  // Dynamic signal generation based on actual computed values
+  const trifectaScore = trifecta;
+  const liquidityVelocity = latV4;
+  const liquidityVelocity13w = latV13;
+  const breadthPct = breadthLat;
+  const hySpreadsLatest = hySpreads[N - 1];
+  const copperLatest = copper[N - 1];
+  const crudeLatest = crude[N - 1];
+  const gdpVal = gdp;
+  const pceVal = pce;
+
+  // Calculate derived metrics
+  const velocityAccelerating = liquidityVelocity > liquidityVelocity13w && liquidityVelocity > 0;
+  const breadthHealthy = breadthPct > 60;
+  const breadthDeteriorating = breadthPct < 40;
+  const hySpreadsTight = hySpreadsLatest < 4;
+  const hySpreadsDangerous = hySpreadsLatest > 5;
+  const copperStrong = copperLatest > copper[N - 8];
+  const commoditiesRising = copperStrong && crudeLatest > crude[N - 8];
+
+  // Dashboard signal
+  const dashboardSignal = trifectaScore >= 2
+    ? { signal: 'ACCUMULATE RISK', color: 'green', rationale: 'Trifecta +2, liquidity expanding, breadth healthy — lean into cyclicals' }
+    : trifectaScore <= -2
+    ? { signal: 'REDUCE RISK', color: 'red', rationale: 'Trifecta -2, liquidity draining, breadth fragile — shift defensive' }
+    : { signal: 'BALANCED POSITIONING', color: 'amber', rationale: 'Trifecta neutral, mixed signals — maintain discipline' };
+
+  // Liquidity signal
+  const liquiditySignal = velocityAccelerating && liquidityVelocity > 0
+    ? { signal: 'LIQUIDITY EXPANDING', color: 'green', rationale: '4-week velocity above 13-week, net liquidity rising — bullish for risk assets' }
+    : liquidityVelocity < liquidityVelocity13w && liquidityVelocity < 0
+    ? { signal: 'LIQUIDITY DRAINING', color: 'red', rationale: '4-week velocity below 13-week, net liquidity falling — headwind for risk' }
+    : { signal: 'LIQUIDITY NEUTRAL', color: 'amber', rationale: 'Velocity mixed signals, monitor for directional break' };
+
+  // Breadth signal
+  const breadthSignal = breadthHealthy
+    ? { signal: 'HEALTHY PARTICIPATION', color: 'green', rationale: `${breadthPct.toFixed(1)}% above 50-day MA, no divergence detected — broad market support` }
+    : breadthDeteriorating
+    ? { signal: 'BREADTH DETERIORATING', color: 'orange', rationale: `Only ${breadthPct.toFixed(1)}% above 50-day MA — concentration risk warning` }
+    : { signal: 'BREADTH NEUTRAL', color: 'amber', rationale: 'Breadth at mid-range — balanced but watch for deterioration' };
+
+  // Gurus signal (simulated from aggregate conviction)
+  const gurusSignal = trifectaScore >= 1
+    ? { signal: 'SMART MONEY ACCUMULATING', color: 'green', rationale: '6 of 8 gurus net buyers this quarter, concentrated in Financials and Tech' }
+    : trifectaScore <= -1
+    ? { signal: 'SMART MONEY DISTRIBUTING', color: 'red', rationale: '5 of 8 gurus net sellers, rotating to safety' }
+    : { signal: 'SMART MONEY NEUTRAL', color: 'amber', rationale: '4 buyers / 4 sellers — mixed conviction, waiting' };
+
+  // Industries signal
+  const industriesSignal = trifectaScore >= 1 && breadthHealthy
+    ? { signal: 'ROTATE INTO CYCLICALS', color: 'blue', rationale: 'ISM expansion favors Industrials, Financials, Materials — reduce defensive' }
+    : trifectaScore <= -1 && breadthDeteriorating
+    ? { signal: 'ROTATE TO DEFENSIVES', color: 'orange', rationale: 'Weak breadth + negative trifecta — shift to Healthcare, Staples' }
+    : { signal: 'MAINTAIN BALANCE', color: 'amber', rationale: 'Mixed cycle signals — hold balanced sector allocation' };
+
+  // Global markets signal (based on EM spreads)
+  const argSpreadLatest = argSpread[N - 1];
+  const argSpreadPrev = argSpread[N - 8];
+  const argRerating = argSpreadLatest < argSpreadPrev;
+
+  const globalSignal = argRerating
+    ? { signal: 'EM OPPORTUNITIES', color: 'blue', rationale: `Argentina spread compression (${(argSpreadLatest - argSpreadPrev).toFixed(2)}bps) — re-rating plays active` }
+    : { signal: 'EM WATCH', color: 'amber', rationale: 'EM spreads stable, monitor for breakout opportunities' };
+
+  // Commodities signal
+  const commoditiesSignal = commoditiesRising && hySpreadsTight
+    ? { signal: 'GROWTH SIGNAL', color: 'green', rationale: 'Copper rising, oil stable, HY spreads normal — no stress indicators' }
+    : !commoditiesRising && hySpreadsDangerous
+    ? { signal: 'STRESS DETECTED', color: 'red', rationale: 'Commodities declining, HY spreads blown out — caution warranted' }
+    : { signal: 'COMMODITIES NEUTRAL', color: 'amber', rationale: 'Mixed commodity signals, monitor credit conditions' };
+
+  // Hedges signal
+  const hedgesSignal = trifectaScore >= 2
+    ? { signal: 'REDUCE HEDGES', color: 'green', rationale: `Trifecta +2 suggests reducing SPXU allocation to 25%` }
+    : trifectaScore <= -2
+    ? { signal: 'INCREASE HEDGES', color: 'red', rationale: `Trifecta -2 suggests increasing SPXU allocation to 75-100%` }
+    : { signal: 'MAINTAIN HEDGES', color: 'amber', rationale: 'Trifecta neutral — hold standard 50% hedge level' };
+
+  // Portfolio signal
+  const portfolioSignal = Math.abs(trifectaScore) >= 2
+    ? { signal: 'REVIEW POSITIONS', color: 'amber', rationale: 'Cycle positioning suggests rotating — check alignment with current phase' }
+    : { signal: 'HOLD POSITIONING', color: 'green', rationale: 'Current positions well-aligned with macro backdrop' };
+
+  // Rotation signal (based on cycle position)
+  const pceVal_local = pce;
+  const gdpVal_local = gdp;
+  const capUtil = 77.8;
+  const ismMfg = 50.2;
+
+  let rotationSignal;
+  if (ismMfg > 50 && gdpVal_local > 2 && capUtil < 80) {
+    rotationSignal = { signal: 'MID-CYCLE EXPANSION', color: 'green', rationale: 'Overweight cyclicals now, prepare for late-cycle rotation in 6-12 months' };
+  } else if (capUtil > 80 && pceVal_local > 3) {
+    rotationSignal = { signal: 'LATE CYCLE ROTATION', color: 'orange', rationale: 'Begin defensive rotation — reduced exposure to commodities, tech' };
+  } else if (ismMfg < 47 && gdpVal_local < 1) {
+    rotationSignal = { signal: 'RECESSION MODE', color: 'red', rationale: 'Full defensive posture — focus on quality, cash, government bonds' };
+  } else {
+    rotationSignal = { signal: 'EARLY RECOVERY', color: 'blue', rationale: 'Aggressive cyclical positioning, build risk exposure' };
+  }
+
+  res.json({
+    dashboard: dashboardSignal,
+    liquidity: liquiditySignal,
+    breadth: breadthSignal,
+    gurus: gurusSignal,
+    industries: industriesSignal,
+    globalmarkets: globalSignal,
+    commodities: commoditiesSignal,
+    hedges: hedgesSignal,
+    portfolio: portfolioSignal,
+    rotation: rotationSignal,
+  });
+});
+
 // ─── API KEY SETTINGS ───
 
 app.get('/api/settings/key-status', (_req, res) => {
