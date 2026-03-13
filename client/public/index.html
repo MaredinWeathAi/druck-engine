@@ -79,6 +79,40 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 /* Plotly overrides */
 .chart-wrap{min-height:300px}
 .chart-tall{min-height:400px}
+/* Screenshot Review */
+.drop-zone{border:2px dashed var(--border);border-radius:12px;padding:48px 24px;text-align:center;cursor:pointer;transition:all .2s;background:var(--card)}
+.drop-zone:hover,.drop-zone.dragover{border-color:var(--accent);background:rgba(245,158,11,.04)}
+.drop-zone .hint{color:var(--dim);font-size:13px;margin-top:8px}
+.drop-zone .big-icon{font-size:42px;color:var(--accent);margin-bottom:8px}
+.ss-gallery{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
+.ss-thumb{position:relative;width:180px;height:120px;border-radius:8px;overflow:hidden;border:1px solid var(--border);cursor:pointer;transition:all .15s}
+.ss-thumb:hover{border-color:var(--accent);transform:scale(1.02)}
+.ss-thumb img{width:100%;height:100%;object-fit:cover}
+.ss-thumb .ss-label{position:absolute;bottom:0;left:0;right:0;background:rgba(11,14,23,.85);padding:4px 8px;font-size:10px;color:var(--accent);font-weight:600}
+.ss-thumb .ss-remove{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(239,68,68,.8);color:#fff;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
+.ss-thumb:hover .ss-remove{opacity:1}
+.review-btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:var(--accent);color:#000;font-weight:700;font-size:14px;border:none;border-radius:8px;cursor:pointer;transition:all .15s;letter-spacing:.5px}
+.review-btn:hover{background:#d97706;transform:translateY(-1px)}
+.review-btn:disabled{background:var(--dim);cursor:not-allowed;transform:none}
+.review-btn .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(0,0,0,.2);border-top-color:#000;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.review-result{margin-top:20px}
+.grade-badge{display:inline-flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:16px;font-size:36px;font-weight:900}
+.pos-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.pos-row:last-child{border-bottom:none}
+.pos-ticker{font-weight:800;font-size:15px;color:var(--accent);width:70px}
+.pos-dir{font-size:11px;font-weight:700;letter-spacing:.5px;width:55px}
+.pos-rating{width:150px}
+.pos-rationale{flex:1;font-size:12px;color:var(--dim)}
+.adj-item{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.adj-item:last-child{border-bottom:none}
+.adj-num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#000;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0}
+.settings-row{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.settings-input{flex:1;padding:10px 14px;background:var(--card2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:monospace}
+.settings-input:focus{outline:none;border-color:var(--accent)}
+.settings-btn{padding:10px 20px;background:var(--accent);color:#000;font-weight:700;font-size:12px;border:none;border-radius:8px;cursor:pointer}
+.ss-preview-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.85);z-index:200;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ss-preview-modal img{max-width:90vw;max-height:90vh;border-radius:8px}
 /* Responsive */
 @media(max-width:1200px){.grid-4{grid-template-columns:1fr 1fr}.grid-3{grid-template-columns:1fr 1fr}}
 @media(max-width:900px){.grid-2,.grid-3,.grid-4{grid-template-columns:1fr}.sidebar{width:60px}.sidebar .nav-item span:not(.icon){display:none}.sidebar-logo h1{font-size:10px;letter-spacing:0}.main{margin-left:60px}}
@@ -108,6 +142,10 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
     <div class="nav-section">Risk</div>
     <div class="nav-item" data-page="hedge"><span class="icon">&#9680;</span><span>Hedge Tracker</span></div>
     <div class="nav-item" data-page="portfolio"><span class="icon">&#9639;</span><span>Portfolio</span></div>
+
+    <div class="nav-section">AI Review</div>
+    <div class="nav-item" data-page="review"><span class="icon">&#9881;</span><span>Position Review</span></div>
+    <div class="nav-item" data-page="settings"><span class="icon">&#9881;</span><span>Settings</span></div>
   </nav>
 </div>
 
@@ -212,6 +250,47 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 <div class="page" id="page-portfolio">
   <h2 style="margin-bottom:16px;font-size:20px">Portfolio &amp; P&amp;L Heat <span style="font-size:12px;color:var(--dim);font-weight:400">Position Monitor</span></h2>
   <div class="card"><div class="card-title">Active Positions</div><div id="port-table"></div></div>
+</div>
+
+<!-- POSITION REVIEW PAGE -->
+<div class="page" id="page-review">
+  <h2 style="margin-bottom:16px;font-size:20px">Position Review <span style="font-size:12px;color:var(--dim);font-weight:400">Paste screenshots of your models for AI analysis</span></h2>
+  <div id="review-key-warning" class="card" style="display:none;border-color:var(--red)">
+    <div style="color:var(--red);font-weight:700;font-size:13px">No API Key Configured</div>
+    <div style="color:var(--dim);font-size:12px;margin-top:4px">Go to Settings and enter your Anthropic API key to enable position review.</div>
+  </div>
+  <div class="card">
+    <div class="card-title">Upload Screenshots</div>
+    <div class="drop-zone" id="drop-zone">
+      <div class="big-icon">&#128247;</div>
+      <div style="font-size:15px;font-weight:600">Paste screenshots here (Ctrl/Cmd+V)</div>
+      <div class="hint">Or drag &amp; drop images, or click to browse. Supports multiple screenshots from different models.</div>
+      <input type="file" id="file-input" accept="image/*" multiple style="display:none">
+    </div>
+    <div class="ss-gallery" id="ss-gallery"></div>
+    <div style="display:flex;align-items:center;gap:16px;margin-top:12px">
+      <button class="review-btn" id="review-btn" disabled onclick="runReview()">
+        <span id="review-btn-text">Review My Positions</span>
+      </button>
+      <span id="ss-count" style="font-size:12px;color:var(--dim)">No screenshots added</span>
+      <button style="background:none;border:1px solid var(--border);color:var(--dim);padding:8px 16px;border-radius:6px;cursor:pointer;font-size:12px" onclick="clearScreenshots()">Clear All</button>
+    </div>
+  </div>
+  <div id="review-results"></div>
+</div>
+
+<!-- SETTINGS PAGE -->
+<div class="page" id="page-settings">
+  <h2 style="margin-bottom:16px;font-size:20px">Settings <span style="font-size:12px;color:var(--dim);font-weight:400">API Configuration</span></h2>
+  <div class="card">
+    <div class="card-title">Anthropic API Key</div>
+    <div style="color:var(--dim);font-size:12px;margin-bottom:12px">Required for the Position Review feature. Your key is stored in server memory only (not persisted). You can also set it as the ANTHROPIC_API_KEY environment variable on Railway.</div>
+    <div class="settings-row">
+      <input type="password" class="settings-input" id="api-key-input" placeholder="sk-ant-api03-...">
+      <button class="settings-btn" onclick="saveApiKey()">Save Key</button>
+    </div>
+    <div id="key-status" style="font-size:12px;color:var(--dim)"></div>
+  </div>
 </div>
 
 </div>
@@ -576,10 +655,234 @@ function loadPortfolio() {
 }
 
 // INIT & LAZY LOADING
+// ─── SCREENSHOT REVIEW ───
+var screenshots = [];
+
+function initReview() {
+  var dropZone = document.getElementById('drop-zone');
+  var fileInput = document.getElementById('file-input');
+
+  // Paste handler (global)
+  document.addEventListener('paste', function(e) {
+    var activePage = document.querySelector('.page.active');
+    if (!activePage || activePage.id !== 'page-review') return;
+    var items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        var file = items[i].getAsFile();
+        if (file) addScreenshot(file);
+      }
+    }
+  });
+
+  // Click to browse
+  dropZone.addEventListener('click', function() { fileInput.click(); });
+  fileInput.addEventListener('change', function() {
+    for (var i = 0; i < fileInput.files.length; i++) addScreenshot(fileInput.files[i]);
+    fileInput.value = '';
+  });
+
+  // Drag and drop
+  dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('dragover'); });
+  dropZone.addEventListener('drop', function(e) {
+    e.preventDefault(); dropZone.classList.remove('dragover');
+    for (var i = 0; i < e.dataTransfer.files.length; i++) {
+      if (e.dataTransfer.files[i].type.indexOf('image') !== -1) addScreenshot(e.dataTransfer.files[i]);
+    }
+  });
+
+  checkKeyStatus();
+}
+
+function addScreenshot(file) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var idx = screenshots.length + 1;
+    screenshots.push({ data: e.target.result, label: 'Model ' + idx });
+    renderGallery();
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderGallery() {
+  var gallery = document.getElementById('ss-gallery');
+  gallery.innerHTML = screenshots.map(function(s, i) {
+    return '<div class="ss-thumb" onclick="previewScreenshot(' + i + ')">' +
+      '<img src="' + s.data + '">' +
+      '<div class="ss-label" contenteditable="true" onclick="event.stopPropagation()" oninput="screenshots[' + i + '].label=this.textContent">' + s.label + '</div>' +
+      '<button class="ss-remove" onclick="event.stopPropagation();removeScreenshot(' + i + ')">x</button>' +
+      '</div>';
+  }).join('');
+  var btn = document.getElementById('review-btn');
+  btn.disabled = screenshots.length === 0;
+  document.getElementById('ss-count').textContent = screenshots.length + ' screenshot' + (screenshots.length !== 1 ? 's' : '') + ' ready';
+}
+
+function removeScreenshot(i) {
+  screenshots.splice(i, 1);
+  // Relabel
+  screenshots.forEach(function(s, idx) { s.label = 'Model ' + (idx + 1); });
+  renderGallery();
+}
+
+function clearScreenshots() {
+  screenshots = [];
+  renderGallery();
+  document.getElementById('review-results').innerHTML = '';
+  document.getElementById('ss-count').textContent = 'No screenshots added';
+}
+
+function previewScreenshot(i) {
+  var modal = document.createElement('div');
+  modal.className = 'ss-preview-modal';
+  modal.innerHTML = '<img src="' + screenshots[i].data + '">';
+  modal.onclick = function() { document.body.removeChild(modal); };
+  document.body.appendChild(modal);
+}
+
+function runReview() {
+  var btn = document.getElementById('review-btn');
+  var btnText = document.getElementById('review-btn-text');
+  btn.disabled = true;
+  btnText.innerHTML = '<span class="spinner"></span> Analyzing...';
+  document.getElementById('review-results').innerHTML = '<div class="card" style="text-align:center;padding:40px;color:var(--dim)"><div class="spinner" style="width:32px;height:32px;border-width:3px;margin:0 auto 12px"></div>Sending ' + screenshots.length + ' screenshot(s) to Claude for analysis...<br><span style="font-size:11px">This may take 15-30 seconds</span></div>';
+
+  fetch('/api/review-positions', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ screenshots: screenshots.map(function(s) { return {data: s.data, label: s.label}; }) })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    btn.disabled = false;
+    btnText.textContent = 'Review My Positions';
+    if (data.error) {
+      document.getElementById('review-results').innerHTML = '<div class="card" style="border-color:var(--red)"><div style="color:var(--red);font-weight:700">Error</div><div style="color:var(--dim);margin-top:4px;font-size:13px">' + data.error + '</div></div>';
+      return;
+    }
+    renderReviewResults(data.review, data.engine_state);
+  })
+  .catch(function(err) {
+    btn.disabled = false;
+    btnText.textContent = 'Review My Positions';
+    document.getElementById('review-results').innerHTML = '<div class="card" style="border-color:var(--red)"><div style="color:var(--red);font-weight:700">Request Failed</div><div style="color:var(--dim);margin-top:4px">' + err.message + '</div></div>';
+  });
+}
+
+function renderReviewResults(review, engine) {
+  if (review.raw_analysis) {
+    document.getElementById('review-results').innerHTML = '<div class="card"><div class="card-title">Analysis</div><pre style="white-space:pre-wrap;font-size:12px;color:var(--text)">' + review.raw_analysis + '</pre></div>';
+    return;
+  }
+
+  var gradeColors = {'A+':'var(--green)','A':'var(--green)','A-':'#86efac','B+':'#86efac','B':'var(--accent)','B-':'var(--accent)','C+':'#fbbf24','C':'#f97316','C-':'#f97316','D+':'#f97316','D':'var(--red)','D-':'var(--red)','F':'var(--red)'};
+  var gc = gradeColors[review.overall_grade] || 'var(--accent)';
+  var ratingColors = {'green':'var(--green)','lime':'#86efac','amber':'var(--accent)','orange':'#f97316','red':'var(--red)'};
+
+  var html = '<div class="grid grid-3" style="margin-bottom:16px">';
+  // Grade
+  html += '<div class="card" style="text-align:center;padding:28px"><div class="grade-badge" style="background:' + gc + '22;color:' + gc + ';margin:0 auto">' + review.overall_grade + '</div><div style="font-size:11px;color:var(--dim);margin-top:10px;text-transform:uppercase;letter-spacing:1px">Portfolio Grade</div></div>';
+  // Summary
+  html += '<div class="card" style="grid-column:span 2"><div class="card-title">Overall Assessment</div><div style="font-size:14px;line-height:1.6">' + (review.overall_summary || '') + '</div>';
+  html += '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">';
+  html += '<span class="tag tag-blue">Trifecta: ' + (engine.trifecta_score >= 0 ? '+' : '') + engine.trifecta_score + '</span>';
+  html += '<span class="tag tag-' + (engine.regime.is_stagflation ? 'red' : 'green') + '">' + engine.regime.label + '</span>';
+  html += '<span class="tag tag-amber">Hedge: ' + engine.hedge.spxu_allocation + '</span>';
+  html += '</div></div>';
+  html += '</div>';
+
+  // Positions
+  if (review.positions && review.positions.length > 0) {
+    html += '<div class="card"><div class="card-title">Position-by-Position Review</div>';
+    review.positions.forEach(function(p) {
+      var rc = ratingColors[p.rating_color] || 'var(--dim)';
+      html += '<div class="pos-row">';
+      html += '<div class="pos-ticker">' + p.ticker + '</div>';
+      html += '<div class="pos-dir" style="color:' + (p.direction === 'LONG' ? 'var(--green)' : 'var(--red)') + '">' + p.direction + '</div>';
+      html += '<div class="pos-rating">' + tagHtml(p.alignment, p.rating_color === 'green' || p.rating_color === 'lime' ? 'green' : p.rating_color === 'red' || p.rating_color === 'orange' ? 'red' : 'amber') + '</div>';
+      html += '<div class="pos-rationale">' + p.rationale + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Risks + Adjustments side by side
+  html += '<div class="grid grid-2">';
+  // Risks
+  if (review.risks && review.risks.length > 0) {
+    html += '<div class="card"><div class="card-title">Top Risks</div>';
+    review.risks.forEach(function(r, i) {
+      html += '<div class="adj-item"><div class="adj-num" style="background:var(--red);color:#fff">' + (i+1) + '</div><div style="font-size:13px">' + r + '</div></div>';
+    });
+    html += '</div>';
+  }
+  // Adjustments
+  if (review.adjustments && review.adjustments.length > 0) {
+    html += '<div class="card"><div class="card-title">Suggested Adjustments</div>';
+    review.adjustments.forEach(function(a) {
+      html += '<div class="adj-item"><div class="adj-num">' + a.priority + '</div><div><div style="font-size:13px;font-weight:600">' + a.action + '</div><div style="font-size:11px;color:var(--dim);margin-top:2px">' + a.rationale + '</div></div></div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Model notes
+  if (review.model_notes && review.model_notes.length > 0) {
+    html += '<div class="card"><div class="card-title">Model Observations</div>';
+    review.model_notes.forEach(function(n) {
+      html += '<div style="font-size:12px;color:var(--dim);padding:4px 0">— ' + n + '</div>';
+    });
+    html += '</div>';
+  }
+
+  document.getElementById('review-results').innerHTML = html;
+}
+
+// ─── SETTINGS ───
+function loadSettings() {
+  checkKeyStatus();
+}
+
+function checkKeyStatus() {
+  fetch('/api/settings/key-status').then(function(r){return r.json();}).then(function(d) {
+    var status = document.getElementById('key-status');
+    var warning = document.getElementById('review-key-warning');
+    if (d.has_key) {
+      if (status) status.innerHTML = tagHtml('CONFIGURED','green') + ' <span style="font-family:monospace;margin-left:8px">' + d.masked + '</span>';
+      if (warning) warning.style.display = 'none';
+    } else {
+      if (status) status.innerHTML = tagHtml('NOT SET','red') + ' <span style="margin-left:8px">Enter your key above or set ANTHROPIC_API_KEY on Railway</span>';
+      if (warning) warning.style.display = 'block';
+    }
+  });
+}
+
+function saveApiKey() {
+  var input = document.getElementById('api-key-input');
+  var key = input.value.trim();
+  if (!key) return;
+  fetch('/api/settings/key', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({api_key: key})
+  }).then(function(r){return r.json();}).then(function(d) {
+    if (d.error) {
+      document.getElementById('key-status').innerHTML = '<span style="color:var(--red)">' + d.error + '</span>';
+    } else {
+      input.value = '';
+      checkKeyStatus();
+    }
+  });
+}
+
+// INIT & LAZY LOADING
 var loaders = {
   dashboard: loadDashboard, liquidity: loadLiquidity, breadth: loadBreadth,
   conviction: loadConviction, industries: function(){return loadIndustries();}, commodities: loadCommodities,
-  argentina: loadArgentina, hedge: loadHedge, portfolio: loadPortfolio
+  argentina: loadArgentina, hedge: loadHedge, portfolio: loadPortfolio,
+  review: initReview, settings: loadSettings
 };
 var loaded = {};
 function ensureLoaded(page) {

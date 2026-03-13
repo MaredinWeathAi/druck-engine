@@ -1,12 +1,16 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import Anthropic from '@anthropic-ai/sdk';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+
+// ─── API KEY MANAGEMENT ───
+let anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
 
 // ─── SIMULATED DATA ENGINE ───
 // Generates realistic macro data. In production, replace with FRED/GuruFocus/yfinance calls.
@@ -410,6 +414,123 @@ app.get('/api/commodities/detail', (_req, res) => {
   });
 });
 
+// ─── API KEY SETTINGS ───
+
+app.get('/api/settings/key-status', (_req, res) => {
+  res.json({ has_key: !!anthropicApiKey, masked: anthropicApiKey ? '••••' + anthropicApiKey.slice(-8) : null });
+});
+
+app.post('/api/settings/key', (req, res) => {
+  const { api_key } = req.body;
+  if (!api_key || typeof api_key !== 'string' || !api_key.startsWith('sk-')) {
+    return res.status(400).json({ error: 'Invalid API key format' });
+  }
+  anthropicApiKey = api_key;
+  res.json({ status: 'ok', masked: '••••' + api_key.slice(-8) });
+});
+
+// ─── SCREENSHOT POSITION REVIEW ───
+
+app.post('/api/review-positions', async (req, res) => {
+  if (!anthropicApiKey) {
+    return res.status(400).json({ error: 'No Anthropic API key configured. Set it in Settings.' });
+  }
+
+  const { screenshots } = req.body;
+  if (!screenshots || !Array.isArray(screenshots) || screenshots.length === 0) {
+    return res.status(400).json({ error: 'No screenshots provided' });
+  }
+  if (screenshots.length > 10) {
+    return res.status(400).json({ error: 'Maximum 10 screenshots per review' });
+  }
+
+  // Gather current engine state for context
+  const engineState = {
+    trifecta_score: trifecta,
+    modules: {
+      m1_liquidity: { score: mod1, roc_4w: +(latV4 * 100).toFixed(2), roc_13w: +(latV13 * 100).toFixed(2), signal: mod1 > 0 ? 'ACCELERATING' : mod1 < 0 ? 'DRAINING' : 'NEUTRAL' },
+      m2_conviction: { score: mod2, signal: 'ACCUMULATING' },
+      m3_breadth: { score: mod3, breadth_pct: +breadthLat.toFixed(1), signal: mod3 > 0 ? 'HEALTHY' : mod3 < 0 ? 'FRAGILE' : 'NEUTRAL' },
+    },
+    regime: { is_stagflation: isStag, label: isStag ? 'STAGFLATION' : trifecta >= 2 ? 'RISK-ON' : trifecta <= -2 ? 'RISK-OFF' : 'NEUTRAL', pce, gdp },
+    hedge: { recommendation: trifecta >= 2 ? 'REDUCE' : trifecta <= -2 ? 'FULL' : 'STANDARD', spxu_allocation: trifecta >= 3 ? '0%' : trifecta >= 2 ? '25%' : trifecta >= 0 ? '50%' : trifecta >= -1 ? '75%' : '100%' },
+    net_liquidity: +nl[N - 1].toFixed(4),
+    breadth_pct: +breadthLat.toFixed(1),
+    argentina: { spread: +argSpread[N - 1].toFixed(2), spread_tightening: argSpread[N - 1] < argSpread[N - 8] },
+  };
+
+  try {
+    const client = new Anthropic({ apiKey: anthropicApiKey });
+
+    // Build content array with all screenshots
+    const imageContent: Array<Anthropic.ImageBlockParam | Anthropic.TextBlockParam> = [];
+    screenshots.forEach((s: { data: string; label: string }, i: number) => {
+      imageContent.push({
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/png', data: s.data.replace(/^data:image\/\w+;base64,/, '') },
+      });
+      imageContent.push({
+        type: 'text',
+        text: `[Screenshot ${i + 1}: "${s.label}"]`,
+      });
+    });
+
+    imageContent.push({
+      type: 'text',
+      text: `CURRENT DRUCK ENGINE STATE:
+${JSON.stringify(engineState, null, 2)}
+
+TASK: You are the Druck Engine position review module. Analyze all the screenshots above — these show the user's actual positions from their trading models/platforms.
+
+For EACH position you can identify in the screenshots:
+1. Identify the ticker/asset, direction (long/short), and approximate size if visible
+2. Rate it on a scale: STRONG ALIGNMENT / ALIGNED / NEUTRAL / MISALIGNED / STRONGLY MISALIGNED — relative to what the Trifecta engine currently recommends
+3. Give a brief 1-2 sentence rationale referencing specific Trifecta signals
+
+Then provide:
+- An OVERALL PORTFOLIO GRADE (A+ through F) based on alignment with the engine
+- Top 3 RISKS in the current positioning
+- Top 3 SUGGESTED ADJUSTMENTS ranked by priority
+
+Format your response as JSON with this exact structure:
+{
+  "positions": [
+    { "ticker": "...", "direction": "LONG|SHORT", "size_note": "...", "alignment": "STRONG ALIGNMENT|ALIGNED|NEUTRAL|MISALIGNED|STRONGLY MISALIGNED", "rating_color": "green|lime|amber|orange|red", "rationale": "..." }
+  ],
+  "overall_grade": "A+",
+  "overall_summary": "2-3 sentence overall assessment",
+  "risks": ["risk 1", "risk 2", "risk 3"],
+  "adjustments": [
+    { "priority": 1, "action": "...", "rationale": "..." }
+  ],
+  "model_notes": ["Any observations about the models/screenshots themselves"]
+}
+
+Return ONLY valid JSON, no markdown fences.`,
+    });
+
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      messages: [{ role: 'user', content: imageContent }],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+    // Try to parse as JSON, fallback to raw text
+    try {
+      const parsed = JSON.parse(text);
+      res.json({ status: 'ok', review: parsed, engine_state: engineState });
+    } catch {
+      // If not valid JSON, wrap it
+      res.json({ status: 'ok', review: { raw_analysis: text }, engine_state: engineState });
+    }
+  } catch (err: any) {
+    console.error('Review error:', err?.message || err);
+    res.status(500).json({ error: err?.message || 'Failed to analyze screenshots' });
+  }
+});
+
 // ─── SERVE STATIC FILES ───
 const clientPath = path.join(__dirname, '../../client/public');
 app.use(express.static(clientPath));
@@ -422,6 +543,6 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v2.0 — Trifecta Analyzer`);
+  console.log(`\n  DRUCK ENGINE v3.0 — Trifecta Analyzer`);
   console.log(`  Running on http://localhost:${PORT}\n`);
 });
