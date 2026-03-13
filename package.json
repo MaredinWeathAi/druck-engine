@@ -1,0 +1,14 @@
+{
+  "name": "druck-engine",
+  "version": "2.0.0",
+  "description": "Druckenmiller Trifecta Macro-Liquidity Analyzer",
+  "scripts": {
+    "dev": "cd server && npm run dev",
+    "build": "cd server && npm run build",
+    "start": "node server/dist/index.js",
+    "install:all": "cd server && npm install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

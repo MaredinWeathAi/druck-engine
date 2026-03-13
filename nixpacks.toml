@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs_18"]
+
+[phases.install]
+cmds = ["cd server && npm install"]
+
+[phases.build]
+cmds = ["cd server && npx tsc"]
+
+[start]
+cmd = "node server/dist/index.js"

@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Druck Engine v2 — Trifecta Macro-Liquidity Analyzer</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<style>
+:root{
+  --bg:#06090f;--bg2:#0c1017;--card:#111827;--card2:#161f2e;
+  --bdr:#1e293b;--bdr2:#2a3548;
+  --t:#e2e8f0;--t2:#94a3b8;--t3:#64748b;--t4:#475569;
+  --grn:#22c55e;--grn2:rgba(34,197,94,.12);--grn3:rgba(34,197,94,.25);
+  --red:#ef4444;--red2:rgba(239,68,68,.12);--red3:rgba(239,68,68,.25);
+  --yel:#eab308;--yel2:rgba(234,179,8,.12);--yel3:rgba(234,179,8,.25);
+  --blu:#3b82f6;--blu2:rgba(59,130,246,.12);
+  --pur:#a855f7;--pur2:rgba(168,85,247,.12);
+  --cyn:#06b6d4;--cyn2:rgba(6,182,212,.12);
+  --gld:#f59e0b;--gld2:rgba(245,158,11,.12);
+  --org:#f97316;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Inter',system-ui,sans-serif;background:var(--bg);color:var(--t);min-height:100vh;overflow-x:hidden}
+
+/* ── TOPBAR ── */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;border-bottom:1px solid var(--bdr);background:rgba(6,9,15,.92);backdrop-filter:blur(16px);position:sticky;top:0;z-index:100}
+.topbar-l{display:flex;align-items:center;gap:14px}
+.logo{font-size:18px;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,var(--gld),var(--org));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo-sub{font-size:12px;color:var(--t3);letter-spacing:.3px}
+.topbar-r{display:flex;align-items:center;gap:10px}
+
+/* ── PILLS ── */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.4px}
+.pill-g{background:var(--grn2);color:var(--grn);border:1px solid var(--grn3)}
+.pill-r{background:var(--red2);color:var(--red);border:1px solid var(--red3)}
+.pill-y{background:var(--yel2);color:var(--yel);border:1px solid var(--yel3)}
+.pill-b{background:var(--blu2);color:var(--blu);border:1px solid rgba(59,130,246,.25)}
+.pill-p{background:var(--pur2);color:var(--pur);border:1px solid rgba(168,85,247,.25)}
+
+/* ── BANNER ── */
+.banner{padding:10px 28px;font-size:12px;font-weight:700;text-align:center;display:none;letter-spacing:.3px}
+.banner.stag{display:block;background:linear-gradient(90deg,rgba(239,68,68,.12),rgba(234,179,8,.12),rgba(239,68,68,.12));color:var(--yel);border-bottom:1px solid var(--yel3);animation:pls 3s ease-in-out infinite}
+.banner.hedge{display:block;background:linear-gradient(90deg,rgba(34,197,94,.1),rgba(6,182,212,.1));color:var(--grn);border-bottom:1px solid var(--grn3)}
+@keyframes pls{0%,100%{opacity:.8}50%{opacity:1}}
+
+.wrap{max-width:1560px;margin:0 auto;padding:20px 28px}
+
+/* ── TRIFECTA HERO ── */
+.trifecta-hero{display:grid;grid-template-columns:300px 1fr;gap:16px;margin-bottom:20px}
+.tri-score-card{background:var(--card);border:1px solid var(--bdr);border-radius:20px;padding:28px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.tri-score-num{font-size:72px;font-weight:900;letter-spacing:-4px;line-height:1}
+.tri-score-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--t3);margin-top:8px}
+.tri-score-bar{display:flex;gap:4px;margin-top:16px}
+.tri-seg{width:36px;height:8px;border-radius:4px;background:var(--bdr);transition:background .3s}
+.tri-regime{margin-top:12px;font-size:13px;font-weight:700;padding:6px 16px;border-radius:8px}
+.tri-modules{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.tri-mod{background:var(--card);border:1px solid var(--bdr);border-radius:16px;padding:20px;transition:border-color .2s}
+.tri-mod:hover{border-color:var(--bdr2)}
+.tri-mod-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.tri-mod-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--t3)}
+.tri-mod-score{font-size:28px;font-weight:800;letter-spacing:-1px}
+.tri-mod-detail{font-size:12px;color:var(--t3);line-height:1.6}
+.tri-mod-meter{height:4px;border-radius:2px;background:var(--bdr);margin-top:12px;overflow:hidden}
+.tri-mod-fill{height:100%;border-radius:2px;transition:width .4s}
+
+/* ── GRIDS ── */
+.g1{display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:20px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+.g21{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:20px}
+.g12{display:grid;grid-template-columns:1fr 2fr;gap:14px;margin-bottom:20px}
+
+/* ── CARDS ── */
+.card{background:var(--card);border:1px solid var(--bdr);border-radius:16px;padding:22px;transition:border-color .2s}
+.card:hover{border-color:var(--bdr2)}
+.card-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.card-t{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--t3)}
+
+/* ── METRICS ── */
+.met-big{font-size:32px;font-weight:800;letter-spacing:-1.5px;line-height:1.1}
+.met-sm{font-size:12px;color:var(--t3);margin-top:2px}
+.met-d{font-size:13px;font-weight:700;margin-top:3px}
+.up{color:var(--grn)}.dn{color:var(--red)}.nt{color:var(--yel)}
+
+/* ── GAUGES ── */
+.gr{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(30,41,59,.4)}
+.gr:last-child{border-bottom:none}
+.gd{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.gl{flex:1;font-size:13px}.gv{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* ── TABLE ── */
+.tbl{width:100%;border-collapse:separate;border-spacing:0}
+.tbl th{text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--t4);padding:7px 10px;border-bottom:1px solid var(--bdr)}
+.tbl td{padding:9px 10px;font-size:13px;border-bottom:1px solid rgba(30,41,59,.25);font-variant-numeric:tabular-nums}
+.tbl tr:hover td{background:rgba(30,41,59,.25)}
+.tk{font-weight:800}
+
+/* ── ALERTS ── */
+.al{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:10px;margin-bottom:6px;font-size:12px;line-height:1.55}
+.al-w{background:var(--yel2);border:1px solid rgba(234,179,8,.15)}
+.al-d{background:var(--red2);border:1px solid rgba(239,68,68,.15)}
+.al-i{background:var(--blu2);border:1px solid rgba(59,130,246,.15)}
+.al-b{background:var(--grn2);border:1px solid rgba(34,197,94,.15)}
+.al-ic{font-size:15px;flex-shrink:0;margin-top:1px}
+
+.tag{display:inline-block;font-size:9px;font-weight:800;padding:2px 5px;border-radius:3px;letter-spacing:.4px;margin-right:4px}
+.tag-a{background:rgba(168,85,247,.18);color:var(--pur)}
+.tag-b{background:rgba(6,182,212,.18);color:var(--cyn)}
+.tag-c{background:rgba(245,158,11,.18);color:var(--gld)}
+.tag-tri{background:rgba(239,68,68,.18);color:var(--red)}
+.tag-arg{background:rgba(59,130,246,.18);color:var(--blu)}
+
+.section{font-size:16px;font-weight:800;letter-spacing:-.4px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.section span{font-size:11px;color:var(--t3);font-weight:400;letter-spacing:0;font-style:italic}
+
+.greyed{opacity:.3;filter:grayscale(.7)}
+
+details.cfg{background:var(--card);border:1px solid var(--bdr);border-radius:14px;padding:16px 20px;margin-bottom:20px}
+details.cfg summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--t3);letter-spacing:.4px}
+.cfg-g{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+.cfg-in{background:var(--bg);border:1px solid var(--bdr);border-radius:8px;padding:7px 10px;color:var(--t);font-size:12px;width:100%}
+.cfg-in:focus{outline:none;border-color:var(--gld)}
+.cfg-lb{font-size:10px;color:var(--t3);margin-bottom:3px;display:block}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:2px;margin-bottom:16px;background:var(--bg2);border-radius:10px;padding:3px;border:1px solid var(--bdr)}
+.tab{padding:8px 18px;font-size:12px;font-weight:700;border-radius:8px;cursor:pointer;color:var(--t3);transition:all .2s;letter-spacing:.2px}
+.tab:hover{color:var(--t2)}
+.tab.active{background:var(--card);color:var(--t);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.tab-content{display:none}.tab-content.active{display:block}
+
+@media(max-width:1200px){.g3,.g2,.g21,.g12,.tri-modules{grid-template-columns:1fr}.trifecta-hero{grid-template-columns:1fr}.cfg-g{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-l">
+    <div class="logo">DRUCK ENGINE</div>
+    <div class="logo-sub">Trifecta Macro-Liquidity Analyzer v2.0</div>
+  </div>
+  <div class="topbar-r">
+    <span class="pill pill-g" id="regime-pill">● RISK-ON</span>
+    <span class="pill pill-p" id="trifecta-pill">TRIFECTA: +2</span>
+    <span style="font-size:11px;color:var(--t4)" id="ts"></span>
+  </div>
+</div>
+
+<div id="banner-stag" class="banner"></div>
+<div id="banner-hedge" class="banner"></div>
+
+<div class="wrap">
+
+<!-- CONFIG -->
+<details class="cfg">
+  <summary>API Configuration & Data Mode</summary>
+  <div class="cfg-g">
+    <div><label class="cfg-lb">FRED API Key</label><input class="cfg-in" id="k-fred" type="password" placeholder="FRED key"></div>
+    <div><label class="cfg-lb">GuruFocus API Key</label><input class="cfg-in" id="k-guru" type="password" placeholder="GuruFocus key"></div>
+    <div><label class="cfg-lb">Data Mode</label><select class="cfg-in" id="data-mode"><option value="sim" selected>Simulated (Demo)</option><option value="live">Live API</option></select></div>
+    <div><label class="cfg-lb">&nbsp;</label><button class="cfg-in" style="cursor:pointer;background:var(--gld);color:#000;font-weight:800;border:none" onclick="init()">Refresh All Data</button></div>
+  </div>
+</details>
+
+<!-- ═════════════ TRIFECTA HERO ═════════════ -->
+<div class="trifecta-hero">
+  <div class="tri-score-card">
+    <div class="tri-score-num" id="tri-num">+2</div>
+    <div class="tri-score-label">Trifecta Score</div>
+    <div class="tri-score-bar" id="tri-bar"></div>
+    <div class="tri-regime" id="tri-regime"></div>
+  </div>
+  <div class="tri-modules" id="tri-modules"></div>
+</div>
+
+<!-- ═════════════ TABS ═════════════ -->
+<div class="tabs" id="main-tabs">
+  <div class="tab active" data-tab="overview">Macro Overview</div>
+  <div class="tab" data-tab="trifecta">Trifecta Deep Dive</div>
+  <div class="tab" data-tab="argentina">Argentina Inflection</div>
+  <div class="tab" data-tab="hedge">Short Hedge Tracker</div>
+  <div class="tab" data-tab="positions">Portfolio & P&L Heat</div>
+</div>
+
+<!-- ═══ TAB: OVERVIEW ═══ -->
+<div class="tab-content active" id="tab-overview">
+
+  <div class="section">Lens A: Liquidity Shield <span>"Liquidity moves markets, not earnings."</span></div>
+  <div class="g3" id="liq-metrics"></div>
+
+  <div class="g21">
+    <div class="card">
+      <div class="card-h"><div class="card-t">Net Liquidity vs S&P 500 — Divergence Detector</div><span class="tag tag-a">LENS A</span></div>
+      <div id="ch-liq" style="height:340px"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">Global Liquidity Gauges</div></div>
+      <div id="gauges"></div>
+    </div>
+  </div>
+
+  <div class="section">Lens B: 18-Month Perception <span>"Never invest in the present."</span></div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-h"><div class="card-t">Big Bet Radar — Sector Scatter</div><span class="tag tag-b">LENS B</span></div>
+      <div id="ch-radar" style="height:380px"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">Forward vs Current P/E</div><div style="font-size:11px;color:var(--t3)">Compression = Growth Expected</div></div>
+      <div id="ch-pe" style="height:380px"></div>
+    </div>
+  </div>
+
+  <div class="section">Lens C: Price vs Heat <span>"If the news is great but it won't go up, get out."</span></div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-h"><div class="card-t">Sentiment vs Price Divergence</div><span class="tag tag-c">LENS C</span></div>
+      <div id="ch-sent" style="height:340px"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">Druck Engine Alerts</div><span class="pill pill-y" id="al-ct">—</span></div>
+      <div id="alerts" style="max-height:340px;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <div class="section">Macro Confirmation</div>
+  <div class="g3">
+    <div class="card"><div class="card-h"><div class="card-t">Commodities</div></div><div id="ch-comm" style="height:200px"></div></div>
+    <div class="card"><div class="card-h"><div class="card-t">HY Spreads — Financial Stress</div></div><div id="ch-hy" style="height:200px"></div></div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">Stagflation Monitor</div></div>
+      <div id="stag-gauges"></div>
+      <div id="stag-box" style="margin-top:12px;padding:10px;border-radius:8px;font-size:12px;font-weight:700;text-align:center"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TAB: TRIFECTA DEEP DIVE ═══ -->
+<div class="tab-content" id="tab-trifecta">
+  <div class="section">Module 1: Liquidity Velocity <span>4-week ROC vs 13-week ROC</span></div>
+  <div class="g2">
+    <div class="card"><div class="card-h"><div class="card-t">Velocity Comparison — 4w vs 13w ROC</div></div><div id="ch-vel" style="height:320px"></div></div>
+    <div class="card"><div class="card-h"><div class="card-t">Velocity Acceleration Map</div></div><div id="ch-accel" style="height:320px"></div></div>
+  </div>
+
+  <div class="section">Module 2: Smart Money Conviction <span>GuruFocus Guru Buy/Sell + Value Rotation</span></div>
+  <div class="g2">
+    <div class="card"><div class="card-h"><div class="card-t">Institutional Flow Heatmap</div></div><div id="ch-heat" style="height:340px"></div></div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">Divergent Value Plays</div><div style="font-size:11px;color:var(--t3)">Liquidity draining + Smart Money accumulating</div></div>
+      <div id="div-plays"></div>
+    </div>
+  </div>
+
+  <div class="section">Module 3: Market Breadth & Fragility <span>% of S&P 500 above 50-day MA</span></div>
+  <div class="g21">
+    <div class="card"><div class="card-h"><div class="card-t">Breadth vs S&P 500 — Fragility Detector</div></div><div id="ch-breadth" style="height:320px"></div></div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">Breadth Dashboard</div></div>
+      <div id="breadth-dash"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TAB: ARGENTINA ═══ -->
+<div class="tab-content" id="tab-argentina">
+  <div class="section">Argentina Inflection Tracker <span>Sovereign Spread → Structural Re-rating Signal</span></div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-h"><div class="card-t">Argentina Sovereign Spread vs US 10Y</div><span class="tag tag-arg">ARGENTINA</span></div>
+      <div id="ch-arg-spread" style="height:360px"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">TECO / GGAL Price vs Spread Compression</div></div>
+      <div id="ch-arg-price" style="height:360px"></div>
+    </div>
+  </div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-h"><div class="card-t">Argentina Thesis Dashboard</div></div>
+      <div id="arg-dash"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">Argentina Alerts</div></div>
+      <div id="arg-alerts"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TAB: HEDGE ═══ -->
+<div class="tab-content" id="tab-hedge">
+  <div class="section">Short Hedge Tracker (SPXU) <span>Auto-reduce when Trifecta reaches +2</span></div>
+  <div class="g2">
+    <div class="card">
+      <div class="card-h"><div class="card-t">SPXU Hedge Value vs Trifecta Score</div></div>
+      <div id="ch-hedge" style="height:360px"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">Hedge Decision Matrix</div></div>
+      <div id="hedge-matrix"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TAB: POSITIONS ═══ -->
+<div class="tab-content" id="tab-positions">
+  <div class="section">Portfolio P&L Heat Monitor</div>
+  <div class="g1">
+    <div class="card" style="overflow-x:auto">
+      <div class="card-h"><div class="card-t">Position vs Sector ETF — Divergence Tracker</div></div>
+      <table class="tbl"><thead><tr>
+        <th>Ticker</th><th>Name</th><th>Day Chg</th><th>Sector ETF</th><th>ETF Chg</th><th>Divergence</th><th>Regime Tag</th><th>Signal</th>
+      </tr></thead><tbody id="pos-body"></tbody></table>
+    </div>
+  </div>
+
+  <div class="section">Smart Money Flow by Sector</div>
+  <div class="g2">
+    <div class="card"><div class="card-h"><div class="card-t">Guru Buy vs Sell Ratio</div></div><div id="ch-guru" style="height:320px"></div></div>
+    <div class="card">
+      <div class="card-h"><div class="card-t">Druck Checklist</div></div>
+      <div id="checklist" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+
+<script>
+// ═══════════════════════════════════════════════
+// DRUCK ENGINE v2 — TRIFECTA SYSTEM
+// ═══════════════════════════════════════════════
+
+const PL={paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{family:'-apple-system,BlinkMacSystemFont,sans-serif',color:'#94a3b8',size:10},margin:{t:8,r:16,b:36,l:56},xaxis:{gridcolor:'rgba(30,41,59,.4)',zerolinecolor:'rgba(30,41,59,.4)'},yaxis:{gridcolor:'rgba(30,41,59,.4)',zerolinecolor:'rgba(30,41,59,.4)'},showlegend:true,legend:{bgcolor:'rgba(0,0,0,0)',font:{size:9}}};
+const PC={displayModeBar:false,responsive:true};
+
+// ── Helpers ──
+function dR(s,n,fd=7){const d=[];let t=new Date(s);for(let i=0;i<n;i++){d.push(new Date(t));t.setDate(t.getDate()+fd)}return d}
+function fD(d){return d.toISOString().split('T')[0]}
+function rW(s,n,dr=0,v=.01){const r=[s];for(let i=1;i<n;i++)r.push(r[i-1]*(1+dr+(Math.random()-.5)*v*2));return r}
+function roc(a,p){return a.map((v,i)=>i<p?0:(v-a[i-p])/a[i-p])}
+
+// ── Generate Data ──
+const N=78;
+const dates=dR('2024-09-01',N,7);
+const ds=dates.map(fD);
+
+// Liquidity components
+const bs=rW(7.4,N,-.0003,.003);
+const tga_=rW(.75,N,.0001,.015);
+const rrp_=rW(.85,N,-.005,.01).map(v=>Math.max(v,.04));
+const nl=bs.map((b,i)=>b-tga_[i]-rrp_[i]);
+const spx=rW(5450,N,.002,.012);
+const m2=rW(20.8,N,.0004,.002);
+
+// Velocities
+const vel4w=roc(nl,4);
+const vel13w=roc(nl,13);
+const latV4=vel4w[N-1];
+const latV13=vel13w[N-1];
+
+// Breadth data (% above 50-day MA)
+const breadth=rW(58,N,.0005,.03).map(v=>Math.max(15,Math.min(90,v)));
+const breadthLat=breadth[N-1];
+const breadthPrev=breadth[N-5];
+
+// Argentina spread
+const argSovYield=rW(14.5,N,-.003,.015);
+const us10y=rW(4.3,N,-.0005,.006);
+const argSpread=argSovYield.map((a,i)=>a-us10y[i]);
+const tecoPrice=rW(12.5,N,.004,.02);
+const ggalPrice=rW(68,N,.005,.018);
+
+// Commodities
+const crude=rW(72,N,.001,.02);
+const copper=rW(4.2,N,.0015,.015);
+const gold=rW(2650,N,.002,.008);
+const hySpreads=rW(3.8,N,-.001,.02);
+
+// Macro state
+const S={
+  pce:2.8,gdp:2.1,capUtil:78.2,ycBps:18,m2YoY:.8,
+  nl:nl[N-1],v4:latV4,v13:latV13,
+  breadth:breadthLat,breadthTrend:breadthLat-breadthPrev,
+  argSpread:argSpread[N-1],argSpreadPrev:argSpread[N-8],
+  tecoChg:((tecoPrice[N-1]-tecoPrice[N-8])/tecoPrice[N-8]*100),
+};
+S.isStag=(S.pce>3.0&&S.gdp<1.0&&S.v4<0);
+
+// ── TRIFECTA SCORE ──
+let mod1=0,mod2=0,mod3=0;
+
+// Module 1: Liquidity Velocity
+if(S.v4>S.v13&&S.v4>0)mod1=1;
+else if(S.v4<S.v13&&S.v4<0)mod1=-1;
+
+// Module 2: Smart Money Conviction (simulated)
+const guruRotating=true; // Gurus accumulating Value/Banks
+const fwdPEbottom25=true; // Forward P/E in bottom 25% of 10yr
+if(guruRotating&&fwdPEbottom25)mod2=1;
+else if(!guruRotating)mod2=-1;
+
+// Module 3: Market Breadth
+if(S.breadth>60)mod3=1;
+else if(S.breadth<40||(S.breadthTrend<-5&&spx[N-1]>spx[N-5]))mod3=-1;
+
+const trifecta=mod1+mod2+mod3;
+
+// ── Sector Data ──
+const sectors=[
+  {n:'Airlines',f18:-.15,ic:.12,pe:8.2,fpe:6.1,cap:'Low'},
+  {n:'Chemicals',f18:-.08,ic:.18,pe:14.5,fpe:11.2,cap:'Low'},
+  {n:'Financials',f18:.12,ic:.42,pe:12.8,fpe:10.5,cap:'Med'},
+  {n:'Technology',f18:.35,ic:.68,pe:28.5,fpe:24.1,cap:'High'},
+  {n:'Energy',f18:.05,ic:.35,pe:10.2,fpe:9.8,cap:'Med'},
+  {n:'Healthcare',f18:.18,ic:.45,pe:18.3,fpe:15.7,cap:'Med'},
+  {n:'Industrials',f18:.08,ic:.30,pe:16.7,fpe:13.9,cap:'Med'},
+  {n:'Materials',f18:-.05,ic:.15,pe:11.8,fpe:9.5,cap:'Low'},
+  {n:'Consumer Disc',f18:.22,ic:.52,pe:22.1,fpe:18.4,cap:'High'},
+  {n:'Utilities',f18:.02,ic:.20,pe:16,fpe:15.2,cap:'Med'},
+  {n:'Real Estate',f18:-.12,ic:.10,pe:19.5,fpe:14.8,cap:'Low'},
+  {n:'Argentina',f18:.28,ic:.08,pe:6.5,fpe:4.2,cap:'Low'},
+];
+
+const positions=[
+  {tk:'BAC',nm:'Bank of America',sec:'Financials',etf:'XLF',dc:-1.2,ec:-.3,regime:'Core Survivor'},
+  {tk:'WFC',nm:'Wells Fargo',sec:'Financials',etf:'XLF',dc:.8,ec:-.3,regime:'Core Survivor'},
+  {tk:'BX',nm:'Blackstone',sec:'Alt Finance',etf:'XLF',dc:-.5,ec:-.3,regime:'Core Survivor'},
+  {tk:'AAL',nm:'American Airlines',sec:'Airlines',etf:'JETS',dc:-2.8,ec:-.9,regime:S.isStag?'HIGH RISK':'Cyclical'},
+  {tk:'DAL',nm:'Delta Airlines',sec:'Airlines',etf:'JETS',dc:-1.5,ec:-.9,regime:S.isStag?'HIGH RISK':'Cyclical'},
+  {tk:'GGAL',nm:'Grupo Galicia',sec:'Argentina',etf:'ARGT',dc:1.5,ec:.8,regime:'Re-rating Play'},
+  {tk:'TECO2',nm:'Telecom Arg',sec:'Argentina',etf:'ARGT',dc:2.1,ec:.8,regime:'Re-rating Play'},
+  {tk:'SPXU',nm:'S&P Ultra Short',sec:'Hedge',etf:'SPY',dc:.9,ec:.3,regime:trifecta>=2?'REDUCE':'Active Hedge'},
+];
+
+const smartMoney={
+  secs:['Financials','Energy','Tech','Healthcare','Airlines','Materials','Argentina'],
+  buy:[72,58,45,52,38,41,65],
+  sell:[28,35,62,40,18,30,12],
+};
+
+const sentData=['BAC','WFC','BX','AAL','GGAL','MSFT','AAPL','XOM','CVX','AMZN'].map(t=>({
+  tk:t,sent:+(Math.random()*2-.5).toFixed(2),pa:+(Math.random()*4-2).toFixed(2)
+}));
+
+// ═══════════════════════════════════
+// RENDER
+// ═══════════════════════════════════
+
+function renderTrifecta(){
+  // Big number
+  document.getElementById('tri-num').textContent=(trifecta>0?'+':'')+trifecta;
+  document.getElementById('tri-num').style.color=trifecta>0?'var(--grn)':trifecta<0?'var(--red)':'var(--yel)';
+
+  // Bar segments
+  let barH='';
+  for(let i=-3;i<=3;i++){
+    let c='var(--bdr)';
+    if(i<=trifecta&&trifecta<0&&i<0)c='var(--red)';
+    else if(i>0&&i<=trifecta&&trifecta>0)c='var(--grn)';
+    else if(i===0&&trifecta===0)c='var(--yel)';
+    barH+=`<div class="tri-seg" style="background:${c}"></div>`;
+  }
+  document.getElementById('tri-bar').innerHTML=barH;
+
+  // Regime
+  const rEl=document.getElementById('tri-regime');
+  if(S.isStag){
+    rEl.style.background='var(--red2)';rEl.style.color='var(--red)';rEl.style.border='1px solid var(--red3)';
+    rEl.textContent='STAGFLATION REGIME';
+  }else if(trifecta>=2){
+    rEl.style.background='var(--grn2)';rEl.style.color='var(--grn)';rEl.style.border='1px solid var(--grn3)';
+    rEl.textContent='RISK-ON — PRESS WINNERS';
+  }else if(trifecta<=-2){
+    rEl.style.background='var(--red2)';rEl.style.color='var(--red)';rEl.style.border='1px solid var(--red3)';
+    rEl.textContent='RISK-OFF — DEFENSE MODE';
+  }else{
+    rEl.style.background='var(--yel2)';rEl.style.color='var(--yel)';rEl.style.border='1px solid var(--yel3)';
+    rEl.textContent='NEUTRAL — IDIOSYNCRATIC PLAYS';
+  }
+
+  // Top pills
+  const rp=document.getElementById('regime-pill');
+  if(S.isStag){rp.className='pill pill-r';rp.textContent='● STAGFLATION';}
+  else if(trifecta>=2){rp.className='pill pill-g';rp.textContent='● RISK-ON';}
+  else if(trifecta<=-2){rp.className='pill pill-r';rp.textContent='● RISK-OFF';}
+  else{rp.className='pill pill-y';rp.textContent='● NEUTRAL';}
+  document.getElementById('trifecta-pill').textContent='TRIFECTA: '+(trifecta>0?'+':'')+trifecta;
+
+  // 3 modules
+  const mods=[
+    {title:'Module 1: Liquidity Velocity',score:mod1,
+     detail:`4-wk ROC: ${(S.v4*100).toFixed(2)}%<br>13-wk ROC: ${(S.v13*100).toFixed(2)}%<br>${mod1>0?'Accelerating — 4w > 13w':'Decelerating — drain intensifying'}`,
+     pct:mod1>0?85:mod1<0?15:50,color:mod1>0?'var(--grn)':mod1<0?'var(--red)':'var(--yel)'},
+    {title:'Module 2: Smart Money',score:mod2,
+     detail:`Guru Buy Trend: ${mod2>0?'Accumulating Value/Banks':'Rotating out'}<br>Forward P/E: Bottom 25% of 10yr range<br>${mod2>0?'Conviction rising in value sectors':'Smart money exiting'}`,
+     pct:mod2>0?80:mod2<0?20:50,color:mod2>0?'var(--grn)':mod2<0?'var(--red)':'var(--yel)'},
+    {title:'Module 3: Market Breadth',score:mod3,
+     detail:`% Above 50d MA: ${S.breadth.toFixed(1)}%<br>Breadth Trend: ${S.breadthTrend>0?'+':''}${S.breadthTrend.toFixed(1)} pts (5-wk)<br>${mod3>0?'Healthy participation':'Narrow rally — fragility risk'}`,
+     pct:mod3>0?75:mod3<0?25:50,color:mod3>0?'var(--grn)':mod3<0?'var(--red)':'var(--yel)'},
+  ];
+  document.getElementById('tri-modules').innerHTML=mods.map(m=>`
+    <div class="tri-mod">
+      <div class="tri-mod-head"><div class="tri-mod-title">${m.title}</div><div class="tri-mod-score" style="color:${m.color}">${m.score>0?'+':''}${m.score}</div></div>
+      <div class="tri-mod-detail">${m.detail}</div>
+      <div class="tri-mod-meter"><div class="tri-mod-fill" style="width:${m.pct}%;background:${m.color}"></div></div>
+    </div>`).join('');
+}
+
+function renderLiqMetrics(){
+  const cards=[
+    {t:'Net Liquidity Index',v:'$'+S.nl.toFixed(2)+'T',d:(S.v4>0?'▲ +':'▼ ')+(S.v4*100).toFixed(1)+'% (4-wk vel)',up:S.v4>0,badge:S.v4>.02?'EXPANDING':S.v4<-.02?'DRAINING':'NEUTRAL',bc:S.v4>.02?'pill-g':S.v4<-.02?'pill-r':'pill-y',sub:'Fed BS − TGA − RRP'},
+    {t:'M2 Money Supply',v:'$'+m2[N-1].toFixed(2)+'T',d:'▲ +'+S.m2YoY+'% YoY',up:true,badge:'FLAT',bc:'pill-y',sub:'Broad money growth'},
+    {t:'Yield Curve (2s10s)',v:'+'+S.ycBps+' bps',d:'▲ from −42 bps (6mo ago)',up:true,badge:'STEEPENING',bc:'pill-g',sub:'Normalization → easing cycle'},
+  ];
+  document.getElementById('liq-metrics').innerHTML=cards.map(c=>`
+    <div class="card"><div class="card-h"><div class="card-t">${c.t}</div><span class="pill ${c.bc}">${c.badge}</span></div>
+    <div class="met-big">${c.v}</div><div class="met-d ${c.up?'up':'dn'}">${c.d}</div><div class="met-sm">${c.sub}</div></div>`).join('');
+}
+
+function renderLiqChart(){
+  Plotly.newPlot('ch-liq',[
+    {x:ds,y:nl,name:'Net Liquidity ($T)',line:{color:'#a855f7',width:2.5}},
+    {x:ds,y:spx,name:'S&P 500',line:{color:'#3b82f6',width:2},yaxis:'y2'},
+  ],{...PL,yaxis:{...PL.yaxis,title:'Net Liquidity ($T)',titlefont:{size:9}},yaxis2:{...PL.yaxis,title:'S&P 500',titlefont:{size:9},side:'right',overlaying:'y'},
+    shapes:[{type:'rect',xref:'x',yref:'paper',x0:ds[Math.floor(N*.6)],x1:ds[Math.floor(N*.75)],y0:0,y1:1,fillcolor:'rgba(239,68,68,.06)',line:{width:0}}],
+    annotations:[{x:ds[Math.floor(N*.6)],y:1.02,xref:'x',yref:'paper',text:'Divergence Zone',showarrow:false,font:{size:9,color:'#ef4444'}}]
+  },PC);
+}
+
+function renderGauges(){
+  const g=[
+    {l:'US Fed (BS)',v:'$'+bs[N-1].toFixed(2)+'T',c:S.v4>0?'var(--grn)':'var(--red)'},
+    {l:'ECB Net Liquidity',v:'€4.21T',c:'var(--yel)'},
+    {l:'BOJ Balance Sheet',v:'¥756T',c:'var(--grn)'},
+    {l:'PBOC Total Assets',v:'¥45.2T',c:'var(--grn)'},
+    {l:'TGA (Treasury Cash)',v:'$'+(tga_[N-1]*1e3).toFixed(0)+'B',c:tga_[N-1]>.8?'var(--red)':'var(--grn)'},
+    {l:'Reverse Repo (RRP)',v:'$'+(rrp_[N-1]*1e3).toFixed(0)+'B',c:rrp_[N-1]<.2?'var(--grn)':'var(--yel)'},
+    {l:'Global Net Liquidity',v:'$18.4T',c:'var(--grn)'},
+  ];
+  document.getElementById('gauges').innerHTML=g.map(x=>`<div class="gr"><div class="gd" style="background:${x.c};box-shadow:0 0 6px ${x.c}"></div><div class="gl">${x.l}</div><div class="gv">${x.v}</div></div>`).join('');
+}
+
+function renderRadar(){
+  const cols=sectors.map(s=>s.f18<0&&s.ic<.25?'#22c55e':s.f18>.2&&s.ic>.5?'#ef4444':'#3b82f6');
+  const sz=sectors.map(s=>Math.abs(s.pe-s.fpe)*3+10);
+  Plotly.newPlot('ch-radar',[{x:sectors.map(s=>s.f18),y:sectors.map(s=>s.ic),text:sectors.map(s=>s.n),mode:'markers+text',textposition:'top center',textfont:{size:9,color:'#e2e8f0'},marker:{size:sz,color:cols,opacity:.85,line:{width:1,color:'rgba(255,255,255,.15)'}},type:'scatter'}],{...PL,showlegend:false,xaxis:{...PL.xaxis,title:'Forward 18m Perception →',titlefont:{size:9},zeroline:true,zerolinecolor:'rgba(148,163,184,.3)'},yaxis:{...PL.yaxis,title:'Institutional Concentration →',titlefont:{size:9},zeroline:true,zerolinecolor:'rgba(148,163,184,.3)'},shapes:[{type:'rect',xref:'x',yref:'y',x0:-.25,x1:0,y0:0,y1:.25,fillcolor:'rgba(34,197,94,.05)',line:{width:1,color:'rgba(34,197,94,.2)',dash:'dot'}}],annotations:[{x:-.12,y:.03,text:'<b>OPPORTUNITY</b>',showarrow:false,font:{size:9,color:'#22c55e'}}]},PC);
+}
+
+function renderPE(){
+  const s=[...sectors].sort((a,b)=>(a.fpe-a.pe)-(b.fpe-b.pe));
+  Plotly.newPlot('ch-pe',[
+    {y:s.map(x=>x.n),x:s.map(x=>x.pe),name:'Current P/E',type:'bar',orientation:'h',marker:{color:'rgba(148,163,184,.35)'}},
+    {y:s.map(x=>x.n),x:s.map(x=>x.fpe),name:'Forward P/E',type:'bar',orientation:'h',marker:{color:'#a855f7'}},
+  ],{...PL,barmode:'group',yaxis:{...PL.yaxis,automargin:true},bargap:.3},PC);
+}
+
+function renderSentiment(){
+  const cols=sentData.map(d=>d.sent>.5&&d.pa<-.5?'#ef4444':d.sent<0&&d.pa>.5?'#22c55e':'#3b82f6');
+  Plotly.newPlot('ch-sent',[{x:sentData.map(d=>d.sent),y:sentData.map(d=>d.pa),text:sentData.map(d=>d.tk),mode:'markers+text',textposition:'top center',textfont:{size:10,color:'#e2e8f0'},marker:{size:16,color:cols,opacity:.85},type:'scatter'}],{...PL,showlegend:false,xaxis:{...PL.xaxis,title:'Sentiment →',titlefont:{size:9},zeroline:true,zerolinecolor:'rgba(148,163,184,.3)'},yaxis:{...PL.yaxis,title:'Price Action %',titlefont:{size:9},zeroline:true,zerolinecolor:'rgba(148,163,184,.3)'},shapes:[{type:'rect',xref:'x',yref:'y',x0:.5,x1:1.6,y0:-2.5,y1:-.5,fillcolor:'rgba(239,68,68,.05)',line:{width:1,color:'rgba(239,68,68,.15)',dash:'dot'}}],annotations:[{x:1.1,y:-2.2,text:'BEARISH DIV',showarrow:false,font:{size:8,color:'#ef4444'}}]},PC);
+}
+
+function renderAlerts(){
+  const a=[];
+  if(S.v4<-.02)a.push({t:'d',i:'🔴',tg:'A',m:'LIQUIDITY DRAINING — Defense mode. Tighten stops.'});
+  else if(S.v4>.02)a.push({t:'b',i:'🟢',tg:'A',m:'LIQUIDITY EXPANDING — Vel +'+(S.v4*100).toFixed(1)+'%. Press winners.'});
+  if(nl[N-1]<nl[N-12]&&spx[N-1]>spx[N-12])a.push({t:'w',i:'⚠️',tg:'A',m:'LIQUIDITY DIVERGENCE — S&P rising while NL falling. The "1987 Signal."'});
+  const opp=sectors.filter(s=>s.f18<0&&s.ic<.2&&s.fpe<s.pe*.8);
+  if(opp.length)a.push({t:'b',i:'🎯',tg:'B',m:'HIGH CONVICTION: '+opp.map(s=>s.n).join(', ')+' — unpopular, improving perception, low capacity.'});
+  const bd=sentData.filter(d=>d.sent>.5&&d.pa<-.5);
+  if(bd.length)a.push({t:'w',i:'📉',tg:'C',m:'BEARISH DIVERGENCE: '+bd.map(d=>d.tk).join(', ')+' — bullish news, bearish price.'});
+  const re=positions.filter(p=>Math.abs(p.dc-p.ec)>2);
+  if(re.length)a.push({t:'d',i:'🚨',tg:'C',m:'P&L HEAT: '+re.map(p=>p.tk).join(', ')+' diverging from sector. Re-evaluate thesis.'});
+  if(trifecta>=2)a.push({t:'i',i:'🛡️',tg:'TRI',m:'TRIFECTA +'+trifecta+' — Consider reducing SPXU hedge. Risk-on conditions confirmed across all 3 modules.'});
+  if(S.argSpread<S.argSpreadPrev&&S.tecoChg>0)a.push({t:'b',i:'🇦🇷',tg:'ARG',m:'STRUCTURAL RE-RATING: Argentina spread tightening while TECO price rising. Inflection confirmed.'});
+  if(S.isStag){a.push({t:'d',i:'🔥',tg:'TRI',m:'STAGFLATION REGIME — PCE >3%, GDP <1%. Favor: Gold, Copper, BAC/WFC/BX. Grey out: Tech. Airlines = HIGH RISK.'});}
+  if(S.breadth<40||S.breadthTrend<-5&&spx[N-1]>spx[N-5])a.push({t:'w',i:'📊',tg:'TRI',m:'BREADTH FRAGILITY — Only '+S.breadth.toFixed(0)+'% above 50d MA. Narrow rally = crash precursor.'});
+
+  document.getElementById('alerts').innerHTML=a.map(x=>`<div class="al al-${x.t}"><span class="al-ic">${x.i}</span><div><span class="tag tag-${x.tg.toLowerCase()}">${x.tg}</span>${x.m}</div></div>`).join('');
+  document.getElementById('al-ct').textContent=a.length+' ACTIVE';
+}
+
+function renderComm(){
+  Plotly.newPlot('ch-comm',[
+    {x:ds,y:crude,name:'WTI',line:{color:'#f59e0b',width:2}},
+    {x:ds,y:copper,name:'Copper',line:{color:'#ef4444',width:2},yaxis:'y2'},
+  ],{...PL,margin:{t:4,r:40,b:28,l:44},yaxis:{...PL.yaxis,showgrid:false},yaxis2:{overlaying:'y',side:'right',showgrid:false},legend:{...PL.legend,x:0,y:1.15,orientation:'h'}},PC);
+}
+
+function renderHY(){
+  Plotly.newPlot('ch-hy',[{x:ds,y:hySpreads,fill:'tozeroy',fillcolor:'rgba(239,68,68,.08)',line:{color:'#ef4444',width:2}}],{...PL,margin:{t:4,r:16,b:28,l:44},showlegend:false,shapes:[{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:5,y1:5,line:{color:'rgba(239,68,68,.4)',width:1,dash:'dash'}}],annotations:[{x:1,y:5.15,xref:'paper',yref:'y',text:'Stress',showarrow:false,font:{size:8,color:'#ef4444'}}]},PC);
+}
+
+function renderStagMon(){
+  const rows=[
+    {l:'PCE Core Inflation',v:S.pce.toFixed(1)+'%',c:S.pce>3?'var(--red)':S.pce>2.5?'var(--yel)':'var(--grn)'},
+    {l:'GDP Growth (Real)',v:S.gdp.toFixed(1)+'%',c:S.gdp<1?'var(--red)':S.gdp<2?'var(--yel)':'var(--grn)'},
+    {l:'Capacity Utilization',v:S.capUtil.toFixed(1)+'%',c:S.capUtil<75?'var(--red)':'var(--yel)'},
+    {l:'Liquidity Velocity',v:(S.v4>0?'+':'')+(S.v4*100).toFixed(1)+'%',c:S.v4<-.02?'var(--red)':S.v4<.02?'var(--yel)':'var(--grn)'},
+  ];
+  document.getElementById('stag-gauges').innerHTML=rows.map(r=>`<div class="gr"><div class="gd" style="background:${r.c}"></div><div class="gl">${r.l}</div><div class="gv">${r.v}</div></div>`).join('');
+  const b=document.getElementById('stag-box');
+  if(S.isStag){b.style.background='var(--red2)';b.style.color='var(--red)';b.style.border='1px solid var(--red3)';b.textContent='STAGFLATION DETECTED';}
+  else{b.style.background='var(--grn2)';b.style.color='var(--grn)';b.style.border='1px solid var(--grn3)';b.textContent='NO STAGFLATION';}
+}
+
+// ── TRIFECTA DEEP DIVE TAB ──
+
+function renderVelocity(){
+  Plotly.newPlot('ch-vel',[
+    {x:ds,y:vel4w.map(v=>v*100),name:'4-wk ROC %',line:{color:'#a855f7',width:2.5}},
+    {x:ds,y:vel13w.map(v=>v*100),name:'13-wk ROC %',line:{color:'#3b82f6',width:2}},
+  ],{...PL,yaxis:{...PL.yaxis,title:'Rate of Change %',titlefont:{size:9},zeroline:true,zerolinecolor:'rgba(148,163,184,.3)'},shapes:[{type:'rect',xref:'paper',yref:'y',x0:0,x1:1,y0:0,y1:15,fillcolor:'rgba(34,197,94,.03)',line:{width:0}},{type:'rect',xref:'paper',yref:'y',x0:0,x1:1,y0:-15,y1:0,fillcolor:'rgba(239,68,68,.03)',line:{width:0}}]},PC);
+}
+
+function renderAccel(){
+  const accel=vel4w.map((v,i)=>i<1?0:v-vel4w[i-1]);
+  Plotly.newPlot('ch-accel',[{x:ds,y:accel.map(v=>v*100),type:'bar',marker:{color:accel.map(v=>v>0?'rgba(34,197,94,.6)':'rgba(239,68,68,.6)')}}],{...PL,showlegend:false,yaxis:{...PL.yaxis,title:'Acceleration (Δ ROC)',titlefont:{size:9}}},PC);
+}
+
+function renderHeatmap(){
+  Plotly.newPlot('ch-heat',[{x:['Buying %','Selling %'],y:smartMoney.secs,z:smartMoney.secs.map((_,i)=>[smartMoney.buy[i],smartMoney.sell[i]]),type:'heatmap',colorscale:[[0,'#1e1b4b'],[.3,'#3730a3'],[.5,'#6366f1'],[.7,'#a855f7'],[1,'#f59e0b']],text:smartMoney.secs.map((_,i)=>[smartMoney.buy[i]+'%',smartMoney.sell[i]+'%']),texttemplate:'%{text}',textfont:{color:'#e2e8f0',size:12},colorbar:{tickfont:{color:'#94a3b8'},len:.8}}],{...PL,yaxis:{...PL.yaxis,automargin:true}},PC);
+}
+
+function renderDivPlays(){
+  const plays=smartMoney.secs.map((s,i)=>({s,buy:smartMoney.buy[i],sell:smartMoney.sell[i],net:smartMoney.buy[i]-smartMoney.sell[i]})).filter(p=>p.buy>55);
+  const isDrain=S.v4<-.02;
+  document.getElementById('div-plays').innerHTML=plays.map(p=>`
+    <div class="al ${isDrain&&p.buy>60?'al-b':'al-i'}">
+      <span class="al-ic">${isDrain&&p.buy>60?'💎':'📊'}</span>
+      <div><b>${p.s}</b> — Buy: ${p.buy}% | Sell: ${p.sell}% | Net: +${p.net}%
+      ${isDrain&&p.buy>60?'<br><span style="color:var(--grn)">DIVERGENT VALUE: Accumulating despite liquidity drain</span>':''}
+      </div>
+    </div>`).join('')||'<div style="color:var(--t3);font-size:13px;padding:16px">No divergent plays detected in current regime.</div>';
+}
+
+function renderBreadth(){
+  Plotly.newPlot('ch-breadth',[
+    {x:ds,y:breadth,name:'% Above 50d MA',fill:'tozeroy',fillcolor:'rgba(59,130,246,.08)',line:{color:'#3b82f6',width:2}},
+    {x:ds,y:spx.map(v=>v/100),name:'S&P 500 (÷100)',line:{color:'#a855f7',width:2},yaxis:'y2'},
+  ],{...PL,yaxis:{...PL.yaxis,title:'Breadth %',titlefont:{size:9},range:[0,100]},yaxis2:{...PL.yaxis,title:'S&P (÷100)',titlefont:{size:9},side:'right',overlaying:'y'},shapes:[{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:60,y1:60,line:{color:'rgba(34,197,94,.3)',width:1,dash:'dash'}},{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:40,y1:40,line:{color:'rgba(239,68,68,.3)',width:1,dash:'dash'}}],annotations:[{x:0,y:62,xref:'paper',yref:'y',text:'Healthy >60%',showarrow:false,font:{size:8,color:'#22c55e'}},{x:0,y:38,xref:'paper',yref:'y',text:'Fragile <40%',showarrow:false,font:{size:8,color:'#ef4444'}}]},PC);
+}
+
+function renderBreadthDash(){
+  const fragile=S.breadth<40||(S.breadthTrend<-5&&spx[N-1]>spx[N-5]);
+  document.getElementById('breadth-dash').innerHTML=`
+    <div class="gr"><div class="gd" style="background:${S.breadth>60?'var(--grn)':S.breadth<40?'var(--red)':'var(--yel)'}"></div><div class="gl">Current Breadth</div><div class="gv">${S.breadth.toFixed(1)}%</div></div>
+    <div class="gr"><div class="gd" style="background:${S.breadthTrend>0?'var(--grn)':'var(--red)'}"></div><div class="gl">5-Week Trend</div><div class="gv">${S.breadthTrend>0?'+':''}${S.breadthTrend.toFixed(1)} pts</div></div>
+    <div class="gr"><div class="gd" style="background:${fragile?'var(--red)':'var(--grn)'}"></div><div class="gl">Fragility Status</div><div class="gv" style="color:${fragile?'var(--red)':'var(--grn)'}">${fragile?'FRAGILE':'STABLE'}</div></div>
+    <div class="gr"><div class="gd" style="background:var(--pur)"></div><div class="gl">Module 3 Score</div><div class="gv" style="color:${mod3>0?'var(--grn)':mod3<0?'var(--red)':'var(--yel)'}">${mod3>0?'+':''}${mod3}</div></div>
+    <div style="margin-top:14px;padding:12px;border-radius:10px;background:${fragile?'var(--red2)':'var(--grn2)'};border:1px solid ${fragile?'var(--red3)':'var(--grn3)'};font-size:12px;font-weight:700;text-align:center;color:${fragile?'var(--red)':'var(--grn)'}">
+      ${fragile?'⚠ BREADTH DIVERGENCE — Narrow rally. SPXU hedge critical.':'✓ Broad participation — healthy rally'}
+    </div>`;
+}
+
+// ── ARGENTINA TAB ──
+
+function renderArgSpread(){
+  Plotly.newPlot('ch-arg-spread',[
+    {x:ds,y:argSpread,name:'Arg Spread (bps equiv.)',fill:'tozeroy',fillcolor:'rgba(59,130,246,.08)',line:{color:'#3b82f6',width:2.5}},
+    {x:ds,y:us10y,name:'US 10Y Yield',line:{color:'#94a3b8',width:1.5,dash:'dot'},yaxis:'y2'},
+  ],{...PL,yaxis:{...PL.yaxis,title:'Spread (%)',titlefont:{size:9}},yaxis2:{...PL.yaxis,title:'US 10Y',titlefont:{size:9},side:'right',overlaying:'y'}},PC);
+}
+
+function renderArgPrice(){
+  Plotly.newPlot('ch-arg-price',[
+    {x:ds,y:tecoPrice,name:'TECO Price',line:{color:'#22c55e',width:2.5}},
+    {x:ds,y:ggalPrice.map(v=>v/5),name:'GGAL (÷5)',line:{color:'#a855f7',width:2}},
+    {x:ds,y:argSpread.map(v=>v*2),name:'Spread (×2)',line:{color:'#ef4444',width:1.5,dash:'dot'},yaxis:'y2'},
+  ],{...PL,yaxis:{...PL.yaxis,title:'Price',titlefont:{size:9}},yaxis2:{...PL.yaxis,title:'Spread (inv.)',titlefont:{size:9},side:'right',overlaying:'y',autorange:'reversed'}},PC);
+}
+
+function renderArgDash(){
+  const spreadTight=S.argSpread<S.argSpreadPrev;
+  const priceUp=S.tecoChg>0;
+  const rerating=spreadTight&&priceUp;
+  document.getElementById('arg-dash').innerHTML=`
+    <div class="gr"><div class="gd" style="background:${spreadTight?'var(--grn)':'var(--red)'}"></div><div class="gl">Sovereign Spread</div><div class="gv">${S.argSpread.toFixed(2)}% ${spreadTight?'(Tightening)':'(Widening)'}</div></div>
+    <div class="gr"><div class="gd" style="background:${priceUp?'var(--grn)':'var(--red)'}"></div><div class="gl">TECO2 Price (8-wk)</div><div class="gv" style="color:${priceUp?'var(--grn)':'var(--red)'}">${priceUp?'+':''}${S.tecoChg.toFixed(1)}%</div></div>
+    <div class="gr"><div class="gd" style="background:var(--blu)"></div><div class="gl">GGAL Price</div><div class="gv">$${ggalPrice[N-1].toFixed(2)}</div></div>
+    <div class="gr"><div class="gd" style="background:${rerating?'var(--grn)':'var(--yel)'}"></div><div class="gl">Re-rating Signal</div><div class="gv" style="color:${rerating?'var(--grn)':'var(--yel)'}"><b>${rerating?'ACTIVE':'PENDING'}</b></div></div>
+    <div style="margin-top:14px;padding:14px;border-radius:10px;background:${rerating?'var(--grn2)':'var(--yel2)'};border:1px solid ${rerating?'var(--grn3)':'var(--yel3)'};font-size:12px;font-weight:700;text-align:center;color:${rerating?'var(--grn)':'var(--yel)'}">
+      ${rerating?'🇦🇷 STRUCTURAL RE-RATING CONFIRMED — Spread tightening + price rising = Druck pattern':'Waiting for spread + price alignment'}
+    </div>`;
+}
+
+function renderArgAlerts(){
+  const a=[];
+  if(S.argSpread<S.argSpreadPrev&&S.tecoChg>0)a.push({t:'b',i:'🇦🇷',m:'STRUCTURAL RE-RATING: Sovereign spread compressing while equity prices rise. This is the German Reunification / Asian Crisis pattern Druck used.'});
+  if(S.argSpread<8)a.push({t:'b',i:'📈',m:'SPREAD NORMALIZED: Argentina spread below 800bps — approaching EM peer average. Equity re-rating has runway.'});
+  if(S.isStag)a.push({t:'i',i:'🛡️',m:'STAGFLATION REGIME: Argentina commodity exports benefit from hard asset inflation. TECO/Bonds = "Core Survivor."'});
+  if(!a.length)a.push({t:'i',i:'🔍',m:'Monitoring Argentina inflection signals. Waiting for spread/price confirmation.'});
+  document.getElementById('arg-alerts').innerHTML=a.map(x=>`<div class="al al-${x.t}"><span class="al-ic">${x.i}</span><div>${x.m}</div></div>`).join('');
+}
+
+// ── HEDGE TAB ──
+
+function renderHedge(){
+  const triHist=[];const spxuHist=[];
+  for(let i=0;i<N;i++){
+    let t=0;
+    if(i>=13){const v4i=vel4w[i],v13i=vel13w[i];if(v4i>v13i&&v4i>0)t++;else if(v4i<v13i&&v4i<0)t--;}
+    t+=mod2;
+    if(breadth[i]>60)t++;else if(breadth[i]<40)t--;
+    triHist.push(t);
+    spxuHist.push(30-t*3+Math.random()*2); // Inverse correlation
+  }
+  Plotly.newPlot('ch-hedge',[
+    {x:ds,y:spxuHist,name:'SPXU Value ($)',line:{color:'#ef4444',width:2.5}},
+    {x:ds,y:triHist,name:'Trifecta Score',line:{color:'#a855f7',width:2},yaxis:'y2'},
+  ],{...PL,yaxis:{...PL.yaxis,title:'SPXU ($)',titlefont:{size:9}},yaxis2:{...PL.yaxis,title:'Trifecta',titlefont:{size:9},side:'right',overlaying:'y',range:[-4,4]},shapes:[{type:'line',xref:'paper',yref:'y2',x0:0,x1:1,y0:2,y1:2,line:{color:'rgba(34,197,94,.4)',width:1,dash:'dash'}},{type:'line',xref:'paper',yref:'y2',x0:0,x1:1,y0:-2,y1:-2,line:{color:'rgba(239,68,68,.4)',width:1,dash:'dash'}}],annotations:[{x:1,y:2.2,xref:'paper',yref:'y2',text:'Reduce Hedge',showarrow:false,font:{size:8,color:'#22c55e'}},{x:1,y:-2.2,xref:'paper',yref:'y2',text:'Max Hedge',showarrow:false,font:{size:8,color:'#ef4444'}}]},PC);
+}
+
+function renderHedgeMatrix(){
+  const rows=[
+    {score:'+3',action:'ELIMINATE hedge',alloc:'0%',reason:'Full risk-on. All 3 modules bullish.'},
+    {score:'+2',action:'REDUCE to 25%',alloc:'25%',reason:'Strong signal. Keep small tail hedge only.'},
+    {score:'+1',action:'Hold at 50%',alloc:'50%',reason:'Mixed signals. Maintain balanced hedge.'},
+    {score:'0',action:'Standard hedge',alloc:'50%',reason:'Neutral. No clear directional bias.'},
+    {score:'-1',action:'Increase to 75%',alloc:'75%',reason:'Bearish lean. Protect capital.'},
+    {score:'-2',action:'FULL hedge',alloc:'100%',reason:'Defense mode. Preserve capital.'},
+    {score:'-3',action:'MAX hedge + cash',alloc:'100%+',reason:'All modules bearish. "Get the hell out."'},
+  ];
+  const curr=trifecta;
+  document.getElementById('hedge-matrix').innerHTML=`
+    <table class="tbl"><thead><tr><th>Trifecta</th><th>Action</th><th>SPXU Alloc</th><th>Rationale</th></tr></thead><tbody>
+    ${rows.map(r=>{
+      const isCurr=parseInt(r.score)===curr;
+      return`<tr style="${isCurr?'background:rgba(168,85,247,.1);':''}"><td style="font-weight:800;${isCurr?'color:var(--pur)':''}">${r.score}${isCurr?' ◄':''}</td><td style="font-weight:700;color:${parseInt(r.score)>=2?'var(--grn)':parseInt(r.score)<=-2?'var(--red)':'var(--yel)'}">${r.action}</td><td>${r.alloc}</td><td style="color:var(--t3)">${r.reason}</td></tr>`;
+    }).join('')}
+    </tbody></table>
+    ${trifecta>=2?`<div style="margin-top:14px;padding:12px;border-radius:10px;background:var(--grn2);border:1px solid var(--grn3);font-size:13px;font-weight:700;text-align:center;color:var(--grn)">🛡️ REDUCE HEDGE ALERT — Trifecta at +${trifecta}. Risk-on confirmed.</div>`:''}`;
+}
+
+// ── POSITIONS TAB ──
+
+function renderPositions(){
+  document.getElementById('pos-body').innerHTML=positions.map(p=>{
+    const dv=(p.dc-p.ec).toFixed(1);const da=Math.abs(parseFloat(dv));
+    let sig='',sc='';
+    if(da>2){sig='RE-EVALUATE';sc='color:var(--red);font-weight:800';}
+    else if(da>1){sig='MONITOR';sc='color:var(--yel);font-weight:700';}
+    else{sig='OK';sc='color:var(--grn)';}
+    const cs=v=>v>=0?'color:var(--grn)':'color:var(--red)';
+    const grey=S.isStag&&p.sec==='Technology'?' class="greyed"':'';
+    const regC=p.regime==='HIGH RISK'?'var(--red)':p.regime==='Core Survivor'?'var(--grn)':p.regime==='REDUCE'?'var(--yel)':p.regime==='Re-rating Play'?'var(--blu)':'var(--t3)';
+    return`<tr${grey}><td class="tk">${p.tk}</td><td style="color:var(--t2)">${p.nm}</td><td style="${cs(p.dc)}">${p.dc>0?'+':''}${p.dc}%</td><td style="color:var(--t3)">${p.etf}</td><td style="${cs(p.ec)}">${p.ec>0?'+':''}${p.ec}%</td><td style="${cs(-da)}">${dv>0?'+':''}${dv}%</td><td style="color:${regC};font-weight:700;font-size:11px">${p.regime}</td><td style="${sc}">${sig}</td></tr>`;
+  }).join('');
+}
+
+function renderGuruChart(){
+  Plotly.newPlot('ch-guru',[
+    {y:smartMoney.secs,x:smartMoney.buy,name:'Buy %',type:'bar',orientation:'h',marker:{color:'rgba(34,197,94,.6)'}},
+    {y:smartMoney.secs,x:smartMoney.sell.map(v=>-v),name:'Sell %',type:'bar',orientation:'h',marker:{color:'rgba(239,68,68,.6)'}},
+  ],{...PL,barmode:'overlay',yaxis:{...PL.yaxis,automargin:true},xaxis:{...PL.xaxis,title:'← Selling | Buying →',titlefont:{size:9}}},PC);
+}
+
+function renderChecklist(){
+  const c=[
+    {q:'Net Liquidity expanding?',ok:S.v4>.02,d:S.v4>.02?'Yes — press winners':'No — tighten stops'},
+    {q:'4w ROC > 13w ROC?',ok:mod1>0,d:mod1>0?'Accelerating':'Decelerating'},
+    {q:'Breadth healthy (>60%)?',ok:S.breadth>60,d:S.breadth.toFixed(0)+'% above 50d MA'},
+    {q:'Smart Money accumulating?',ok:mod2>0,d:mod2>0?'Rotating into value':'Exiting'},
+    {q:'No Stagflation?',ok:!S.isStag,d:S.isStag?'STAGFLATION — rotate':'Clear'},
+    {q:'Positions tracking sector?',ok:positions.filter(p=>Math.abs(p.dc-p.ec)>2).length===0,d:positions.filter(p=>Math.abs(p.dc-p.ec)>2).length>0?'Divergence!':'Aligned'},
+    {q:'Argentina re-rating?',ok:S.argSpread<S.argSpreadPrev&&S.tecoChg>0,d:S.argSpread<S.argSpreadPrev?'Spread tightening':'Waiting'},
+    {q:'Hedge sized correctly?',ok:trifecta>=2?false:true,d:trifecta>=2?'Trifecta +'+trifecta+' — reduce':'Appropriate'},
+  ];
+  document.getElementById('checklist').innerHTML=c.map(x=>`<div style="padding:10px;border-radius:8px;background:${x.ok?'var(--grn2)':'var(--red2)'};border:1px solid ${x.ok?'var(--grn3)':'var(--red3)'}"><div style="font-weight:700;font-size:12px;color:${x.ok?'var(--grn)':'var(--red)';}">${x.ok?'✓':'✗'} ${x.q}</div><div style="font-size:11px;color:var(--t3);margin-top:2px">${x.d}</div></div>`).join('');
+}
+
+// ── Banners ──
+function renderBanners(){
+  if(S.isStag){
+    document.getElementById('banner-stag').className='banner stag';
+    document.getElementById('banner-stag').textContent='⚠ STAGFLATION REGIME — PCE >3.0% | GDP <1.0% | Liquidity Contracting — Core Survivors: BAC, WFC, BX, Gold, Copper | High Risk: AAL, DAL | Grey: Tech';
+  }
+  if(trifecta>=2){
+    document.getElementById('banner-hedge').className='banner hedge';
+    document.getElementById('banner-hedge').textContent='🛡️ REDUCE HEDGE — Trifecta Score: +'+trifecta+' — All modules confirm risk-on. Consider trimming SPXU position.';
+  }
+}
+
+// ── Tabs ──
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-'+tab.dataset.tab).classList.add('active');
+    // Lazy render charts for tabs
+    if(tab.dataset.tab==='trifecta'){renderVelocity();renderAccel();renderHeatmap();renderDivPlays();renderBreadth();renderBreadthDash();}
+    if(tab.dataset.tab==='argentina'){renderArgSpread();renderArgPrice();renderArgDash();renderArgAlerts();}
+    if(tab.dataset.tab==='hedge'){renderHedge();renderHedgeMatrix();}
+    if(tab.dataset.tab==='positions'){renderPositions();renderGuruChart();renderChecklist();}
+  });
+});
+
+// ── Init ──
+function init(){
+  document.getElementById('ts').textContent='Updated: '+new Date().toLocaleString();
+  renderTrifecta();
+  renderBanners();
+  // Overview tab
+  renderLiqMetrics();renderLiqChart();renderGauges();renderRadar();renderPE();renderSentiment();renderAlerts();renderComm();renderHY();renderStagMon();
+}
+init();
+</script>
+</body>
+</html>
