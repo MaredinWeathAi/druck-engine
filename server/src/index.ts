@@ -531,10 +531,15 @@ async function refreshLiveData() {
       console.log(`[FRED] M2: ${fredData.m2sl[fredData.m2sl.length - 1]?.toFixed(0)}B, YoY: ${m2Yoy}%`);
     }
 
-    // ── PCE Core (already a percentage like 2.8) ──
-    if (fredData.pcepilfe.length > 0) {
-      pce = fredData.pcepilfe[fredData.pcepilfe.length - 1];
-      console.log(`[FRED] PCE Core: ${pce}%`);
+    // ── PCE Core YoY (PCEPILFE is a price INDEX, not a percentage — must compute YoY change) ──
+    if (fredData.pcepilfe.length >= 13) {
+      const latestPce = fredData.pcepilfe[fredData.pcepilfe.length - 1];
+      const yearAgoPce = fredData.pcepilfe[fredData.pcepilfe.length - 13]; // ~12 months ago (monthly data)
+      pce = +((latestPce - yearAgoPce) / yearAgoPce * 100).toFixed(1);
+      console.log(`[FRED] PCE Core YoY: ${pce}% (index: ${latestPce}, year-ago: ${yearAgoPce})`);
+    } else if (fredData.pcepilfe.length > 0) {
+      // Not enough data for YoY — log warning, keep default
+      console.warn(`[FRED] PCE Core: only ${fredData.pcepilfe.length} observations, need 13+ for YoY. Using default ${pce}%`);
     }
 
     // ── Real GDP Growth (already a percentage like 2.1) ──
@@ -612,7 +617,7 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '5.0.0',
+    version: '5.1.0',
     name: 'Druck Engine — Trifecta Analyzer',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
