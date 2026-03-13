@@ -10,7 +10,7 @@
 :root{
   --bg:#0b0e17;--sidebar:#0f1320;--card:#141926;--card2:#1a1f30;
   --border:#1e2540;--text:#e2e8f0;--dim:#64748b;--accent:#f59e0b;
-  --green:#22c55e;--red:#ef4444;--blue:#3b82f6;--purple:#a78bfa;--cyan:#06b6d4;
+  --green:#0ea5e9;--red:#f97316;--blue:#3b82f6;--purple:#a78bfa;--cyan:#06b6d4;
 }
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;overflow:hidden}
 /* Sidebar */
@@ -72,18 +72,18 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .action-banner.orange{background:rgba(249,115,22,0.08);border-color:rgba(249,115,22,0.25)}
 .action-banner.red{background:rgba(239,68,68,0.08);border-color:rgba(239,68,68,0.25)}
 .action-signal{font-size:14px;font-weight:800;letter-spacing:1px;text-transform:uppercase;white-space:nowrap}
-.action-banner.green .action-signal{color:#22c55e}
+.action-banner.green .action-signal{color:#0ea5e9}
 .action-banner.blue .action-signal{color:#3b82f6}
 .action-banner.amber .action-signal{color:#f59e0b}
 .action-banner.orange .action-signal{color:#f97316}
-.action-banner.red .action-signal{color:#ef4444}
+.action-banner.red .action-signal{color:#f97316}
 .action-rationale{font-size:12px;color:#94a3b8;line-height:1.5}
 .action-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.action-banner.green .action-dot{background:#22c55e}
+.action-banner.green .action-dot{background:#0ea5e9}
 .action-banner.blue .action-dot{background:#3b82f6}
 .action-banner.amber .action-dot{background:#f59e0b}
 .action-banner.orange .action-dot{background:#f97316}
-.action-banner.red .action-dot{background:#ef4444}
+.action-banner.red .action-dot{background:#f97316}
 /* Rotation Radar Page */
 .cycle-clock{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
 .cycle-phase-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:18px;text-align:center;position:relative;transition:all 0.2s}
@@ -95,9 +95,9 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .rotation-list{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:24px}
 .rotation-group{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:18px}
 .rotation-group h4{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
-.rotation-group.accumulate h4{color:#22c55e}
+.rotation-group.accumulate h4{color:#0ea5e9}
 .rotation-group.hold h4{color:#3b82f6}
-.rotation-group.reduce h4{color:#ef4444}
+.rotation-group.reduce h4{color:#f97316}
 .rotation-item{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.03);font-size:12px}
 .rotation-item:last-child{border-bottom:none}
 .rotation-item .ri-sector{font-weight:700;color:var(--text);margin-bottom:3px}
@@ -310,7 +310,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div class="card">
         <h3>Macro Regime Indicators</h3>
         <div class="regime-section-intro">
-          These 8 indicators define the current economic regime. Each shows the <strong>trailing 12-month average</strong> (baseline trend) vs. the <strong>latest reading</strong> (current direction). Color bars signal health: <span style="color:var(--green);font-weight:700">green</span> = favorable for risk assets, <span style="color:var(--accent);font-weight:700">amber</span> = monitor closely, <span style="color:var(--red);font-weight:700">red</span> = caution.
+          These 8 indicators define the current economic regime. Each shows the <strong>trailing 12-month average</strong> (baseline trend) vs. the <strong>latest reading</strong> (current direction). Color bars signal health: <span style="color:var(--green);font-weight:700">blue</span> = favorable for risk assets, <span style="color:var(--accent);font-weight:700">amber</span> = monitor closely, <span style="color:var(--red);font-weight:700">orange</span> = caution.
         </div>
         <div class="grid-4" id="regime-indicators">
           <!-- Populated by JS -->
@@ -919,7 +919,7 @@ function loadLiquidity() {
       name: 'Net Liquidity',
       type: 'scatter',
       mode: 'lines',
-      line: { color: 'rgba(34, 197, 94, 0.8)', width: 2 }
+      line: { color: 'rgba(14, 165, 233, 0.8)', width: 2 }
     };
     var trace2 = {
       x: data.dates,
@@ -1198,7 +1198,7 @@ function loadGlobalMarkets() {
       name: 'Spread (bps)',
       type: 'scatter',
       mode: 'lines',
-      line: { color: 'rgba(239, 68, 68, 0.8)', width: 2 }
+      line: { color: 'rgba(249, 115, 22, 0.8)', width: 2 }
     };
     var trace2 = {
       x: data.dates,
@@ -1206,7 +1206,7 @@ function loadGlobalMarkets() {
       name: 'TECO Price',
       type: 'scatter',
       mode: 'lines',
-      line: { color: 'rgba(34, 197, 94, 0.8)', width: 2 },
+      line: { color: 'rgba(14, 165, 233, 0.8)', width: 2 },
       yaxis: 'y2'
     };
     var layout = {
@@ -1258,7 +1258,7 @@ function loadCommodities() {
       name: 'Copper',
       type: 'scatter',
       mode: 'lines',
-      line: { color: 'rgba(220, 38, 38, 0.8)', width: 2 },
+      line: { color: 'rgba(232, 121, 249, 0.8)', width: 2 },
       yaxis: 'y2'
     });
     traces.push({
@@ -1267,7 +1267,7 @@ function loadCommodities() {
       name: 'Gold',
       type: 'scatter',
       mode: 'lines',
-      line: { color: 'rgba(34, 197, 94, 0.8)', width: 2 },
+      line: { color: 'rgba(14, 165, 233, 0.8)', width: 2 },
       yaxis: 'y3'
     });
 
