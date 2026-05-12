@@ -6,14 +6,15 @@
 // ═══════════════════════════════════════════════════════════════════
 
 import { Router, Request, Response } from 'express';
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
 import Anthropic from '@anthropic-ai/sdk';
 
 const router = Router();
 
-// Suppress yahoo-finance2 validation noise
-try { (yahooFinance as any).setGlobalConfig({ validation: { logErrors: false } }); } catch {}
-try { (yahooFinance as any).suppressNotices(['yahooSurvey']); } catch {}
+// Initialize yahoo-finance2 v3 (requires instantiation)
+const yahooFinance = new (YahooFinance as any)();
+try { yahooFinance.setGlobalConfig({ validation: { logErrors: false } }); } catch {}
+try { yahooFinance.suppressNotices(['yahooSurvey']); } catch {}
 
 // ─── INSTRUMENT REGISTRY (Phase 1: ~30 instruments) ───
 interface Instrument {
