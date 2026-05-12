@@ -595,28 +595,25 @@ async function refreshMorningLens(): Promise<void> {
   const errors: string[] = [];
   const startTime = Date.now();
 
-  // Fetch OHLC for all instruments in parallel (batched to avoid rate limits)
-  const batchSize = 5;
+  // Fetch OHLC sequentially with delays to avoid Yahoo Finance rate limits on cloud IPs
   const allBars: Map<string, OHLCBar[]> = new Map();
 
-  for (let i = 0; i < INSTRUMENTS.length; i += batchSize) {
-    const batch = INSTRUMENTS.slice(i, i + batchSize);
-    const results = await Promise.allSettled(
-      batch.map(inst => fetchOHLC(inst.symbol, '1y'))
-    );
-    for (let j = 0; j < batch.length; j++) {
-      const result = results[j];
-      if (result.status === 'fulfilled' && result.value.length > 0) {
-        allBars.set(batch[j].symbol, result.value);
+  for (let i = 0; i < INSTRUMENTS.length; i++) {
+    try {
+      const bars = await fetchOHLC(INSTRUMENTS[i].symbol, '1y');
+      if (bars.length > 0) {
+        allBars.set(INSTRUMENTS[i].symbol, bars);
       } else {
-        const errMsg = result.status === 'rejected' ? result.reason?.message : 'No data';
-        errors.push(`${batch[j].symbol}: ${errMsg}`);
-        console.warn(`[LENS] Failed to fetch ${batch[j].symbol}: ${errMsg}`);
+        errors.push(`${INSTRUMENTS[i].symbol}: No data`);
+        console.warn(`[LENS] Failed to fetch ${INSTRUMENTS[i].symbol}: No data`);
       }
+    } catch (err: any) {
+      errors.push(`${INSTRUMENTS[i].symbol}: ${err?.message || 'Unknown error'}`);
+      console.warn(`[LENS] Failed to fetch ${INSTRUMENTS[i].symbol}: ${err?.message}`);
     }
-    // Small delay between batches
-    if (i + batchSize < INSTRUMENTS.length) {
-      await new Promise(r => setTimeout(r, 200));
+    // Delay between each request to avoid rate limiting
+    if (i < INSTRUMENTS.length - 1) {
+      await new Promise(r => setTimeout(r, 1500));
     }
   }
 
