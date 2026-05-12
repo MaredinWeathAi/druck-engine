@@ -98,6 +98,72 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .rotation-group.accumulate h4{color:#0ea5e9}
 .rotation-group.hold h4{color:#3b82f6}
 .rotation-group.reduce h4{color:#f97316}
+/* Morning Lens */
+.death-nails-banner{display:flex;align-items:center;gap:16px;padding:16px 24px;border-radius:10px;margin-bottom:20px;border:2px solid}
+.death-nails-banner.dn-0{background:rgba(14,165,233,0.08);border-color:rgba(14,165,233,0.3)}
+.death-nails-banner.dn-1{background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.3)}
+.death-nails-banner.dn-2{background:rgba(249,115,22,0.08);border-color:rgba(249,115,22,0.3)}
+.death-nails-banner.dn-3{background:rgba(232,121,249,0.08);border-color:rgba(232,121,249,0.3)}
+.dn-count{font-size:32px;font-weight:900;font-family:monospace}
+.dn-0 .dn-count{color:#0ea5e9}
+.dn-1 .dn-count{color:#f59e0b}
+.dn-2 .dn-count{color:#f97316}
+.dn-3 .dn-count{color:#e879f9}
+.dn-label{font-size:14px;font-weight:700;color:var(--text)}
+.dn-detail{font-size:12px;color:var(--dim);margin-top:4px}
+.dn-nails{display:flex;gap:8px;margin-left:auto}
+.dn-nail{padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
+.dn-nail.firing{background:rgba(249,115,22,0.2);color:#f97316;border:1px solid rgba(249,115,22,0.4)}
+.dn-nail.safe{background:rgba(14,165,233,0.1);color:#0ea5e9;border:1px solid rgba(14,165,233,0.2)}
+.aria-section{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:24px;margin-bottom:20px;position:relative}
+.aria-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;cursor:pointer}
+.aria-header h3{font-size:15px;font-weight:700;color:var(--accent)}
+.aria-toggle{font-size:12px;color:var(--dim);margin-left:auto}
+.aria-body{font-size:13px;line-height:1.8;color:var(--text);white-space:pre-wrap}
+.aria-body.collapsed{display:none}
+.aria-timestamp{font-size:10px;color:var(--dim);margin-top:12px;text-align:right}
+.what-changed-feed{margin-bottom:20px}
+.wc-entry{display:flex;gap:12px;padding:12px 16px;border-left:3px solid;margin-bottom:4px;background:var(--card);border-radius:0 8px 8px 0}
+.wc-entry.upgrade{border-left-color:#0ea5e9}
+.wc-entry.downgrade{border-left-color:#f97316}
+.wc-entry.new_signal{border-left-color:#f59e0b}
+.wc-entry.cleared{border-left-color:var(--dim)}
+.wc-icon{font-size:16px;flex-shrink:0}
+.wc-text{flex:1}
+.wc-headline{font-size:13px;font-weight:600;color:var(--text)}
+.wc-detail{font-size:11px;color:var(--dim);margin-top:3px}
+.signal-strip{display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap}
+.signal-pill{padding:10px 18px;border-radius:8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;text-align:center;min-width:120px}
+.signal-pill.healthy{background:rgba(14,165,233,0.12);color:#0ea5e9;border:1px solid rgba(14,165,233,0.25)}
+.signal-pill.warning{background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.25)}
+.signal-pill.danger{background:rgba(249,115,22,0.12);color:#f97316;border:1px solid rgba(249,115,22,0.25)}
+.signal-pill.critical{background:rgba(232,121,249,0.12);color:#e879f9;border:1px solid rgba(232,121,249,0.25)}
+.signal-pill .pill-label{font-size:9px;color:var(--dim);display:block;margin-bottom:4px;letter-spacing:1px}
+/* Chart Grid */
+.bucket-tabs{display:flex;gap:8px;margin-bottom:20px}
+.bucket-tab{padding:8px 18px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:var(--card2);border:1px solid var(--border);color:var(--dim);transition:all .15s}
+.bucket-tab.active{background:rgba(245,158,11,0.1);color:var(--accent);border-color:var(--accent)}
+.instrument-table{width:100%;border-collapse:collapse;font-size:12px}
+.instrument-table th{text-align:left;padding:10px 12px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:700;border-bottom:2px solid var(--border);cursor:pointer;user-select:none}
+.instrument-table th:hover{color:var(--accent)}
+.instrument-table td{padding:10px 12px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.instrument-table tr:hover{background:rgba(245,158,11,0.04)}
+.trend-pill{display:inline-block;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px}
+.trend-pill.UPTREND{background:rgba(14,165,233,0.15);color:#0ea5e9}
+.trend-pill.DOWNTREND{background:rgba(249,115,22,0.15);color:#f97316}
+.trend-pill.TOPPING{background:rgba(245,158,11,0.15);color:#f59e0b}
+.trend-pill.BASING{background:rgba(167,139,250,0.15);color:#a78bfa}
+.trend-pill.SIDEWAYS{background:rgba(100,116,139,0.15);color:#64748b}
+.sparkline-cell{width:80px;height:30px}
+.pct-change.positive{color:#0ea5e9;font-weight:600}
+.pct-change.negative{color:#f97316;font-weight:600}
+.lens-refresh-btn{padding:8px 16px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:rgba(245,158,11,0.1);color:var(--accent);border:1px solid rgba(245,158,11,0.3);transition:all .15s;float:right;margin-top:-4px}
+.lens-refresh-btn:hover{background:rgba(245,158,11,0.2)}
+.lens-refresh-btn:disabled{opacity:0.5;cursor:not-allowed}
+.lens-loading{text-align:center;padding:40px;color:var(--dim);font-size:14px}
+.lens-empty{text-align:center;padding:40px;color:var(--dim)}
+.lens-empty .empty-icon{font-size:40px;margin-bottom:12px}
+.lens-empty p{font-size:13px;line-height:1.6}
 .rotation-item{padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.03);font-size:12px}
 .rotation-item:last-child{border-bottom:none}
 .rotation-item .ri-sector{font-weight:700;color:var(--text);margin-bottom:3px}
@@ -199,11 +265,22 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 <div class="sidebar">
   <div class="sidebar-logo">
     <h1>DRUCK</h1>
-    <div class="ver">v4.0</div>
+    <div class="ver">v5.1</div>
   </div>
   <div class="sidebar-nav">
+    <!-- Morning Lens -->
+    <div class="nav-section">Morning Lens</div>
+    <div class="nav-item" data-page="morninglens">
+      <div class="icon">☀️</div>
+      <div>Morning Brief</div>
+    </div>
+    <div class="nav-item" data-page="chartgrid">
+      <div class="icon">📉</div>
+      <div>Chart Grid</div>
+    </div>
+
     <!-- Overview -->
-    <div class="nav-section">Overview</div>
+    <div class="nav-section">Trifecta Engine</div>
     <div class="nav-item active" data-page="dashboard">
       <div class="icon">📊</div>
       <div>Dashboard</div>
@@ -727,6 +804,80 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       </div>
     </div>
 
+    <!-- Morning Lens Page -->
+    <div class="page" id="page-morninglens">
+      <button class="lens-refresh-btn" id="lens-refresh-btn" onclick="refreshLens()">⟳ Refresh Data</button>
+      <!-- Death Nails Banner -->
+      <div class="death-nails-banner dn-0" id="dn-banner">
+        <div class="dn-count" id="dn-count">—</div>
+        <div>
+          <div class="dn-label" id="dn-label">Loading Death Nails...</div>
+          <div class="dn-detail" id="dn-detail"></div>
+        </div>
+        <div class="dn-nails" id="dn-nails"></div>
+      </div>
+
+      <!-- Signal Strip -->
+      <div class="signal-strip" id="signal-strip"></div>
+
+      <!-- Aria Narrative -->
+      <div class="aria-section" id="aria-section">
+        <div class="aria-header" onclick="toggleAria()">
+          <span style="font-size:18px">🤖</span>
+          <h3>Aria's Morning Brief</h3>
+          <span class="aria-toggle" id="aria-toggle">▼ collapse</span>
+        </div>
+        <div class="aria-body" id="aria-body">Loading narrative...</div>
+        <div class="aria-timestamp" id="aria-timestamp"></div>
+      </div>
+
+      <!-- What Changed Since Yesterday -->
+      <div class="card">
+        <h3 style="margin-bottom:16px">What Changed Since Yesterday</h3>
+        <div class="what-changed-feed" id="what-changed-feed">
+          <div class="lens-loading">Waiting for data...</div>
+        </div>
+      </div>
+
+      <!-- Leading Groups -->
+      <div class="card">
+        <h3 style="margin-bottom:16px">Inside-of-the-Market Leading Groups</h3>
+        <div class="grid-3" id="leading-groups-grid"></div>
+      </div>
+    </div>
+
+    <!-- Chart Grid Page -->
+    <div class="page" id="page-chartgrid">
+      <button class="lens-refresh-btn" id="cg-refresh-btn" onclick="refreshLens()">⟳ Refresh Data</button>
+      <div class="bucket-tabs" id="bucket-tabs">
+        <div class="bucket-tab active" data-bucket="equities" onclick="switchBucket('equities')">Equities</div>
+        <div class="bucket-tab" data-bucket="commodities" onclick="switchBucket('commodities')">Commodities</div>
+        <div class="bucket-tab" data-bucket="fx" onclick="switchBucket('fx')">FX &amp; Crypto</div>
+        <div class="bucket-tab" data-bucket="fixed_income" onclick="switchBucket('fixed_income')">Fixed Income</div>
+        <div class="bucket-tab" data-bucket="all" onclick="switchBucket('all')">All</div>
+      </div>
+      <div class="card" style="overflow-x:auto">
+        <table class="instrument-table" id="instrument-table">
+          <thead>
+            <tr>
+              <th data-sort="symbol">Symbol</th>
+              <th data-sort="name">Name</th>
+              <th data-sort="price">Price</th>
+              <th data-sort="chg1d">1D %</th>
+              <th data-sort="chg30d">30D %</th>
+              <th data-sort="daily">Daily Trend</th>
+              <th data-sort="weekly">Weekly</th>
+              <th data-sort="monthly">Monthly</th>
+              <th data-sort="roc20">20d ROC</th>
+              <th data-sort="ma50">50 MA</th>
+              <th data-sort="ma200">200 MA</th>
+            </tr>
+          </thead>
+          <tbody id="instrument-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Settings Page -->
     <div class="page" id="page-settings">
       <div class="card">
@@ -772,6 +923,8 @@ function showPage(page) {
   document.querySelector('[data-page="' + page + '"]').classList.add('active');
   // Update title
   var titles = {
+    morninglens: 'Morning Brief',
+    chartgrid: 'Chart Grid',
     dashboard: 'Dashboard',
     liquidity: 'Liquidity Deep Dive',
     breadth: 'Market Breadth',
@@ -793,7 +946,9 @@ function showPage(page) {
 }
 
 function loadPageData(page) {
-  if (page === 'dashboard') loadDashboard();
+  if (page === 'morninglens') loadMorningLens();
+  else if (page === 'chartgrid') loadChartGrid();
+  else if (page === 'dashboard') loadDashboard();
   else if (page === 'liquidity') loadLiquidity();
   else if (page === 'breadth') loadBreadth();
   else if (page === 'gurus') loadGurus();
@@ -1548,6 +1703,286 @@ window.saveApiKey = function() {
     alert('Error: ' + err.message);
   });
 };
+
+// ═══════════════════════════════════════════════
+// MORNING LENS
+// ═══════════════════════════════════════════════
+var lensData = null;
+var currentBucket = 'equities';
+var ariaCollapsed = false;
+
+function loadMorningLens() {
+  Promise.all([
+    apiCall('/api/lens/signals'),
+    apiCall('/api/lens/death-nails'),
+    apiCall('/api/lens/leading-groups'),
+    apiCall('/api/lens/what-changed'),
+    apiCall('/api/lens/narrative')
+  ]).then(function(results) {
+    var signals = results[0];
+    var dn = results[1];
+    var lg = results[2];
+    var wc = results[3];
+    var narrative = results[4];
+    renderDeathNails(dn);
+    renderSignalStrip(signals);
+    renderAria(narrative);
+    renderWhatChanged(wc);
+    renderLeadingGroups(lg);
+  }).catch(function(err) {
+    console.error('Morning Lens load error:', err);
+  });
+}
+
+function renderDeathNails(dn) {
+  if (!dn || !dn.components) return;
+  var count = dn.count || 0;
+  var banner = document.getElementById('dn-banner');
+  banner.className = 'death-nails-banner dn-' + count;
+  document.getElementById('dn-count').textContent = count + '/3';
+  var labels = [
+    'All Clear — No Death Nails firing',
+    'Caution — 1 Death Nail firing',
+    'Warning — 2 Death Nails firing',
+    'DANGER — All 3 Death Nails firing'
+  ];
+  document.getElementById('dn-label').textContent = labels[count];
+  var details = [
+    'Rates, dollar, and oil are all contained. Risk-on environment.',
+    'One headwind is building. Monitor closely for deterioration.',
+    'Two headwinds active. Druckenmiller would be reducing exposure.',
+    'Full trifecta of headwinds. Druckenmiller\'s maximum caution signal.'
+  ];
+  document.getElementById('dn-detail').textContent = details[count];
+  var nailsHtml = '';
+  var nailNames = { 'Rising Rates': 'RATES', 'Rising Dollar': 'DOLLAR', 'Rising Oil': 'OIL' };
+  dn.components.forEach(function(n) {
+    var cls = n.firing ? 'firing' : 'safe';
+    var label = nailNames[n.component] || n.component;
+    nailsHtml += '<div class="dn-nail ' + cls + '">' + label + (n.firing ? ' ⚠' : ' ✓') + '</div>';
+  });
+  document.getElementById('dn-nails').innerHTML = nailsHtml;
+}
+
+function renderSignalStrip(signals) {
+  if (!signals) return;
+  var strip = document.getElementById('signal-strip');
+  var html = '';
+  // Death Nails pill
+  var dn = signals.deathNails;
+  if (dn) {
+    var c = dn.count || 0;
+    var g = c === 0 ? 'healthy' : c === 1 ? 'warning' : c === 2 ? 'danger' : 'critical';
+    html += '<div class="signal-pill ' + g + '"><span class="pill-label">Death Nails</span>' + c + '/3</div>';
+  }
+  // Leading Groups pill
+  var lg = signals.leadingGroups;
+  if (lg) {
+    var h = lg.healthyCount || 0; var b = lg.brokenCount || 0;
+    var g2 = h >= 4 ? 'healthy' : b >= 3 ? 'danger' : 'warning';
+    html += '<div class="signal-pill ' + g2 + '"><span class="pill-label">Leading Groups</span>' + h + 'H / ' + b + 'B</div>';
+  }
+  // Defensives/Cyclicals pill
+  var dc = signals.defensivesVsCyclicals;
+  if (dc) {
+    var riskyCount = 0;
+    if (dc.xlpXly && dc.xlpXly.trend13w === 'RISING') riskyCount++;
+    if (dc.xluXlk && dc.xluXlk.trend13w === 'RISING') riskyCount++;
+    if (dc.goldCopper && dc.goldCopper.trend13w === 'RISING') riskyCount++;
+    var g3 = riskyCount === 0 ? 'healthy' : riskyCount <= 1 ? 'warning' : 'danger';
+    var dcLabel = riskyCount === 0 ? 'RISK ON' : riskyCount >= 2 ? 'RISK OFF' : 'MIXED';
+    html += '<div class="signal-pill ' + g3 + '"><span class="pill-label">Def / Cyc</span>' + dcLabel + '</div>';
+  }
+  // Breadth pill
+  var br = signals.breadth;
+  if (br) {
+    var g4 = br.breadthHealth === 'HEALTHY' ? 'healthy' : br.breadthHealth === 'BROKEN' ? 'danger' : 'warning';
+    html += '<div class="signal-pill ' + g4 + '"><span class="pill-label">Breadth</span>' + br.breadthHealth + '</div>';
+  }
+  // Curve pill
+  var cc = signals.curveCredit;
+  if (cc) {
+    var spread = cc.yieldCurve2s10s || 0;
+    var g5 = spread > 0 ? 'healthy' : spread > -50 ? 'warning' : 'danger';
+    html += '<div class="signal-pill ' + g5 + '"><span class="pill-label">Curve 2s10s</span>' + spread.toFixed(0) + 'bp</div>';
+    var hySpread = cc.hySpread || 0;
+    var g6 = hySpread < 400 ? 'healthy' : hySpread < 600 ? 'warning' : 'danger';
+    html += '<div class="signal-pill ' + g6 + '"><span class="pill-label">HY Spread</span>' + hySpread.toFixed(0) + 'bp</div>';
+  }
+  strip.innerHTML = html;
+}
+
+function renderAria(narrative) {
+  var body = document.getElementById('aria-body');
+  var ts = document.getElementById('aria-timestamp');
+  if (!narrative || !narrative.text) {
+    body.textContent = 'Aria narrative not yet generated. Click Refresh to trigger generation.';
+    ts.textContent = '';
+    return;
+  }
+  body.textContent = narrative.text;
+  if (narrative.generatedAt) {
+    var d = new Date(narrative.generatedAt);
+    ts.textContent = 'Generated ' + d.toLocaleString();
+  }
+}
+
+function toggleAria() {
+  ariaCollapsed = !ariaCollapsed;
+  var body = document.getElementById('aria-body');
+  var toggle = document.getElementById('aria-toggle');
+  if (ariaCollapsed) {
+    body.classList.add('collapsed');
+    toggle.textContent = '▶ expand';
+  } else {
+    body.classList.remove('collapsed');
+    toggle.textContent = '▼ collapse';
+  }
+}
+
+function renderWhatChanged(wc) {
+  var feed = document.getElementById('what-changed-feed');
+  if (!wc || !wc.entries || wc.entries.length === 0) {
+    feed.innerHTML = '<div class="lens-empty"><div class="empty-icon">📋</div><p>No changes detected since yesterday.<br>Check back after the next data refresh.</p></div>';
+    return;
+  }
+  var icons = { death_nail: '💀', leading_group: '🏗️', breadth: '📊', defensives: '🛡️', curve_credit: '📈', trend_state: '📉' };
+  var severityClass = { critical: 'downgrade', warning: 'new_signal', info: 'cleared' };
+  var html = '';
+  wc.entries.forEach(function(e) {
+    var cat = e.category || 'trend_state';
+    var cls = severityClass[e.severity] || 'cleared';
+    html += '<div class="wc-entry ' + cls + '">';
+    html += '<div class="wc-icon">' + (icons[cat] || '📌') + '</div>';
+    html += '<div class="wc-text"><div class="wc-headline">' + (e.message || '') + '</div>';
+    if (e.symbol) html += '<div class="wc-detail">' + e.symbol + ' • ' + (e.category || '') + '</div>';
+    html += '</div></div>';
+  });
+  feed.innerHTML = html;
+}
+
+function renderLeadingGroups(lg) {
+  var grid = document.getElementById('leading-groups-grid');
+  if (!lg || !lg.groups) { grid.innerHTML = ''; return; }
+  var html = '';
+  lg.groups.forEach(function(g) {
+    var statusClass = g.health === 'HEALTHY' ? 'healthy' : g.health === 'BROKEN' ? 'danger' : 'warning';
+    html += '<div class="regime-card">';
+    html += '<div class="regime-status-bar ' + statusClass + '"></div>';
+    html += '<div class="regime-title">' + g.symbol + ' — ' + (g.name || '') + '</div>';
+    html += '<div class="regime-context">' + (g.trendState || '—') + '</div>';
+    html += '<div class="regime-readings"><div class="regime-reading">';
+    html += '<div class="reading-label">Health</div>';
+    html += '<div class="reading-value ' + statusClass + '">' + (g.health || '—') + '</div>';
+    html += '</div><div class="regime-reading">';
+    html += '<div class="reading-label">vs SPY 3M</div>';
+    html += '<div class="reading-value">' + (g.relPerf3m != null ? (g.relPerf3m > 0 ? '+' : '') + g.relPerf3m.toFixed(1) + '%' : '—') + '</div>';
+    html += '</div></div></div>';
+  });
+  grid.innerHTML = html;
+}
+
+function refreshLens() {
+  var btn = document.getElementById('lens-refresh-btn');
+  var btn2 = document.getElementById('cg-refresh-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Refreshing...'; }
+  if (btn2) { btn2.disabled = true; btn2.textContent = '⟳ Refreshing...'; }
+  apiCall('/api/lens/refresh', 'POST').then(function() {
+    setTimeout(function() {
+      if (currentPage === 'morninglens') loadMorningLens();
+      if (currentPage === 'chartgrid') loadChartGrid();
+      if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh Data'; }
+      if (btn2) { btn2.disabled = false; btn2.textContent = '⟳ Refresh Data'; }
+    }, 3000);
+  }).catch(function(err) {
+    alert('Refresh error: ' + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh Data'; }
+    if (btn2) { btn2.disabled = false; btn2.textContent = '⟳ Refresh Data'; }
+  });
+}
+
+// ═══════════════════════════════════════════════
+// CHART GRID
+// ═══════════════════════════════════════════════
+
+function loadChartGrid() {
+  apiCall('/api/lens/instruments').then(function(data) {
+    if (!data || !data.instruments) return;
+    lensData = data.instruments;
+    renderInstrumentTable(currentBucket);
+  }).catch(function(err) {
+    console.error('Chart grid load error:', err);
+  });
+}
+
+function switchBucket(bucket) {
+  currentBucket = bucket;
+  document.querySelectorAll('.bucket-tab').forEach(function(t) {
+    t.classList.toggle('active', t.getAttribute('data-bucket') === bucket);
+  });
+  renderInstrumentTable(bucket);
+}
+
+function renderInstrumentTable(bucket) {
+  if (!lensData) return;
+  var tbody = document.getElementById('instrument-tbody');
+  var filtered = bucket === 'all' ? lensData : lensData.filter(function(i) { return i.bucket === bucket; });
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--dim)">No instruments in this bucket</td></tr>';
+    return;
+  }
+  var html = '';
+  filtered.forEach(function(inst) {
+    var d = inst.daily || {};
+    var w = inst.weekly || {};
+    var m = inst.monthly || {};
+    var price = d.price || 0;
+    var chg1d = inst.changePct1d || 0;
+    var chg30d = inst.changePct30d || 0;
+    var roc20 = d.roc20d || 0;
+    var dState = d.state || '—';
+    var wState = w ? (w.state || '—') : '—';
+    var mState = m ? (m.state || '—') : '—';
+    html += '<tr>';
+    html += '<td style="font-weight:700;color:var(--accent)">' + inst.symbol + '</td>';
+    html += '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (inst.name || '') + '</td>';
+    html += '<td>' + price.toFixed(2) + '</td>';
+    html += '<td class="pct-change ' + (chg1d >= 0 ? 'positive' : 'negative') + '">' + (chg1d >= 0 ? '+' : '') + chg1d.toFixed(2) + '%</td>';
+    html += '<td class="pct-change ' + (chg30d >= 0 ? 'positive' : 'negative') + '">' + (chg30d >= 0 ? '+' : '') + chg30d.toFixed(2) + '%</td>';
+    html += '<td><span class="trend-pill ' + dState + '">' + dState + '</span></td>';
+    html += '<td><span class="trend-pill ' + wState + '">' + wState + '</span></td>';
+    html += '<td><span class="trend-pill ' + mState + '">' + mState + '</span></td>';
+    html += '<td class="pct-change ' + (roc20 >= 0 ? 'positive' : 'negative') + '">' + (roc20 >= 0 ? '+' : '') + roc20.toFixed(2) + '%</td>';
+    html += '<td style="color:var(--dim)">' + (d.ma50 ? d.ma50.toFixed(2) : '—') + '</td>';
+    html += '<td style="color:var(--dim)">' + (d.ma200 ? d.ma200.toFixed(2) : '—') + '</td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+// Table sorting
+document.addEventListener('click', function(e) {
+  if (e.target.tagName === 'TH' && e.target.closest('#instrument-table')) {
+    var sortKey = e.target.getAttribute('data-sort');
+    if (!sortKey || !lensData) return;
+    lensData.sort(function(a, b) {
+      var av, bv;
+      if (sortKey === 'symbol') { av = a.symbol; bv = b.symbol; return av < bv ? -1 : av > bv ? 1 : 0; }
+      if (sortKey === 'name') { av = a.name || ''; bv = b.name || ''; return av < bv ? -1 : av > bv ? 1 : 0; }
+      if (sortKey === 'price') { av = (a.daily || {}).price || 0; bv = (b.daily || {}).price || 0; return bv - av; }
+      if (sortKey === 'chg1d') { av = a.changePct1d || 0; bv = b.changePct1d || 0; return bv - av; }
+      if (sortKey === 'chg30d') { av = a.changePct30d || 0; bv = b.changePct30d || 0; return bv - av; }
+      if (sortKey === 'roc20') { av = (a.daily || {}).roc20d || 0; bv = (b.daily || {}).roc20d || 0; return bv - av; }
+      if (sortKey === 'daily') { av = (a.daily || {}).state || ''; bv = (b.daily || {}).state || ''; return av < bv ? -1 : av > bv ? 1 : 0; }
+      if (sortKey === 'weekly') { av = (a.weekly || {}).state || ''; bv = (b.weekly || {}).state || ''; return av < bv ? -1 : av > bv ? 1 : 0; }
+      if (sortKey === 'monthly') { av = (a.monthly || {}).state || ''; bv = (b.monthly || {}).state || ''; return av < bv ? -1 : av > bv ? 1 : 0; }
+      if (sortKey === 'ma50') { av = (a.daily || {}).ma50 || 0; bv = (b.daily || {}).ma50 || 0; return bv - av; }
+      if (sortKey === 'ma200') { av = (a.daily || {}).ma200 || 0; bv = (b.daily || {}).ma200 || 0; return bv - av; }
+      return 0;
+    });
+    renderInstrumentTable(currentBucket);
+  }
+});
 
 // Load initial page
 loadPageData('dashboard');

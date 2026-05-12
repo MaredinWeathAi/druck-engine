@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import Anthropic from '@anthropic-ai/sdk';
+import morningLensRouter from './morning-lens';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -1520,6 +1521,9 @@ Return ONLY valid JSON, no markdown fences.`,
     res.status(500).json({ error: err?.message || 'Failed to analyze screenshots' });
   }
 });
+
+// ─── MORNING LENS MODULE ───
+app.use('/api', morningLensRouter);
 
 // ─── SERVE STATIC FILES ───
 const clientPath = path.join(__dirname, '../../client/public');
