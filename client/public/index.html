@@ -257,6 +257,90 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading{text-align:center;padding:40px;color:var(--dim)}
+
+/* ══════════ MARKET INTEL STYLES ══════════ */
+.intel-stat-card{flex:1;min-width:100px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center}
+.intel-stat-card.critical{border-color:#ef4444;background:rgba(239,68,68,.08)}
+.intel-stat-card.major{border-color:#f97316;background:rgba(249,115,22,.08)}
+.intel-stat-card.significant{border-color:#eab308;background:rgba(234,179,8,.08)}
+.intel-stat-card.monitor{border-color:#0ea5e9;background:rgba(14,165,233,.08)}
+.intel-stat-card.total{border-color:var(--accent);background:rgba(245,158,11,.08)}
+.intel-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:2px}
+.intel-stat-val{font-size:24px;font-weight:800}
+.intel-stat-card.critical .intel-stat-val{color:#ef4444}
+.intel-stat-card.major .intel-stat-val{color:#f97316}
+.intel-stat-card.significant .intel-stat-val{color:#eab308}
+.intel-stat-card.monitor .intel-stat-val{color:#0ea5e9}
+.intel-stat-card.total .intel-stat-val{color:var(--accent)}
+
+.intel-headline{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;cursor:pointer;transition:all .15s}
+.intel-headline:hover{border-color:var(--accent);background:var(--card2)}
+.intel-headline.impact-critical{border-left:4px solid #ef4444}
+.intel-headline.impact-major{border-left:4px solid #f97316}
+.intel-headline.impact-significant{border-left:4px solid #eab308}
+.intel-headline.impact-monitor{border-left:4px solid #0ea5e9}
+.intel-headline.impact-noise{border-left:4px solid #6b7280}
+
+.intel-hl-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px}
+.intel-hl-ticker{font-size:16px;font-weight:800;color:var(--text)}
+.intel-hl-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase}
+.intel-hl-badge.critical{background:#ef4444;color:#fff}
+.intel-hl-badge.major{background:#f97316;color:#fff}
+.intel-hl-badge.significant{background:#eab308;color:#000}
+.intel-hl-badge.monitor{background:#0ea5e9;color:#fff}
+.intel-hl-badge.urgent{background:#ef4444;color:#fff;animation:pulse-urgent 1.5s infinite}
+@keyframes pulse-urgent{0%,100%{opacity:1}50%{opacity:.5}}
+
+.intel-hl-text{font-size:13px;color:var(--text);font-weight:500;line-height:1.4;margin-bottom:6px}
+.intel-hl-meta{display:flex;gap:12px;align-items:center;font-size:11px;color:var(--dim);flex-wrap:wrap}
+.intel-hl-reaction{font-weight:700}
+.intel-hl-reaction.pos{color:#0ea5e9}
+.intel-hl-reaction.neg{color:#f97316}
+
+.intel-hl-action{font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(245,158,11,.15);color:var(--accent);text-transform:uppercase}
+.intel-hl-cascade{font-size:10px;padding:2px 6px;border-radius:4px}
+.intel-hl-cascade.high{background:rgba(239,68,68,.15);color:#ef4444}
+.intel-hl-cascade.medium{background:rgba(249,115,22,.15);color:#f97316}
+.intel-hl-cascade.low{background:rgba(107,114,128,.15);color:#9ca3af}
+
+.intel-hl-direction{font-size:14px}
+
+.intel-tab{background:var(--card);border:1px solid var(--border);color:var(--dim);padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s}
+.intel-tab:hover{color:var(--text);border-color:var(--text)}
+.intel-tab.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.intel-tab-content{display:none}
+.intel-tab-content.active{display:block}
+
+.intel-digest-btn{background:var(--card2);border:1px solid var(--border);color:var(--dim);padding:6px 16px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600}
+.intel-digest-btn.active{background:var(--accent);color:#000;border-color:var(--accent)}
+
+.intel-digest-section{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.intel-digest-section h4{font-size:14px;font-weight:700;margin:0 0 8px 0;color:var(--accent)}
+.intel-digest-section .takeaway{font-size:12px;color:var(--dim);font-style:italic;margin-top:8px}
+
+.intel-research-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px}
+.intel-research-priority{font-size:11px;font-weight:800;padding:4px 10px;border-radius:6px;white-space:nowrap}
+.intel-research-priority.P5{background:#ef4444;color:#fff}
+.intel-research-priority.P4{background:#f97316;color:#fff}
+.intel-research-priority.P3{background:#eab308;color:#000}
+.intel-research-body{flex:1}
+.intel-research-body .ticker{font-weight:700;font-size:14px}
+.intel-research-body .hl{font-size:12px;color:var(--dim);margin-top:2px}
+.intel-research-body .deadline{font-size:11px;color:var(--accent);margin-top:4px}
+
+.guru-filter{background:var(--card);border:1px solid var(--border);color:var(--dim);padding:6px 14px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;transition:all .15s}
+.guru-filter:hover{color:var(--text);border-color:var(--text)}
+.guru-filter.active{background:var(--accent);color:#000;border-color:var(--accent)}
+
+.guru-table{width:100%;border-collapse:collapse;font-size:12px}
+.guru-table th{background:var(--card2);color:var(--dim);text-align:left;padding:8px 10px;font-weight:600;border-bottom:1px solid var(--border);position:sticky;top:0;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.guru-table td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text)}
+.guru-table tr:hover td{background:rgba(245,158,11,.04)}
+.guru-pct{font-weight:700}
+.guru-pct.high{color:#0ea5e9}
+.guru-pct.med{color:#eab308}
+.guru-pct.low{color:var(--dim)}
+.guru-notes{font-size:11px;color:var(--dim);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -265,7 +349,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 <div class="sidebar">
   <div class="sidebar-logo">
     <h1>DRUCK</h1>
-    <div class="ver">v5.1</div>
+    <div class="ver">v6.0</div>
   </div>
   <div class="sidebar-nav">
     <!-- Morning Lens -->
@@ -277,6 +361,21 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     <div class="nav-item" data-page="chartgrid">
       <div class="icon">📉</div>
       <div>Chart Grid</div>
+    </div>
+
+    <!-- Market Intel -->
+    <div class="nav-section">Market Intel</div>
+    <div class="nav-item" data-page="intelfeed">
+      <div class="icon">⚡</div>
+      <div>Headline Feed</div>
+    </div>
+    <div class="nav-item" data-page="inteldash">
+      <div class="icon">🔍</div>
+      <div>Intel Dashboard</div>
+    </div>
+    <div class="nav-item" data-page="guruwatch">
+      <div class="icon">🎯</div>
+      <div>Guru Watch</div>
     </div>
 
     <!-- Overview -->
@@ -879,6 +978,75 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     </div>
 
     <!-- Settings Page -->
+    <!-- ══════════ INTEL FEED PAGE ══════════ -->
+    <div class="page" id="page-intelfeed">
+      <div id="intel-status-bar" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
+        <div class="intel-stat-card critical"><div class="intel-stat-label">Critical</div><div class="intel-stat-val" id="if-stat-critical">0</div></div>
+        <div class="intel-stat-card major"><div class="intel-stat-label">Major</div><div class="intel-stat-val" id="if-stat-major">0</div></div>
+        <div class="intel-stat-card significant"><div class="intel-stat-label">Significant</div><div class="intel-stat-val" id="if-stat-significant">0</div></div>
+        <div class="intel-stat-card monitor"><div class="intel-stat-label">Monitor</div><div class="intel-stat-val" id="if-stat-monitor">0</div></div>
+        <div class="intel-stat-card total"><div class="intel-stat-label">Total</div><div class="intel-stat-val" id="if-stat-total">0</div></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+        <input type="text" id="intel-search" placeholder="Search ticker or headline..." style="flex:1;min-width:200px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;">
+        <select id="intel-filter-impact" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:12px;">
+          <option value="all">All Impact</option>
+          <option value="critical">Critical</option>
+          <option value="major">Major</option>
+          <option value="significant">Significant</option>
+          <option value="monitor">Monitor</option>
+        </select>
+        <select id="intel-filter-direction" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:12px;">
+          <option value="all">All Directions</option>
+          <option value="positive">Positive</option>
+          <option value="negative">Negative</option>
+          <option value="mixed">Mixed</option>
+        </select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim);cursor:pointer;">
+          <input type="checkbox" id="intel-filter-urgent"> Urgent Only
+        </label>
+      </div>
+      <div id="intel-feed-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <!-- ══════════ INTEL DASHBOARD PAGE ══════════ -->
+    <div class="page" id="page-inteldash">
+      <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
+        <button class="intel-tab active" data-inteltab="digest" onclick="switchIntelTab('digest')">Daily Digest</button>
+        <button class="intel-tab" data-inteltab="research" onclick="switchIntelTab('research')">Research Queue</button>
+      </div>
+      <div id="inteltab-digest" class="intel-tab-content active">
+        <div style="display:flex;gap:10px;margin-bottom:16px;">
+          <button class="intel-digest-btn active" onclick="loadDigest('11:30am', event)">11:30am Digest</button>
+          <button class="intel-digest-btn" onclick="loadDigest('3:30pm', event)">3:30pm Digest</button>
+        </div>
+        <div id="intel-digest-content" class="card" style="white-space:pre-wrap;font-family:monospace;font-size:12px;line-height:1.6;color:var(--text);"></div>
+        <div id="intel-digest-sections" style="margin-top:16px;display:flex;flex-direction:column;gap:12px;"></div>
+      </div>
+      <div id="inteltab-research" class="intel-tab-content" style="display:none;">
+        <div id="intel-research-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+      </div>
+    </div>
+
+    <!-- ══════════ GURU WATCH PAGE ══════════ -->
+    <div class="page" id="page-guruwatch">
+      <div class="card" style="margin-bottom:16px;padding:12px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <h3 style="margin:0;font-size:15px;">Q1 2026 Guru Holdings — Top Positions by Conviction</h3>
+          <span style="font-size:11px;color:var(--dim);">Source: 13F filings</span>
+        </div>
+      </div>
+      <div id="guru-filter-bar" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="guru-filter active" onclick="filterGuru('all', event)">All Gurus</button>
+        <button class="guru-filter" onclick="filterGuru('Burry', event)">Burry</button>
+        <button class="guru-filter" onclick="filterGuru('Klarman', event)">Klarman</button>
+        <button class="guru-filter" onclick="filterGuru('Druckenmiller', event)">Druckenmiller</button>
+        <button class="guru-filter" onclick="filterGuru('Einhorn', event)">Einhorn</button>
+        <button class="guru-filter" onclick="filterGuru('Greenberg', event)">Greenberg</button>
+      </div>
+      <div id="guru-table-wrap" style="overflow-x:auto;"></div>
+    </div>
+
     <div class="page" id="page-settings">
       <div class="card">
         <h3>Settings</h3>
@@ -936,6 +1104,9 @@ function showPage(page) {
     hedges: 'Hedge Tracker',
     portfolio: 'Portfolio',
     review: 'Position Review',
+    intelfeed: 'Headline Feed',
+    inteldash: 'Intel Dashboard',
+    guruwatch: 'Guru Watch',
     settings: 'Settings'
   };
   document.getElementById('page-title').textContent = titles[page] || page;
@@ -959,6 +1130,9 @@ function loadPageData(page) {
   else if (page === 'portfolio') loadPortfolio();
   else if (page === 'rotation') loadRotation();
   else if (page === 'review') loadReviewSetup();
+  else if (page === 'intelfeed') loadIntelFeed();
+  else if (page === 'inteldash') loadIntelDash();
+  else if (page === 'guruwatch') loadGuruWatch();
   else if (page === 'settings') loadSettings();
 }
 
@@ -1987,6 +2161,293 @@ document.addEventListener('click', function(e) {
 // Load initial page
 loadPageData('dashboard');
 loadActionSignals();
+
+// ═══════════════════════════════════════════════
+// MARKET INTELLIGENCE - HEADLINE FEED
+// ═══════════════════════════════════════════════
+var intelHeadlines = [];
+var intelCurrentFilter = 'all';
+
+function loadIntelFeed() {
+  Promise.all([
+    apiCall('/api/intel/status'),
+    apiCall('/api/intel/headlines?limit=100')
+  ]).then(function(results) {
+    var status = results[0];
+    var feed = results[1];
+
+    // Stats bar
+    document.getElementById('if-stat-critical').textContent = status.stats.critical;
+    document.getElementById('if-stat-major').textContent = status.stats.major;
+    document.getElementById('if-stat-significant').textContent = status.stats.significant;
+    document.getElementById('if-stat-monitor').textContent = status.stats.monitor;
+    document.getElementById('if-stat-total').textContent = status.stats.total;
+
+    intelHeadlines = feed.headlines || [];
+    renderIntelFeed(intelHeadlines);
+  });
+}
+
+function renderIntelFeed(headlines) {
+  var container = document.getElementById('intel-feed-list');
+  if (!headlines.length) {
+    container.innerHTML = '<div class="card" style="text-align:center;padding:30px;color:var(--dim);">No headlines match your filters</div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < headlines.length; i++) {
+    var h = headlines[i];
+    var dirIcon = h.direction === 'positive' ? '▲' : h.direction === 'negative' ? '▼' : '◆';
+    var reactionClass = h.marketReactionPct >= 0 ? 'pos' : 'neg';
+    var reactionStr = (h.marketReactionPct >= 0 ? '+' : '') + h.marketReactionPct.toFixed(1) + '%';
+    var timeStr = formatIntelTime(h.timestamp);
+    var actionStr = (h.actionRecommended || '').replace(/_/g, ' ').toUpperCase();
+
+    html += '<div class="intel-headline impact-' + h.impactLevel + '">';
+    html += '  <div class="intel-hl-top">';
+    html += '    <div style="display:flex;align-items:center;gap:8px;">';
+    html += '      <span class="intel-hl-direction">' + dirIcon + '</span>';
+    html += '      <span class="intel-hl-ticker">' + h.ticker + '</span>';
+    html += '      <span class="intel-hl-badge ' + h.impactLevel + '">' + h.impactLevel + '</span>';
+    if (h.urgency) {
+      html += '      <span class="intel-hl-badge urgent">URGENT</span>';
+    }
+    html += '    </div>';
+    html += '    <div style="text-align:right;">';
+    html += '      <div class="intel-hl-reaction ' + reactionClass + '">' + reactionStr + '</div>';
+    html += '      <div style="font-size:10px;color:var(--dim);">' + timeStr + '</div>';
+    html += '    </div>';
+    html += '  </div>';
+    html += '  <div class="intel-hl-text">' + h.headline + '</div>';
+    html += '  <div class="intel-hl-meta">';
+    html += '    <span>' + (h.source || '').replace(/_/g, ' ') + '</span>';
+    html += '    <span class="intel-hl-action">' + actionStr + '</span>';
+    html += '    <span class="intel-hl-cascade ' + h.cascadePotential + '">Cascade: ' + h.cascadePotential + '</span>';
+    if (h.portfolioRelevance === 'your_position') html += '<span style="color:#0ea5e9;font-weight:700;">YOUR POSITION</span>';
+    if (h.portfolioRelevance === 'guru_holding') html += '<span style="color:#e879f9;font-weight:700;">GURU HOLDING</span>';
+    html += '  </div>';
+    if (h.notes) {
+      html += '  <div style="font-size:11px;color:var(--dim);margin-top:6px;font-style:italic;">' + h.notes + '</div>';
+    }
+    html += '</div>';
+  }
+  container.innerHTML = html;
+}
+
+function formatIntelTime(ts) {
+  try {
+    var d = new Date(ts);
+    var now = new Date();
+    var diff = Math.floor((now - d) / 1000);
+    if (diff < 60) return diff + 's ago';
+    if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+    return d.toLocaleDateString();
+  } catch(e) { return ts; }
+}
+
+// Live search/filter (safe binding — elements exist in DOM but may be hidden)
+try {
+  document.getElementById('intel-search').addEventListener('input', function() { applyIntelFilters(); });
+  document.getElementById('intel-filter-impact').addEventListener('change', function() { applyIntelFilters(); });
+  document.getElementById('intel-filter-direction').addEventListener('change', function() { applyIntelFilters(); });
+  document.getElementById('intel-filter-urgent').addEventListener('change', function() { applyIntelFilters(); });
+} catch(e) { console.warn('Intel filter binding deferred:', e); }
+
+function applyIntelFilters() {
+  var q = document.getElementById('intel-search').value.toLowerCase();
+  var impact = document.getElementById('intel-filter-impact').value;
+  var direction = document.getElementById('intel-filter-direction').value;
+  var urgentOnly = document.getElementById('intel-filter-urgent').checked;
+
+  var filtered = intelHeadlines.filter(function(h) {
+    if (q && h.ticker.toLowerCase().indexOf(q) === -1 && h.headline.toLowerCase().indexOf(q) === -1) return false;
+    if (impact !== 'all' && h.impactLevel !== impact) return false;
+    if (direction !== 'all' && h.direction !== direction) return false;
+    if (urgentOnly && !h.urgency) return false;
+    return true;
+  });
+  renderIntelFeed(filtered);
+}
+
+// ═══════════════════════════════════════════════
+// MARKET INTELLIGENCE - DASHBOARD / DIGEST
+// ═══════════════════════════════════════════════
+
+function loadIntelDash() {
+  loadDigest('11:30am');
+  loadResearchQueue();
+}
+
+function switchIntelTab(tab) {
+  document.querySelectorAll('.intel-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.intel-tab-content').forEach(function(c) { c.classList.remove('active'); c.style.display = 'none'; });
+  document.querySelector('[data-inteltab="' + tab + '"]').classList.add('active');
+  var el = document.getElementById('inteltab-' + tab);
+  el.classList.add('active');
+  el.style.display = 'block';
+}
+
+function loadDigest(runTime, clickEvent) {
+  document.querySelectorAll('.intel-digest-btn').forEach(function(b) { b.classList.remove('active'); });
+  if (clickEvent && clickEvent.target) { clickEvent.target.classList.add('active'); }
+  else { document.querySelector('.intel-digest-btn').classList.add('active'); }
+
+  apiCall('/api/intel/digest?run_time=' + encodeURIComponent(runTime)).then(function(digest) {
+    // Executive summary
+    document.getElementById('intel-digest-content').textContent = digest.executiveSummary;
+
+    // Sections
+    var sections = [
+      digest.criticalSection,
+      digest.majorEventsSection,
+      digest.sectorRotationsSection,
+      digest.macroImpactsSection,
+      digest.portfolioRelevanceSection
+    ];
+
+    var html = '';
+    for (var i = 0; i < sections.length; i++) {
+      var s = sections[i];
+      if (!s) continue;
+      html += '<div class="intel-digest-section">';
+      html += '  <h4>' + s.title + '</h4>';
+      html += '  <p style="font-size:12px;color:var(--text);margin:0 0 6px;">' + s.description + '</p>';
+      if (s.headlines && s.headlines.length > 0) {
+        for (var j = 0; j < Math.min(s.headlines.length, 5); j++) {
+          var h = s.headlines[j];
+          html += '<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">';
+          html += '  <strong>' + h.ticker + '</strong>: ' + h.headline;
+          if (h.marketReactionPct) {
+            var cls = h.marketReactionPct >= 0 ? 'pos' : 'neg';
+            html += ' <span class="intel-hl-reaction ' + cls + '">(' + (h.marketReactionPct >= 0 ? '+' : '') + h.marketReactionPct.toFixed(1) + '%)</span>';
+          }
+          html += '</div>';
+        }
+      }
+      html += '  <div class="takeaway">' + s.keyTakeaway + '</div>';
+      html += '</div>';
+    }
+
+    // Research priorities in digest
+    if (digest.researchPriorities && digest.researchPriorities.length > 0) {
+      html += '<div class="intel-digest-section">';
+      html += '  <h4>Research Priorities</h4>';
+      for (var k = 0; k < digest.researchPriorities.length; k++) {
+        var r = digest.researchPriorities[k];
+        var pClass = r.priority.indexOf('P5') >= 0 ? 'P5' : r.priority.indexOf('P4') >= 0 ? 'P4' : 'P3';
+        html += '<div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">';
+        html += '  <span class="intel-research-priority ' + pClass + '">' + r.priority + '</span>';
+        html += '  <span style="font-size:12px;"><strong>' + r.ticker + '</strong>: ' + r.headline + '</span>';
+        html += '  <span style="font-size:10px;color:var(--accent);margin-left:auto;">' + r.deadline + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    document.getElementById('intel-digest-sections').innerHTML = html;
+  });
+}
+
+function loadResearchQueue() {
+  apiCall('/api/intel/research').then(function(data) {
+    var html = '';
+    var queue = data.queue || [];
+    if (queue.length === 0) {
+      html = '<div class="card" style="text-align:center;padding:20px;color:var(--dim);">No research items in queue</div>';
+    } else {
+      for (var i = 0; i < queue.length; i++) {
+        var r = queue[i];
+        var pClass = r.priority.indexOf('P5') >= 0 ? 'P5' : r.priority.indexOf('P4') >= 0 ? 'P4' : 'P3';
+        html += '<div class="intel-research-card">';
+        html += '  <span class="intel-research-priority ' + pClass + '">' + r.priority + '</span>';
+        html += '  <div class="intel-research-body">';
+        html += '    <div class="ticker">' + r.ticker + '</div>';
+        html += '    <div class="hl">' + r.headline + '</div>';
+        html += '    <div class="deadline">Deadline: ' + r.deadline + ' | Action: ' + (r.action || '').replace(/_/g, ' ').toUpperCase() + '</div>';
+        html += '  </div>';
+        html += '</div>';
+      }
+    }
+    document.getElementById('intel-research-list').innerHTML = html;
+  });
+}
+
+// ═══════════════════════════════════════════════
+// GURU WATCH
+// ═══════════════════════════════════════════════
+var guruData = [];
+var guruCurrentFilter = 'all';
+
+function loadGuruWatch() {
+  apiCall('/api/intel/guru').then(function(data) {
+    guruData = data.positions || [];
+    renderGuruTable(guruData);
+  });
+}
+
+function filterGuru(guru, clickEvent) {
+  guruCurrentFilter = guru;
+  document.querySelectorAll('.guru-filter').forEach(function(b) { b.classList.remove('active'); });
+  if (clickEvent && clickEvent.target) { clickEvent.target.classList.add('active'); }
+  else { document.querySelector('.guru-filter').classList.add('active'); }
+
+  if (guru === 'all') {
+    renderGuruTable(guruData);
+  } else {
+    var filtered = guruData.filter(function(g) {
+      if (guru === 'Burry') return g.burryPct > 0;
+      if (guru === 'Klarman') return g.klarmanPct > 0;
+      if (guru === 'Druckenmiller') return g.druckenmillerPct > 0;
+      if (guru === 'Einhorn') return g.einhornPct > 0;
+      if (guru === 'Greenberg') return g.greenbergPct > 0;
+      return true;
+    });
+    renderGuruTable(filtered);
+  }
+}
+
+function renderGuruTable(positions) {
+  if (!positions.length) {
+    document.getElementById('guru-table-wrap').innerHTML = '<div class="card" style="text-align:center;padding:20px;color:var(--dim);">No positions match filter</div>';
+    return;
+  }
+
+  var html = '<table class="guru-table">';
+  html += '<thead><tr>';
+  html += '<th>#</th><th>Ticker</th><th>Company</th>';
+  html += '<th>Burry</th><th>Klarman</th><th>Druck</th><th>Einhorn</th><th>Greenberg</th>';
+  html += '<th>Largest</th><th>Fund</th><th>Notes</th>';
+  html += '</tr></thead><tbody>';
+
+  for (var i = 0; i < positions.length; i++) {
+    var g = positions[i];
+    html += '<tr>';
+    html += '<td>' + g.rank + '</td>';
+    html += '<td style="font-weight:700;color:var(--accent);">' + g.ticker + '</td>';
+    html += '<td>' + g.companyName + '</td>';
+    html += '<td>' + formatGuroPct(g.burryPct) + '</td>';
+    html += '<td>' + formatGuroPct(g.klarmanPct) + '</td>';
+    html += '<td>' + formatGuroPct(g.druckenmillerPct) + '</td>';
+    html += '<td>' + formatGuroPct(g.einhornPct) + '</td>';
+    html += '<td>' + formatGuroPct(g.greenbergPct) + '</td>';
+    html += '<td><span class="guru-pct high">' + g.largestPosition.toFixed(1) + '%</span></td>';
+    html += '<td style="font-size:11px;">' + g.fundWithLargest + '</td>';
+    html += '<td class="guru-notes" title="' + (g.statusNotes || '').replace(/"/g, '&quot;') + '">' + (g.statusNotes || '') + '</td>';
+    html += '</tr>';
+  }
+
+  html += '</tbody></table>';
+  document.getElementById('guru-table-wrap').innerHTML = html;
+}
+
+function formatGuroPct(pct) {
+  if (!pct || pct === 0) return '<span class="guru-pct low">—</span>';
+  var cls = pct >= 10 ? 'high' : pct >= 5 ? 'med' : 'low';
+  return '<span class="guru-pct ' + cls + '">' + pct.toFixed(1) + '%</span>';
+}
+
 </script>
 </body>
 </html>

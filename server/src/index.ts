@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import Anthropic from '@anthropic-ai/sdk';
 import morningLensRouter from './morning-lens';
+import marketIntelRouter from './market-intel';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -1524,6 +1525,7 @@ Return ONLY valid JSON, no markdown fences.`,
 
 // ─── MORNING LENS MODULE ───
 app.use('/api', morningLensRouter);
+app.use('/api', marketIntelRouter);
 
 // ─── SERVE STATIC FILES ───
 const clientPath = path.join(__dirname, '../../client/public');
@@ -1537,7 +1539,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v4.0 — Trifecta Analyzer with Live Data`);
+  console.log(`\n  DRUCK ENGINE v6.0 — Trifecta Analyzer with Live Data`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);
