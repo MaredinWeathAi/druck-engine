@@ -4,6 +4,7 @@ import path from 'path';
 import Anthropic from '@anthropic-ai/sdk';
 import morningLensRouter from './morning-lens';
 import marketIntelRouter from './market-intel';
+import mtrpClientRouter from './mtrp-client';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -1529,6 +1530,7 @@ app.use('/api', marketIntelRouter);
 
 // ─── SERVE STATIC FILES ───
 const clientPath = path.join(__dirname, '../../client/public');
+app.use('/api/mtrp', mtrpClientRouter);
 app.use(express.static(clientPath));
 
 // SPA fallback
