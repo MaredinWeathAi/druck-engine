@@ -620,8 +620,8 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '5.1.0',
-    name: 'Druck Engine — Trifecta Analyzer',
+    version: '6.0.0',
+    name: 'Druck Engine — Market Intelligence Platform',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
     data_source: dataSource,
