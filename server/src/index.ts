@@ -9,6 +9,7 @@ import inflectionRouter from './inflection-engine';
 import fundamentalRouter from './fundamental-data';
 import industryRouter from './industry-drivers';
 import alertRouter from './alert-system';
+import geoEventsRouter, { setGeoEventKeys } from './geo-events';
 // mtrp-client bridge removed — Market Intel lives entirely in Druck Engine
 
 const app = express();
@@ -1428,6 +1429,7 @@ app.post('/api/settings/key', (req, res) => {
     return res.status(400).json({ error: 'Invalid API key format' });
   }
   anthropicApiKey = api_key;
+  setGeoEventKeys(api_key, GURUFOCUS_API_KEY);
   res.json({ status: 'ok', masked: '••••' + api_key.slice(-8) });
 });
 
@@ -1537,6 +1539,10 @@ app.use('/api/inflection', inflectionRouter);
 app.use('/api/fundamentals', fundamentalRouter);
 app.use('/api/industry', industryRouter);
 app.use('/api/alerts', alertRouter);
+app.use('/api/geo-events', geoEventsRouter);
+
+// Initialize geo-event keys
+setGeoEventKeys(anthropicApiKey, GURUFOCUS_API_KEY);
 
 // ─── SERVE STATIC FILES ───
 const clientPath = path.join(__dirname, '../../client/public');
@@ -1550,7 +1556,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v6.0 — Trifecta Analyzer with Live Data`);
+  console.log(`\n  DRUCK ENGINE v8.0 — Trifecta Analyzer + Geo-Macro Intelligence`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);

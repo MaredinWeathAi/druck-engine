@@ -419,6 +419,17 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div>Rotation Radar</div>
     </div>
 
+    <!-- Macro Events -->
+    <div class="nav-section">Macro Events</div>
+    <div class="nav-item" data-page="geoevents">
+      <div class="icon">🌍</div>
+      <div>Geo Events</div>
+    </div>
+    <div class="nav-item" data-page="earningscal">
+      <div class="icon">📅</div>
+      <div>Earnings Calendar</div>
+    </div>
+
     <!-- Risk -->
     <div class="nav-section">Risk</div>
     <div class="nav-item" data-page="hedges">
@@ -1051,6 +1062,38 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div id="guru-table-wrap" style="overflow-x:auto;"></div>
     </div>
 
+    <!-- Geo Events Page -->
+    <div class="page" id="page-geoevents">
+      <div class="regime-section-intro">Real-time geopolitical and macroeconomic event detection with 1st/2nd/3rd order effect chain mapping. Events are analyzed by Claude and mapped to your portfolio exposure.</div>
+      <div style="display:flex;gap:12px;margin-bottom:20px;">
+        <button onclick="runGeoScan()" style="padding:8px 16px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:12px;">Scan Now</button>
+        <button onclick="showScenarioInput()" style="padding:8px 16px;background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;">Custom Scenario</button>
+        <div id="geo-scan-status" style="font-size:11px;color:var(--dim);display:flex;align-items:center;"></div>
+      </div>
+      <div id="geo-scenario-box" style="display:none;margin-bottom:20px;" class="card">
+        <h4 style="margin-bottom:8px;font-size:13px;">What-If Scenario Analysis</h4>
+        <textarea id="geo-scenario-input" placeholder="Describe a geopolitical scenario... e.g. 'Iran closes the Strait of Hormuz' or 'Fed raises rates 50bps unexpectedly'" style="width:100%;height:60px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;resize:vertical;"></textarea>
+        <button onclick="runCustomScenario()" style="margin-top:8px;padding:6px 14px;background:var(--blue);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;">Analyze Scenario</button>
+        <div id="geo-scenario-result" style="margin-top:12px;"></div>
+      </div>
+      <div id="geo-events-list"></div>
+    </div>
+
+    <!-- Earnings Calendar Page -->
+    <div class="page" id="page-earningscal">
+      <div class="regime-section-intro">Upcoming earnings reports for tracked instruments. Cross-referenced from Yahoo Finance and GuruFocus.</div>
+      <div style="display:flex;gap:12px;margin-bottom:20px;">
+        <select id="earnings-range" onchange="loadEarningsCal()" style="padding:6px 12px;background:var(--card2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;">
+          <option value="7">Next 7 days</option>
+          <option value="14">Next 14 days</option>
+          <option value="30" selected>Next 30 days</option>
+          <option value="60">Next 60 days</option>
+        </select>
+        <div id="earnings-status" style="font-size:11px;color:var(--dim);display:flex;align-items:center;"></div>
+      </div>
+      <div id="earnings-list"></div>
+    </div>
+
     <div class="page" id="page-settings">
       <div class="card">
         <h3>Settings</h3>
@@ -1111,6 +1154,8 @@ function showPage(page) {
     intelfeed: 'Headline Feed',
     inteldash: 'Intel Dashboard',
     guruwatch: 'Guru Watch',
+    geoevents: 'Geopolitical Events',
+    earningscal: 'Earnings Calendar',
     settings: 'Settings'
   };
   document.getElementById('page-title').textContent = titles[page] || page;
@@ -1137,6 +1182,8 @@ function loadPageData(page) {
   else if (page === 'intelfeed') loadIntelFeed();
   else if (page === 'inteldash') loadIntelDash();
   else if (page === 'guruwatch') loadGuruWatch();
+  else if (page === 'geoevents') loadGeoEvents();
+  else if (page === 'earningscal') loadEarningsCal();
   else if (page === 'settings') loadSettings();
 }
 
@@ -2459,6 +2506,257 @@ function formatGuroPct(pct) {
   if (!pct || pct === 0) return '<span class="guru-pct low">—</span>';
   var cls = pct >= 10 ? 'high' : pct >= 5 ? 'med' : 'low';
   return '<span class="guru-pct ' + cls + '">' + pct.toFixed(1) + '%</span>';
+}
+
+// ============================================================================
+// GEO EVENTS PAGE
+// ============================================================================
+
+function loadGeoEvents() {
+  var el = document.getElementById('geo-events-list');
+  el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--dim);">Loading geopolitical events...</div>';
+  document.getElementById('geo-scan-status').textContent = 'Scanning...';
+
+  apiCall('/api/geo-events/scan').then(function(data) {
+    if (!data || data.error) {
+      el.innerHTML = '<div class="card" style="color:var(--red);">Error: ' + (data?.error || 'Failed to scan') + '</div>';
+      return;
+    }
+    document.getElementById('geo-scan-status').textContent = 'Last scan: ' + new Date(data.scanTime).toLocaleTimeString() + ' | ' + data.eventCount + ' events detected';
+    renderGeoEvents(data.events || []);
+  });
+}
+
+function runGeoScan() {
+  loadGeoEvents();
+}
+
+function renderGeoEvents(events) {
+  var el = document.getElementById('geo-events-list');
+  if (events.length === 0) {
+    el.innerHTML = '<div class="card" style="text-align:center;padding:30px;color:var(--dim);">No significant geopolitical events detected in the last 72 hours. Markets appear calm on the macro front.</div>';
+    return;
+  }
+
+  var severityColors = { critical: '#ef4444', high: '#f97316', moderate: '#f59e0b', low: '#64748b' };
+  var severityIcons = { critical: '🔴', high: '🟠', moderate: '🟡', low: '🔵' };
+  var dirColors = { positive: '#0ea5e9', negative: '#f97316', mixed: '#a78bfa', neutral: '#64748b' };
+
+  var html = '';
+  for (var i = 0; i < events.length; i++) {
+    var evt = events[i];
+    var sevColor = severityColors[evt.severity] || '#64748b';
+    var sevIcon = severityIcons[evt.severity] || '⚪';
+
+    html += '<div class="card" style="border-left:3px solid ' + sevColor + ';margin-bottom:16px;">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">';
+    html += '<div>';
+    html += '<div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;">' + sevIcon + ' ' + evt.title + '</div>';
+    html += '<div style="font-size:11px;color:var(--dim);">' + evt.category.replace(/_/g, ' ').toUpperCase() + ' | ' + evt.region + ' | Sources: ' + (evt.sources || []).join(', ') + '</div>';
+    html += '</div>';
+    html += '<div style="padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;text-transform:uppercase;background:' + sevColor + '22;color:' + sevColor + ';">' + evt.severity + '</div>';
+    html += '</div>';
+
+    html += '<div style="font-size:13px;color:#94a3b8;line-height:1.6;margin-bottom:16px;">' + evt.summary + '</div>';
+
+    // Effect chains
+    if (evt.effectChains && evt.effectChains.length > 0) {
+      html += '<div style="margin-bottom:12px;">';
+      html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:8px;">Effect Chain Analysis</div>';
+
+      for (var order = 1; order <= 3; order++) {
+        var orderEffects = evt.effectChains.filter(function(c) { return c.order === order; });
+        if (orderEffects.length === 0) continue;
+
+        var orderLabels = { 1: '1ST ORDER (Immediate)', 2: '2ND ORDER (Weeks)', 3: '3RD ORDER (Months)' };
+        html += '<div style="margin-bottom:8px;">';
+        html += '<div style="font-size:10px;font-weight:600;color:var(--accent);margin-bottom:4px;">' + orderLabels[order] + '</div>';
+
+        for (var j = 0; j < orderEffects.length; j++) {
+          var chain = orderEffects[j];
+          var dColor = dirColors[chain.direction] || '#64748b';
+          var arrow = chain.direction === 'positive' ? '↑' : chain.direction === 'negative' ? '↓' : '↕';
+
+          html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg);border-radius:4px;margin-bottom:4px;font-size:12px;">';
+          html += '<span style="color:' + dColor + ';font-weight:700;min-width:16px;">' + arrow + '</span>';
+          html += '<span style="color:var(--accent);font-weight:600;min-width:100px;">' + chain.sector.replace(/_/g, ' ') + '</span>';
+          html += '<span style="color:var(--text);flex:1;">' + chain.effect + '</span>';
+          html += '<span style="font-size:10px;color:var(--dim);min-width:60px;text-align:right;">' + chain.magnitude + '</span>';
+
+          if (chain.tickers && chain.tickers.length > 0) {
+            html += '<span style="font-size:10px;color:' + dColor + ';">' + chain.tickers.slice(0, 5).join(', ') + '</span>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    // Portfolio exposure
+    if (evt.portfolioExposure && evt.portfolioExposure.length > 0) {
+      html += '<div style="margin-bottom:8px;">';
+      html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:8px;">Portfolio Exposure</div>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+      for (var k = 0; k < Math.min(evt.portfolioExposure.length, 15); k++) {
+        var exp = evt.portfolioExposure[k];
+        var expColor = dirColors[exp.direction] || '#64748b';
+        html += '<span style="padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;background:' + expColor + '15;color:' + expColor + ';border:1px solid ' + expColor + '33;" title="' + exp.impact + '">' + exp.ticker + '</span>';
+      }
+      html += '</div></div>';
+    }
+
+    // Analysis notes
+    if (evt.analysisNotes) {
+      html += '<div style="font-size:11px;color:#94a3b8;line-height:1.5;padding:8px 12px;background:rgba(245,158,11,0.05);border-radius:4px;border-left:2px solid var(--accent);margin-top:8px;">';
+      html += '<span style="font-weight:600;color:var(--accent);">Analyst Note:</span> ' + evt.analysisNotes;
+      html += '</div>';
+    }
+
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function showScenarioInput() {
+  var box = document.getElementById('geo-scenario-box');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+function runCustomScenario() {
+  var scenario = document.getElementById('geo-scenario-input').value.trim();
+  if (!scenario) return;
+
+  var resultEl = document.getElementById('geo-scenario-result');
+  resultEl.innerHTML = '<div style="color:var(--dim);font-size:12px;">Analyzing scenario...</div>';
+
+  apiCall('/api/geo-events/analyze-custom', 'POST', { scenario: scenario }).then(function(data) {
+    if (!data || data.error) {
+      resultEl.innerHTML = '<div style="color:var(--red);font-size:12px;">Error: ' + (data?.error || 'Failed') + '</div>';
+      return;
+    }
+
+    var a = data.analysis;
+    var html = '';
+    html += '<div style="margin-top:12px;">';
+    html += '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;">' + (a.title || 'Scenario Analysis') + '</div>';
+    html += '<div style="font-size:12px;color:#94a3b8;margin-bottom:12px;">' + (a.summary || '') + '</div>';
+
+    if (a.effects && a.effects.length > 0) {
+      var dirColors2 = { positive: '#0ea5e9', negative: '#f97316', mixed: '#a78bfa' };
+      for (var i = 0; i < a.effects.length; i++) {
+        var e = a.effects[i];
+        var dc = dirColors2[e.direction] || '#64748b';
+        var ar = e.direction === 'positive' ? '↑' : e.direction === 'negative' ? '↓' : '↕';
+        html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg);border-radius:4px;margin-bottom:4px;font-size:12px;">';
+        html += '<span style="font-weight:700;color:var(--dim);min-width:30px;">'+e.order+'</span>';
+        html += '<span style="color:' + dc + ';font-weight:700;min-width:16px;">' + ar + '</span>';
+        html += '<span style="color:var(--accent);font-weight:600;min-width:100px;">' + (e.sector||'').replace(/_/g,' ') + '</span>';
+        html += '<span style="color:var(--text);flex:1;">' + e.effect + '</span>';
+        if (e.tickers && e.tickers.length) {
+          html += '<span style="font-size:10px;color:' + dc + ';">' + e.tickers.slice(0,5).join(', ') + '</span>';
+        }
+        html += '</div>';
+      }
+    }
+
+    if (a.contrarian_view) {
+      html += '<div style="margin-top:12px;padding:8px 12px;background:rgba(249,115,22,0.08);border-radius:4px;border-left:2px solid var(--red);font-size:11px;color:#94a3b8;">';
+      html += '<span style="font-weight:600;color:var(--red);">Contrarian View:</span> ' + a.contrarian_view;
+      html += '</div>';
+    }
+
+    if (a.historical_parallel) {
+      html += '<div style="margin-top:8px;padding:8px 12px;background:rgba(59,130,246,0.08);border-radius:4px;border-left:2px solid var(--blue);font-size:11px;color:#94a3b8;">';
+      html += '<span style="font-weight:600;color:var(--blue);">Historical Parallel:</span> ' + a.historical_parallel;
+      html += '</div>';
+    }
+
+    html += '</div>';
+    resultEl.innerHTML = html;
+  });
+}
+
+// ============================================================================
+// EARNINGS CALENDAR PAGE
+// ============================================================================
+
+function loadEarningsCal() {
+  var el = document.getElementById('earnings-list');
+  var days = document.getElementById('earnings-range').value || 30;
+  el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--dim);">Loading earnings calendar...</div>';
+
+  apiCall('/api/geo-events/earnings?days=' + days).then(function(data) {
+    if (!data || data.error) {
+      el.innerHTML = '<div class="card" style="color:var(--red);">Error: ' + (data?.error || 'Failed') + '</div>';
+      return;
+    }
+
+    document.getElementById('earnings-status').textContent = data.count + ' upcoming reports | Last scan: ' + (data.lastScan ? new Date(data.lastScan).toLocaleTimeString() : 'never');
+    renderEarningsCal(data.entries || []);
+  });
+}
+
+function renderEarningsCal(entries) {
+  var el = document.getElementById('earnings-list');
+  if (entries.length === 0) {
+    el.innerHTML = '<div class="card" style="text-align:center;padding:30px;color:var(--dim);">No upcoming earnings in the selected timeframe.</div>';
+    return;
+  }
+
+  // Group by week
+  var weeks = {};
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    var weekKey;
+    if (e.daysUntil < 0) weekKey = 'Recently Reported';
+    else if (e.daysUntil <= 7) weekKey = 'This Week';
+    else if (e.daysUntil <= 14) weekKey = 'Next Week';
+    else weekKey = 'Week of ' + e.reportDate.substring(0, 10);
+    if (!weeks[weekKey]) weeks[weekKey] = [];
+    weeks[weekKey].push(e);
+  }
+
+  var html = '';
+  var weekKeys = Object.keys(weeks);
+  for (var w = 0; w < weekKeys.length; w++) {
+    var wk = weekKeys[w];
+    var items = weeks[wk];
+
+    html += '<div class="card" style="margin-bottom:16px;">';
+    html += '<div style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:12px;">' + wk + '</div>';
+
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">';
+    for (var j = 0; j < items.length; j++) {
+      var entry = items[j];
+      var urgency = entry.daysUntil <= 3 ? '#ef4444' : entry.daysUntil <= 7 ? '#f97316' : entry.daysUntil <= 14 ? '#f59e0b' : '#64748b';
+      var daysText = entry.daysUntil < 0 ? Math.abs(entry.daysUntil) + 'd ago' : entry.daysUntil === 0 ? 'TODAY' : entry.daysUntil + 'd';
+
+      html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;display:flex;align-items:center;gap:12px;">';
+      html += '<div style="min-width:40px;text-align:center;">';
+      html += '<div style="font-size:18px;font-weight:800;color:' + urgency + ';">' + daysText + '</div>';
+      html += '</div>';
+      html += '<div style="flex:1;">';
+      html += '<div style="font-size:13px;font-weight:700;color:var(--text);">' + entry.ticker + '</div>';
+      html += '<div style="font-size:11px;color:var(--dim);">' + entry.companyName + '</div>';
+      html += '<div style="font-size:10px;color:var(--dim);margin-top:2px;">' + entry.reportDate + ' | ' + entry.source + '</div>';
+      html += '</div>';
+      html += '<div style="text-align:right;">';
+      if (entry.estimatedEPS !== null) {
+        html += '<div style="font-size:11px;color:var(--dim);">Est EPS</div>';
+        html += '<div style="font-size:14px;font-weight:700;color:var(--text);">$' + entry.estimatedEPS.toFixed(2) + '</div>';
+      }
+      if (entry.previousEPS !== null) {
+        html += '<div style="font-size:10px;color:var(--dim);margin-top:2px;">Prev: $' + entry.previousEPS.toFixed(2) + '</div>';
+      }
+      html += '</div>';
+      html += '</div>';
+    }
+    html += '</div></div>';
+  }
+
+  el.innerHTML = html;
 }
 
 </script>
