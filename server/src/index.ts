@@ -5,6 +5,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import morningLensRouter from './morning-lens';
 import marketIntelRouter from './market-intel';
 import taAccelRouter from './ta-acceleration';
+import inflectionRouter from './inflection-engine';
+import fundamentalRouter from './fundamental-data';
+import industryRouter from './industry-drivers';
+import alertRouter from './alert-system';
 // mtrp-client bridge removed — Market Intel lives entirely in Druck Engine
 
 const app = express();
@@ -621,8 +625,8 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '6.0.0',
-    name: 'Druck Engine — Market Intelligence Platform',
+    version: '7.0.0',
+    name: 'Druck Engine — Investment Inflection Platform',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
     data_source: dataSource,
@@ -1529,6 +1533,10 @@ Return ONLY valid JSON, no markdown fences.`,
 app.use('/api', morningLensRouter);
 app.use('/api', marketIntelRouter);
 app.use('/api/ta', taAccelRouter);
+app.use('/api/inflection', inflectionRouter);
+app.use('/api/fundamentals', fundamentalRouter);
+app.use('/api/industry', industryRouter);
+app.use('/api/alerts', alertRouter);
 
 // ─── SERVE STATIC FILES ───
 const clientPath = path.join(__dirname, '../../client/public');
