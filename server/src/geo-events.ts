@@ -493,6 +493,19 @@ function classifyEventsLocally(newsItems: NewsItem[]): GeoEvent[] {
             tickers: SECTOR_TICKER_MAP[e.sector] || [],
           }));
 
+          // Build portfolio exposure from effect chains
+          const exposureMap = new Map<string, { impact: string; direction: 'positive' | 'negative' | 'neutral' }>();
+          for (const chain of effectChains) {
+            for (const t of chain.tickers) {
+              if (!exposureMap.has(t)) {
+                exposureMap.set(t, {
+                  impact: chain.effect,
+                  direction: chain.direction === 'mixed' ? 'neutral' : chain.direction,
+                });
+              }
+            }
+          }
+
           events.push({
             id: `geo-local-${Date.now()}-${events.length}`,
             timestamp: item.date,
@@ -503,7 +516,11 @@ function classifyEventsLocally(newsItems: NewsItem[]): GeoEvent[] {
             region: 'Global',
             sources: [item.source],
             effectChains,
-            portfolioExposure: [],
+            portfolioExposure: Array.from(exposureMap.entries()).map(([ticker, info]) => ({
+              ticker,
+              impact: info.impact,
+              direction: info.direction,
+            })),
             analysisNotes: 'Classified by keyword matching (Claude analysis unavailable)',
             lastUpdated: new Date().toISOString(),
           });
@@ -513,7 +530,18 @@ function classifyEventsLocally(newsItems: NewsItem[]): GeoEvent[] {
     }
   }
 
-  return events;
+  // Deduplicate: keep at most 3 events per category (most recent)
+  const byCategory = new Map<string, GeoEvent[]>();
+  for (const evt of events) {
+    if (!byCategory.has(evt.category)) byCategory.set(evt.category, []);
+    byCategory.get(evt.category)!.push(evt);
+  }
+  const deduped: GeoEvent[] = [];
+  for (const [, catEvents] of byCategory) {
+    deduped.push(...catEvents.slice(0, 3));
+  }
+
+  return deduped;
 }
 
 // ============================================================================
@@ -542,10 +570,16 @@ async function fetchEarningsCalendar(): Promise<EarningsEntry[]> {
           }
 
           const quote = await yf.quote(ticker) as any;
-          const earningsDate = quote?.earningsTimestamp;
+          // yahoo-finance2 may use different field names depending on version
+          const earningsDate = quote?.earningsTimestamp
+            || quote?.earningsCallTimestampStart
+            || quote?.earnings?.earningsDate?.[0];
 
           if (earningsDate) {
-            const reportDate = new Date(earningsDate * 1000);
+            // Handle both unix timestamp (seconds) and Date objects
+            const reportDate = typeof earningsDate === 'number'
+              ? new Date(earningsDate > 1e12 ? earningsDate : earningsDate * 1000)
+              : new Date(earningsDate);
             const daysUntil = Math.ceil((reportDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
             // Only include upcoming earnings (next 60 days) or very recent (last 7 days)
