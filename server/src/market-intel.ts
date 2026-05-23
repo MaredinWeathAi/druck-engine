@@ -14,7 +14,7 @@
  * - Searchable headline cache (10k)
  * - Daily digest generation (11:30am & 3:30pm ET)
  * - Guru holdings from CSV (Q1 2026 13F data)
- * - REST API endpoints for MTRP integration
+ * - REST API endpoints for Druck Engine integration
  */
 
 import { Router, Request, Response } from 'express';
@@ -144,9 +144,14 @@ interface GuruPosition {
   druckenmillerPct: number;
   einhornPct: number;
   greenbergPct: number;
+  ackmanPct: number;
+  abramsPct: number;
+  tepperPct: number;
   largestPosition: number;
   fundWithLargest: string;
   statusNotes: string;
+  guruCount?: number;        // How many gurus hold this
+  consensusWeight?: number;  // Sum of all guru weights
 }
 
 interface SearchFilters {
@@ -795,18 +800,35 @@ function loadGuruPositions(): GuruPosition[] {
           return isNaN(n) ? 0 : n;
         };
 
+        const burry = parsePct(cols[3]);
+        const klarman = parsePct(cols[4]);
+        const druck = parsePct(cols[5]);
+        const einhorn = parsePct(cols[6]);
+        const greenberg = parsePct(cols[7]);
+        const ackman = parsePct(cols[8]);
+        const abrams = parsePct(cols[9]);
+        const tepper = parsePct(cols[10]);
+        const allPcts = [burry, klarman, druck, einhorn, greenberg, ackman, abrams, tepper];
+        const guruCount = allPcts.filter(p => p > 0).length;
+        const consensusWeight = allPcts.reduce((sum, p) => sum + p, 0);
+
         positions.push({
           rank: parseInt(cols[0]) || 0,
           ticker: cols[1],
           companyName: cols[2] || '',
-          burryPct: parsePct(cols[3]),
-          klarmanPct: parsePct(cols[4]),
-          druckenmillerPct: parsePct(cols[5]),
-          einhornPct: parsePct(cols[6]),
-          greenbergPct: parsePct(cols[7]),
-          largestPosition: parsePct(cols[8]),
-          fundWithLargest: cols[9] || '',
-          statusNotes: cols[10] || '',
+          burryPct: burry,
+          klarmanPct: klarman,
+          druckenmillerPct: druck,
+          einhornPct: einhorn,
+          greenbergPct: greenberg,
+          ackmanPct: ackman,
+          abramsPct: abrams,
+          tepperPct: tepper,
+          largestPosition: parsePct(cols[11]),
+          fundWithLargest: cols[12] || '',
+          statusNotes: cols[13] || '',
+          guruCount,
+          consensusWeight,
         });
       }
 
@@ -818,21 +840,33 @@ function loadGuruPositions(): GuruPosition[] {
   }
 
   console.log('  Guru holdings: Using built-in top positions');
-  // Fallback built-in data from the CSV
-  return [
-    { rank: 1, ticker: 'PLTR', companyName: 'Palantir Technologies', burryPct: 66, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, largestPosition: 66, fundWithLargest: 'Burry/Scion', statusNotes: 'New $912M position; overwhelming conviction signal' },
-    { rank: 2, ticker: 'AMZN', companyName: 'Amazon.com Inc', burryPct: 0, klarmanPct: 12.7, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, largestPosition: 12.7, fundWithLargest: 'Klarman/Baupost', statusNotes: 'Massive 120% add' },
-    { rank: 3, ticker: 'QSR', companyName: 'Restaurant Brands International', burryPct: 0, klarmanPct: 11.67, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, largestPosition: 11.67, fundWithLargest: 'Klarman/Baupost', statusNotes: 'Klarman largest position' },
-    { rank: 4, ticker: 'OMF', companyName: 'OneMain Holdings', burryPct: 0, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 12.25, largestPosition: 12.25, fundWithLargest: 'Greenberg/Brave Warrior', statusNotes: 'Consumer finance' },
-    { rank: 5, ticker: 'NVDA', companyName: 'NVIDIA Corporation', burryPct: 13.5, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, largestPosition: 13.5, fundWithLargest: 'Burry/Scion', statusNotes: 'AI infrastructure' },
-    { rank: 6, ticker: 'NTRA', companyName: 'Natera Inc', burryPct: 0, klarmanPct: 0, druckenmillerPct: 12.8, einhornPct: 0, greenbergPct: 0, largestPosition: 12.8, fundWithLargest: 'Druckenmiller/Duquesne', statusNotes: 'Druckenmiller largest' },
-    { rank: 7, ticker: 'PFE', companyName: 'Pfizer Inc', burryPct: 11.1, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, largestPosition: 11.1, fundWithLargest: 'Burry/Scion', statusNotes: '610% add' },
-    { rank: 8, ticker: 'ANTM', companyName: 'Anthem Inc', burryPct: 0, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 10.28, greenbergPct: 7.3, largestPosition: 10.28, fundWithLargest: 'Einhorn/Greenlight', statusNotes: 'Multi-guru holding' },
-    { rank: 9, ticker: 'MOH', companyName: 'Molina Healthcare', burryPct: 1.7, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, largestPosition: 1.7, fundWithLargest: 'Burry/Scion', statusNotes: 'Burry 400% add' },
-    { rank: 10, ticker: 'HAL', companyName: 'Halliburton Company', burryPct: 4.5, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, largestPosition: 4.5, fundWithLargest: 'Burry/Scion', statusNotes: 'New energy services' },
-    { rank: 11, ticker: 'INSM', companyName: 'Insmed Incorporated', burryPct: 0, klarmanPct: 0, druckenmillerPct: 5.74, einhornPct: 0, greenbergPct: 0, largestPosition: 5.74, fundWithLargest: 'Druckenmiller/Duquesne', statusNotes: 'Biotech' },
-    { rank: 12, ticker: 'XLF', companyName: 'Financial Select Sector SPDR', burryPct: 0, klarmanPct: 0, druckenmillerPct: 6.7, einhornPct: 0, greenbergPct: 0, largestPosition: 6.7, fundWithLargest: 'Druckenmiller/Duquesne', statusNotes: 'Financial sector' },
+  // Fallback built-in data — 8 gurus (Q1 2026 13F)
+  const fallback: Omit<GuruPosition, 'guruCount' | 'consensusWeight'>[] = [
+    { rank: 1, ticker: 'PLTR', companyName: 'Palantir Technologies', burryPct: 66, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 0, abramsPct: 0, tepperPct: 0, largestPosition: 66, fundWithLargest: 'Burry/Scion', statusNotes: 'New $912M position; overwhelming conviction' },
+    { rank: 2, ticker: 'AMZN', companyName: 'Amazon.com Inc', burryPct: 0, klarmanPct: 12.7, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 0, abramsPct: 0, tepperPct: 6.8, largestPosition: 12.7, fundWithLargest: 'Klarman/Baupost', statusNotes: 'Massive 120% add; Tepper also holds' },
+    { rank: 3, ticker: 'QSR', companyName: 'Restaurant Brands Intl', burryPct: 0, klarmanPct: 11.67, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 16.8, abramsPct: 0, tepperPct: 0, largestPosition: 16.8, fundWithLargest: 'Ackman/Pershing Square', statusNotes: 'Klarman + Ackman top conviction' },
+    { rank: 4, ticker: 'OMF', companyName: 'OneMain Holdings', burryPct: 0, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 12.25, ackmanPct: 0, abramsPct: 0, tepperPct: 0, largestPosition: 12.25, fundWithLargest: 'Greenberg/Brave Warrior', statusNotes: 'Consumer finance' },
+    { rank: 5, ticker: 'NVDA', companyName: 'NVIDIA Corporation', burryPct: 13.5, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 0, abramsPct: 0, tepperPct: 0, largestPosition: 13.5, fundWithLargest: 'Burry/Scion', statusNotes: 'AI infrastructure' },
+    { rank: 6, ticker: 'NTRA', companyName: 'Natera Inc', burryPct: 0, klarmanPct: 0, druckenmillerPct: 12.8, einhornPct: 0, greenbergPct: 0, ackmanPct: 0, abramsPct: 0, tepperPct: 0, largestPosition: 12.8, fundWithLargest: 'Druckenmiller/Duquesne', statusNotes: 'Genetic testing' },
+    { rank: 7, ticker: 'PFE', companyName: 'Pfizer Inc', burryPct: 11.1, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 0, abramsPct: 0, tepperPct: 0, largestPosition: 11.1, fundWithLargest: 'Burry/Scion', statusNotes: '610% add' },
+    { rank: 8, ticker: 'ANTM', companyName: 'Anthem Inc', burryPct: 0, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 10.28, greenbergPct: 7.3, ackmanPct: 0, abramsPct: 0, tepperPct: 0, largestPosition: 10.28, fundWithLargest: 'Einhorn/Greenlight', statusNotes: 'Multi-guru holding' },
+    { rank: 9, ticker: 'HLT', companyName: 'Hilton Worldwide', burryPct: 0, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 19.2, abramsPct: 0, tepperPct: 0, largestPosition: 19.2, fundWithLargest: 'Ackman/Pershing Square', statusNotes: 'Ackman largest holding' },
+    { rank: 10, ticker: 'GOOGL', companyName: 'Alphabet Inc', burryPct: 0, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 15.5, abramsPct: 12.8, tepperPct: 8.2, largestPosition: 15.5, fundWithLargest: 'Ackman/Pershing Square', statusNotes: '3-guru consensus' },
+    { rank: 11, ticker: 'TMUS', companyName: 'T-Mobile US', burryPct: 0, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 0, abramsPct: 22.1, tepperPct: 0, largestPosition: 22.1, fundWithLargest: 'Abrams/Abrams Capital', statusNotes: 'Concentrated telecom' },
+    { rank: 12, ticker: 'META', companyName: 'Meta Platforms', burryPct: 0, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 0, abramsPct: 15.5, tepperPct: 7.1, largestPosition: 15.5, fundWithLargest: 'Abrams/Abrams Capital', statusNotes: 'Abrams + Tepper adding' },
+    { rank: 13, ticker: 'BABA', companyName: 'Alibaba Group', burryPct: 0, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 0, abramsPct: 0, tepperPct: 14.8, largestPosition: 14.8, fundWithLargest: 'Tepper/Appaloosa', statusNotes: 'China reopening bet' },
+    { rank: 14, ticker: 'CP', companyName: 'Canadian Pacific Kansas City', burryPct: 0, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 13.1, abramsPct: 0, tepperPct: 0, largestPosition: 13.1, fundWithLargest: 'Ackman/Pershing Square', statusNotes: 'Concentrated rail play' },
+    { rank: 15, ticker: 'NKE', companyName: 'Nike Inc', burryPct: 0, klarmanPct: 0, druckenmillerPct: 0, einhornPct: 0, greenbergPct: 0, ackmanPct: 8.7, abramsPct: 0, tepperPct: 5.5, largestPosition: 8.7, fundWithLargest: 'Ackman/Pershing Square', statusNotes: 'Ackman + Tepper new positions' },
   ];
+
+  return fallback.map(pos => {
+    const pcts = [pos.burryPct, pos.klarmanPct, pos.druckenmillerPct, pos.einhornPct, pos.greenbergPct, pos.ackmanPct, pos.abramsPct, pos.tepperPct];
+    return {
+      ...pos,
+      guruCount: pcts.filter(p => p > 0).length,
+      consensusWeight: pcts.reduce((s, p) => s + p, 0),
+    };
+  });
 }
 
 // ============================================================================

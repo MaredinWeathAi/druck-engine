@@ -1043,6 +1043,10 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         <button class="guru-filter" onclick="filterGuru('Druckenmiller', event)">Druckenmiller</button>
         <button class="guru-filter" onclick="filterGuru('Einhorn', event)">Einhorn</button>
         <button class="guru-filter" onclick="filterGuru('Greenberg', event)">Greenberg</button>
+        <button class="guru-filter" onclick="filterGuru('Ackman', event)">Ackman</button>
+        <button class="guru-filter" onclick="filterGuru('Abrams', event)">Abrams</button>
+        <button class="guru-filter" onclick="filterGuru('Tepper', event)">Tepper</button>
+        <button class="guru-filter" onclick="filterGuru('consensus', event)">Multi-Guru</button>
       </div>
       <div id="guru-table-wrap" style="overflow-x:auto;"></div>
     </div>
@@ -2402,6 +2406,10 @@ function filterGuru(guru, clickEvent) {
       if (guru === 'Druckenmiller') return g.druckenmillerPct > 0;
       if (guru === 'Einhorn') return g.einhornPct > 0;
       if (guru === 'Greenberg') return g.greenbergPct > 0;
+      if (guru === 'Ackman') return g.ackmanPct > 0;
+      if (guru === 'Abrams') return g.abramsPct > 0;
+      if (guru === 'Tepper') return g.tepperPct > 0;
+      if (guru === 'consensus') return (g.guruCount || 1) >= 2;
       return true;
     });
     renderGuruTable(filtered);
@@ -2418,7 +2426,8 @@ function renderGuruTable(positions) {
   html += '<thead><tr>';
   html += '<th>#</th><th>Ticker</th><th>Company</th>';
   html += '<th>Burry</th><th>Klarman</th><th>Druck</th><th>Einhorn</th><th>Greenberg</th>';
-  html += '<th>Largest</th><th>Fund</th><th>Notes</th>';
+  html += '<th>Ackman</th><th>Abrams</th><th>Tepper</th>';
+  html += '<th>Gurus</th><th>Largest</th><th>Fund</th><th>Notes</th>';
   html += '</tr></thead><tbody>';
 
   for (var i = 0; i < positions.length; i++) {
@@ -2432,6 +2441,10 @@ function renderGuruTable(positions) {
     html += '<td>' + formatGuroPct(g.druckenmillerPct) + '</td>';
     html += '<td>' + formatGuroPct(g.einhornPct) + '</td>';
     html += '<td>' + formatGuroPct(g.greenbergPct) + '</td>';
+    html += '<td>' + formatGuroPct(g.ackmanPct) + '</td>';
+    html += '<td>' + formatGuroPct(g.abramsPct) + '</td>';
+    html += '<td>' + formatGuroPct(g.tepperPct) + '</td>';
+    html += '<td style="font-weight:700;color:' + (g.guruCount >= 3 ? '#0ea5e9' : g.guruCount >= 2 ? '#f97316' : 'var(--text-dim)') + ';">' + (g.guruCount || 1) + '</td>';
     html += '<td><span class="guru-pct high">' + g.largestPosition.toFixed(1) + '%</span></td>';
     html += '<td style="font-size:11px;">' + g.fundWithLargest + '</td>';
     html += '<td class="guru-notes" title="' + (g.statusNotes || '').replace(/"/g, '&quot;') + '">' + (g.statusNotes || '') + '</td>';

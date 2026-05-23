@@ -4,7 +4,8 @@ import path from 'path';
 import Anthropic from '@anthropic-ai/sdk';
 import morningLensRouter from './morning-lens';
 import marketIntelRouter from './market-intel';
-import mtrpClientRouter from './mtrp-client';
+import taAccelRouter from './ta-acceleration';
+// mtrp-client bridge removed — Market Intel lives entirely in Druck Engine
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -1527,10 +1528,10 @@ Return ONLY valid JSON, no markdown fences.`,
 // ─── MORNING LENS MODULE ───
 app.use('/api', morningLensRouter);
 app.use('/api', marketIntelRouter);
+app.use('/api/ta', taAccelRouter);
 
 // ─── SERVE STATIC FILES ───
 const clientPath = path.join(__dirname, '../../client/public');
-app.use('/api/mtrp', mtrpClientRouter);
 app.use(express.static(clientPath));
 
 // SPA fallback
