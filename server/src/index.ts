@@ -20,7 +20,7 @@ app.use(express.json({ limit: '50mb' }));
 // ─── API KEY MANAGEMENT ───
 let anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
 const FRED_API_KEY = process.env.FRED_API_KEY || '';
-const GURUFOCUS_API_KEY = process.env.GURUFOCUS_API_KEY || '';
+const GURUFOCUS_API_KEY = process.env.GURUFOCUS_API_KEY || '026d8ee9d10c778c6656d672b5ff1e71:544e1fff1953fece457d6152f3239e74';
 
 // ─── DATA CACHING LAYER ───
 interface CacheEntry<T> {

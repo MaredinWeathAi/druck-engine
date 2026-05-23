@@ -18,7 +18,7 @@ import { Router, Request, Response } from 'express';
 
 const router = Router();
 
-const GURUFOCUS_API_KEY = process.env.GURUFOCUS_API_KEY || '';
+const GURUFOCUS_API_KEY = process.env.GURUFOCUS_API_KEY || '026d8ee9d10c778c6656d672b5ff1e71:544e1fff1953fece457d6152f3239e74';
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
 // ============================================================================
