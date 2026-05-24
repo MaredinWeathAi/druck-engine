@@ -626,8 +626,8 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '9.0.0',
-    name: 'Druck Engine — Guru-Calibrated Inflection Intelligence',
+    version: '10.0.0',
+    name: 'Druck Engine — Smart Money Cycle Inflection Intelligence',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
     data_source: dataSource,
@@ -1556,7 +1556,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v9.0 — Guru-Calibrated Inflection Intelligence`);
+  console.log(`\n  DRUCK ENGINE v10.0 — Smart Money Cycle Inflection Intelligence`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);
