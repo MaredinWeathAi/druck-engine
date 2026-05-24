@@ -685,49 +685,49 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         <div class="bucket-tab" data-bucket="commodities" onclick="switchBucket('commodities')">Commodities</div>
         <div class="bucket-tab" data-bucket="fx" onclick="switchBucket('fx')">FX &amp; Crypto</div>
         <div class="bucket-tab" data-bucket="fixed_income" onclick="switchBucket('fixed_income')">Fixed Income</div>
+        <div class="bucket-tab" data-bucket="international" onclick="switchBucket('international')">International</div>
       </div>
       <div class="card" style="overflow-x:auto">
-        <table class="instrument-table" id="instrument-table">
-          <thead>
-            <tr>
-              <th data-sort="symbol">Symbol</th>
-              <th data-sort="name">Name</th>
-              <th data-sort="phase">Phase</th>
-              <th data-sort="signal">Signal</th>
-              <th data-sort="chg30d">30D %</th>
-              <th data-sort="weekly">Weekly</th>
-              <th data-sort="monthly">Monthly</th>
-              <th data-sort="roc20">20d ROC</th>
-              <th data-sort="ma50">50 MA</th>
-              <th data-sort="ma200">200 MA</th>
-            </tr>
-          </thead>
-          <tbody id="instrument-tbody"></tbody>
-        </table>
-      </div>
-
-      <!-- Country Valuations (moved from Global Markets) -->
-      <div class="card" style="margin-top:16px">
-        <h3>Country Valuations & Signals</h3>
-        <div class="metric-row" style="margin-bottom:16px">
-          <div class="metric-card">
-            <div class="metric-label">Countries Tracked</div>
-            <div class="metric-value" id="countries-count">10</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Re-rating</div>
-            <div class="metric-value" id="rerating-count">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Stable</div>
-            <div class="metric-value" id="stable-count">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Deteriorating</div>
-            <div class="metric-value" id="deteriorating-count">—</div>
-          </div>
+        <!-- Instrument table (shown for all tabs except International) -->
+        <div id="instrument-table-wrap">
+          <table class="instrument-table" id="instrument-table">
+            <thead>
+              <tr>
+                <th data-sort="symbol">Symbol</th>
+                <th data-sort="name">Name</th>
+                <th data-sort="phase">Phase</th>
+                <th data-sort="signal">Signal</th>
+                <th data-sort="chg30d">30D %</th>
+                <th data-sort="weekly">Weekly</th>
+                <th data-sort="monthly">Monthly</th>
+                <th data-sort="roc20">20d ROC</th>
+                <th data-sort="ma50">50 MA</th>
+                <th data-sort="ma200">200 MA</th>
+              </tr>
+            </thead>
+            <tbody id="instrument-tbody"></tbody>
+          </table>
         </div>
-        <div style="overflow-x:auto;">
+        <!-- Country Valuations (shown only for International tab) -->
+        <div id="international-table-wrap" style="display:none">
+          <div class="metric-row" style="margin-bottom:16px">
+            <div class="metric-card">
+              <div class="metric-label">Countries Tracked</div>
+              <div class="metric-value" id="countries-count">10</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Re-rating</div>
+              <div class="metric-value" id="rerating-count">—</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Stable</div>
+              <div class="metric-value" id="stable-count">—</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Deteriorating</div>
+              <div class="metric-value" id="deteriorating-count">—</div>
+            </div>
+          </div>
           <div style="display:grid;grid-template-columns:120px 80px 120px 60px 70px 80px 100px 80px 80px;gap:12px;padding:12px;border-bottom:2px solid var(--border);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);">
             <div>Country</div>
             <div>ETF</div>
@@ -739,9 +739,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
             <div>YTD Return</div>
             <div>Breadth %</div>
           </div>
-          <div id="countries-table">
-            <!-- Populated by JS -->
-          </div>
+          <div id="countries-table"></div>
         </div>
       </div>
     </div>
@@ -1779,7 +1777,14 @@ function switchBucket(bucket) {
   document.querySelectorAll('.bucket-tab').forEach(function(t) {
     t.classList.toggle('active', t.getAttribute('data-bucket') === bucket);
   });
-  renderInstrumentTable(bucket);
+  if (bucket === 'international') {
+    document.getElementById('instrument-table-wrap').style.display = 'none';
+    document.getElementById('international-table-wrap').style.display = 'block';
+  } else {
+    document.getElementById('instrument-table-wrap').style.display = 'block';
+    document.getElementById('international-table-wrap').style.display = 'none';
+    renderInstrumentTable(bucket);
+  }
 }
 
 function renderInstrumentTable(bucket) {
