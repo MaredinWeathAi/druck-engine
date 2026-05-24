@@ -923,11 +923,22 @@ router.get('/lens/narrative', async (req: Request, res: Response) => {
   res.json({ narrative: text, timestamp: ariaTimestamp, cached: false });
 });
 
+// Debug endpoint — shows refresh errors and fetch diagnostics
+router.get('/lens/debug', (req: Request, res: Response) => {
+  res.json({
+    instrumentCount: instrumentSnapshots.size,
+    totalInstruments: INSTRUMENTS.length,
+    lastRefresh: lensLastRefresh ? new Date(lensLastRefresh).toISOString() : null,
+    errors: lensRefreshErrors,
+    errorCount: lensRefreshErrors.length,
+  });
+});
+
 // Force refresh
 router.post('/lens/refresh', async (req: Request, res: Response) => {
   try {
     await refreshMorningLens();
-    res.json({ status: 'refreshed', instrumentCount: instrumentSnapshots.size });
+    res.json({ status: 'refreshed', instrumentCount: instrumentSnapshots.size, errors: lensRefreshErrors.slice(0, 5) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Refresh failed' });
   }
