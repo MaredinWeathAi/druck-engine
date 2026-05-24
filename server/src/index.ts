@@ -626,8 +626,8 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '7.0.0',
-    name: 'Druck Engine — Investment Inflection Platform',
+    version: '9.0.0',
+    name: 'Druck Engine — Guru-Calibrated Inflection Intelligence',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
     data_source: dataSource,
