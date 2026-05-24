@@ -369,24 +369,17 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div class="icon">⚡</div>
       <div>Headline Feed</div>
     </div>
-    <div class="nav-item" data-page="inteldash">
-      <div class="icon">🔍</div>
-      <div>Intel Dashboard</div>
-    </div>
     <div class="nav-item" data-page="guruwatch">
       <div class="icon">🎯</div>
       <div>Guru Watch</div>
     </div>
 
-    <!-- Overview -->
-    <div class="nav-section">Trifecta Engine</div>
+    <!-- Trifecta -->
+    <div class="nav-section">Trifecta</div>
     <div class="nav-item active" data-page="dashboard">
       <div class="icon">📊</div>
       <div>Dashboard</div>
     </div>
-
-    <!-- Trifecta Modules -->
-    <div class="nav-section">Trifecta Modules</div>
     <div class="nav-item" data-page="liquidity">
       <div class="icon">💧</div>
       <div>Liquidity</div>
@@ -394,10 +387,6 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     <div class="nav-item" data-page="breadth">
       <div class="icon">📈</div>
       <div>Market Breadth</div>
-    </div>
-    <div class="nav-item" data-page="gurus">
-      <div class="icon">🧠</div>
-      <div>Smart Money</div>
     </div>
 
     <!-- Deep Dive -->
@@ -430,23 +419,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div>Earnings Calendar</div>
     </div>
 
-    <!-- Risk -->
-    <div class="nav-section">Risk</div>
-    <div class="nav-item" data-page="hedges">
-      <div class="icon">🛡️</div>
-      <div>Hedge Tracker</div>
-    </div>
-    <div class="nav-item" data-page="portfolio">
-      <div class="icon">💼</div>
-      <div>Portfolio</div>
-    </div>
-
-    <!-- AI Review -->
-    <div class="nav-section">AI Review</div>
-    <div class="nav-item" data-page="review">
-      <div class="icon">🤖</div>
-      <div>Position Review</div>
-    </div>
+    <!-- Settings -->
     <div class="nav-item" data-page="settings">
       <div class="icon">⚙️</div>
       <div>Settings</div>
@@ -593,71 +566,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       </div>
     </div>
 
-    <!-- Smart Money (Gurus) Page -->
-    <div class="page" id="page-gurus">
-      <div class="action-banner" id="signal-gurus">
-        <div class="action-dot"></div>
-        <div class="action-signal">Loading...</div>
-        <div class="action-rationale"></div>
-      </div>
-      <div class="card">
-        <h3>Smart Money Gurus</h3>
-        <div class="metric-row">
-          <div class="metric-card">
-            <div class="metric-label">Total Gurus Tracked</div>
-            <div class="metric-value" id="guru-count">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Consensus Picks</div>
-            <div class="metric-value" id="consensus-count">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Avg Conviction</div>
-            <div class="metric-value" id="avg-conviction">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Most Bought</div>
-            <div class="metric-value" id="most-bought-count">—</div>
-          </div>
-        </div>
-      </div>
-
-      <div id="gurus-container">
-        <!-- Guru cards populated by JS -->
-      </div>
-
-      <div class="card">
-        <h3>Consensus Picks (3+ Gurus)</h3>
-        <div class="consensus-tickers" id="consensus-tickers">
-          <!-- Populated by JS -->
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Aggregate Sector Concentration</h3>
-        <div class="chart-container" id="sector-concentration-chart"></div>
-      </div>
-
-      <div class="card">
-        <h3>Most Bought & Sold</h3>
-        <div class="grid-2">
-          <div>
-            <h4 style="margin-bottom:12px;font-size:13px;color:var(--green);">Most Bought</h4>
-            <table id="most-bought-table">
-              <thead><tr><th>Ticker</th><th>Gurus</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <div>
-            <h4 style="margin-bottom:12px;font-size:13px;color:var(--red);">Most Sold</h4>
-            <table id="most-sold-table">
-              <thead><tr><th>Ticker</th><th>Gurus</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Smart Money page removed in v10.0 restructure — data lives in Guru Watch -->
 
     <!-- Industry Scanner Page -->
     <div class="page" id="page-industries">
@@ -843,76 +752,9 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       </div>
     </div>
 
-    <!-- Hedge Tracker Page -->
-    <div class="page" id="page-hedges">
-      <div class="action-banner" id="signal-hedges">
-        <div class="action-dot"></div>
-        <div class="action-signal">Loading...</div>
-        <div class="action-rationale"></div>
-      </div>
-      <div class="card">
-        <h3>Hedge Tracker</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Ticker</th>
-              <th>Name</th>
-              <th>Sector</th>
-              <th>Day Chg %</th>
-              <th>ETF Chg %</th>
-              <th>Regime Tag</th>
-            </tr>
-          </thead>
-          <tbody id="hedges-table">
-            <!-- Populated by JS -->
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <!-- Risk section (Hedge Tracker + Portfolio) removed in v10.0 restructure -->
 
-    <!-- Portfolio Page -->
-    <div class="page" id="page-portfolio">
-      <div class="action-banner" id="signal-portfolio">
-        <div class="action-dot"></div>
-        <div class="action-signal">Loading...</div>
-        <div class="action-rationale"></div>
-      </div>
-      <div class="card">
-        <h3>Portfolio Positions</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Ticker</th>
-              <th>Name</th>
-              <th>Sector</th>
-              <th>ETF</th>
-              <th>Day Chg %</th>
-              <th>ETF Chg %</th>
-              <th>Regime Tag</th>
-            </tr>
-          </thead>
-          <tbody id="portfolio-table">
-            <!-- Populated by JS -->
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Position Review Page -->
-    <div class="page" id="page-review">
-      <div class="card">
-        <h3>Position Review (AI)</h3>
-        <p style="font-size:13px;color:var(--dim);margin-bottom:16px;">Upload screenshots of your positions. Claude will analyze them against the current Trifecta state.</p>
-        <div class="screenshot-upload" id="upload-zone">
-          <div style="font-size:14px;color:var(--text);font-weight:600;margin-bottom:8px;">Click or drag screenshots</div>
-          <div style="font-size:12px;color:var(--dim);">PNG, JPG (max 10 images)</div>
-          <input type="file" id="screenshot-input" multiple accept="image/*">
-        </div>
-        <div class="screenshot-list" id="screenshot-list"></div>
-        <button id="review-button" disabled style="margin-top:16px;width:100%;">Analyze with Claude</button>
-        <div id="review-container"></div>
-      </div>
-    </div>
+    <!-- Position Review removed in v10.0 restructure -->
 
     <!-- Morning Lens Page -->
     <div class="page" id="page-morninglens">
@@ -972,10 +814,9 @@ button:disabled{opacity:0.5;cursor:not-allowed}
             <tr>
               <th data-sort="symbol">Symbol</th>
               <th data-sort="name">Name</th>
-              <th data-sort="price">Price</th>
-              <th data-sort="chg1d">1D %</th>
+              <th data-sort="phase">Phase</th>
+              <th data-sort="signal">Signal</th>
               <th data-sort="chg30d">30D %</th>
-              <th data-sort="daily">Daily Trend</th>
               <th data-sort="weekly">Weekly</th>
               <th data-sort="monthly">Monthly</th>
               <th data-sort="roc20">20d ROC</th>
@@ -989,7 +830,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     </div>
 
     <!-- Settings Page -->
-    <!-- ══════════ INTEL FEED PAGE ══════════ -->
+    <!-- ══════════ HEADLINE FEED PAGE (includes Digest & Research) ══════════ -->
     <div class="page" id="page-intelfeed">
       <div id="intel-status-bar" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
         <div class="intel-stat-card critical"><div class="intel-stat-label">Critical</div><div class="intel-stat-val" id="if-stat-critical">0</div></div>
@@ -998,35 +839,40 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         <div class="intel-stat-card monitor"><div class="intel-stat-label">Monitor</div><div class="intel-stat-val" id="if-stat-monitor">0</div></div>
         <div class="intel-stat-card total"><div class="intel-stat-label">Total</div><div class="intel-stat-val" id="if-stat-total">0</div></div>
       </div>
-      <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-        <input type="text" id="intel-search" placeholder="Search ticker or headline..." style="flex:1;min-width:200px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;">
-        <select id="intel-filter-impact" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:12px;">
-          <option value="all">All Impact</option>
-          <option value="critical">Critical</option>
-          <option value="major">Major</option>
-          <option value="significant">Significant</option>
-          <option value="monitor">Monitor</option>
-        </select>
-        <select id="intel-filter-direction" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:12px;">
-          <option value="all">All Directions</option>
-          <option value="positive">Positive</option>
-          <option value="negative">Negative</option>
-          <option value="mixed">Mixed</option>
-        </select>
-        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim);cursor:pointer;">
-          <input type="checkbox" id="intel-filter-urgent"> Urgent Only
-        </label>
-      </div>
-      <div id="intel-feed-list" style="display:flex;flex-direction:column;gap:8px;"></div>
-    </div>
 
-    <!-- ══════════ INTEL DASHBOARD PAGE ══════════ -->
-    <div class="page" id="page-inteldash">
-      <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
-        <button class="intel-tab active" data-inteltab="digest" onclick="switchIntelTab('digest')">Daily Digest</button>
+      <!-- Tabs: Headlines / Digest / Research -->
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+        <button class="intel-tab active" data-inteltab="headlines" onclick="switchIntelTab('headlines')">Headlines</button>
+        <button class="intel-tab" data-inteltab="digest" onclick="switchIntelTab('digest')">Daily Digest</button>
         <button class="intel-tab" data-inteltab="research" onclick="switchIntelTab('research')">Research Queue</button>
       </div>
-      <div id="inteltab-digest" class="intel-tab-content active">
+
+      <!-- Headlines Tab -->
+      <div id="inteltab-headlines" class="intel-tab-content active">
+        <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+          <input type="text" id="intel-search" placeholder="Search ticker or headline..." style="flex:1;min-width:200px;background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:13px;">
+          <select id="intel-filter-impact" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:12px;">
+            <option value="all">All Impact</option>
+            <option value="critical">Critical</option>
+            <option value="major">Major</option>
+            <option value="significant">Significant</option>
+            <option value="monitor">Monitor</option>
+          </select>
+          <select id="intel-filter-direction" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:6px;font-size:12px;">
+            <option value="all">All Directions</option>
+            <option value="positive">Positive</option>
+            <option value="negative">Negative</option>
+            <option value="mixed">Mixed</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim);cursor:pointer;">
+            <input type="checkbox" id="intel-filter-urgent"> Urgent Only
+          </label>
+        </div>
+        <div id="intel-feed-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
+      <!-- Daily Digest Tab -->
+      <div id="inteltab-digest" class="intel-tab-content" style="display:none;">
         <div style="display:flex;gap:10px;margin-bottom:16px;">
           <button class="intel-digest-btn active" onclick="loadDigest('11:30am', event)">11:30am Digest</button>
           <button class="intel-digest-btn" onclick="loadDigest('3:30pm', event)">3:30pm Digest</button>
@@ -1034,6 +880,8 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         <div id="intel-digest-content" class="card" style="white-space:pre-wrap;font-family:monospace;font-size:12px;line-height:1.6;color:var(--text);"></div>
         <div id="intel-digest-sections" style="margin-top:16px;display:flex;flex-direction:column;gap:12px;"></div>
       </div>
+
+      <!-- Research Queue Tab -->
       <div id="inteltab-research" class="intel-tab-content" style="display:none;">
         <div id="intel-research-list" style="display:flex;flex-direction:column;gap:10px;"></div>
       </div>
@@ -1143,16 +991,11 @@ function showPage(page) {
     dashboard: 'Dashboard',
     liquidity: 'Liquidity Deep Dive',
     breadth: 'Market Breadth',
-    gurus: 'Smart Money Gurus',
     industries: 'Industry Scanner',
     globalmarkets: 'Global Markets',
     commodities: 'Commodities',
     rotation: 'Rotation Radar',
-    hedges: 'Hedge Tracker',
-    portfolio: 'Portfolio',
-    review: 'Position Review',
     intelfeed: 'Headline Feed',
-    inteldash: 'Intel Dashboard',
     guruwatch: 'Guru Watch',
     geoevents: 'Geopolitical Events',
     earningscal: 'Earnings Calendar',
@@ -1171,16 +1014,11 @@ function loadPageData(page) {
   else if (page === 'dashboard') loadDashboard();
   else if (page === 'liquidity') loadLiquidity();
   else if (page === 'breadth') loadBreadth();
-  else if (page === 'gurus') loadGurus();
   else if (page === 'industries') loadIndustries();
   else if (page === 'globalmarkets') loadGlobalMarkets();
   else if (page === 'commodities') loadCommodities();
-  else if (page === 'hedges') loadHedges();
-  else if (page === 'portfolio') loadPortfolio();
   else if (page === 'rotation') loadRotation();
-  else if (page === 'review') loadReviewSetup();
   else if (page === 'intelfeed') loadIntelFeed();
-  else if (page === 'inteldash') loadIntelDash();
   else if (page === 'guruwatch') loadGuruWatch();
   else if (page === 'geoevents') loadGeoEvents();
   else if (page === 'earningscal') loadEarningsCal();
@@ -1209,7 +1047,7 @@ function loadActionSignals() {
 }
 
 function applySignals(data) {
-  var pages = ['dashboard', 'liquidity', 'breadth', 'gurus', 'industries', 'globalmarkets', 'commodities', 'hedges', 'portfolio', 'rotation'];
+  var pages = ['dashboard', 'liquidity', 'breadth', 'industries', 'globalmarkets', 'commodities', 'rotation'];
   pages.forEach(function(p) {
     var el = document.getElementById('signal-' + p);
     var sig = data[p];
@@ -1482,7 +1320,11 @@ function loadIndustrySector(sector) {
     var summary = data.summary;
     var stocks = data.stocks;
 
-    var html = '<h4 style="margin-bottom:12px;font-size:14px;">' + sector.charAt(0).toUpperCase() + sector.slice(1).replace(/_/g, ' ') + ' Summary</h4>';
+    // Map sector names to lens ETF symbols for phase lookup
+    var sectorEtfMap = { financials: 'KRE', airlines: 'IYT', energy: 'CL=F', technology: 'XLK', healthcare: 'XLU', materials: 'HG=F', consumer_staples: 'XLP', communication_services: 'QQQ', industrials: 'IYT', semiconductors: 'SMH', retail: 'XRT' };
+    var etfSym = sectorEtfMap[sector] || '';
+    var sectorPhasePill = etfSym ? getPhasePillHtml(etfSym) : '';
+    var html = '<h4 style="margin-bottom:12px;font-size:14px;">' + sector.charAt(0).toUpperCase() + sector.slice(1).replace(/_/g, ' ') + ' Summary' + sectorPhasePill + '</h4>';
     html += '<div class="metric-row" style="margin-bottom:20px;">';
     html += '<div class="metric-card"><div class="metric-label">Breadth %</div><div class="metric-value">' + summary.breadth_pct.toFixed(1) + '%</div></div>';
     html += '<div class="metric-card"><div class="metric-label">Avg P/E</div><div class="metric-value">' + summary.avg_pe.toFixed(1) + '</div></div>';
@@ -1524,7 +1366,7 @@ function loadGlobalMarkets() {
       if (c.signal === 'RISING') signalClass = 'rising';
       tableHtml += '<div class="country-row">';
       tableHtml += '<div class="name">' + c.name + '</div>';
-      tableHtml += '<div>' + c.etf + '</div>';
+      tableHtml += '<div>' + c.etf + getPhasePillHtml(c.etf) + '</div>';
       tableHtml += '<div>' + c.index + '</div>';
       tableHtml += '<div class="numeric">' + c.pe.toFixed(1) + '</div>';
       tableHtml += '<div class="numeric">' + c.fwdPe.toFixed(1) + '</div>';
@@ -1614,13 +1456,13 @@ function loadCommodities() {
       hy: data.hy_spreads[data.hy_spreads.length - 1]
     };
 
-    document.getElementById('oil-price').textContent = '$' + latest.wti.toFixed(2);
+    document.getElementById('oil-price').innerHTML = '$' + latest.wti.toFixed(2) + getPhasePillHtml('CL=F');
     document.getElementById('oil-trend').textContent = signals.oil_trend;
-    document.getElementById('copper-price').textContent = '$' + latest.copper.toFixed(3);
+    document.getElementById('copper-price').innerHTML = '$' + latest.copper.toFixed(3) + getPhasePillHtml('HG=F');
     document.getElementById('copper-trend').textContent = signals.copper_trend;
-    document.getElementById('gold-price').textContent = '$' + latest.gold.toFixed(0);
+    document.getElementById('gold-price').innerHTML = '$' + latest.gold.toFixed(0) + getPhasePillHtml('GC=F');
     document.getElementById('gold-trend').textContent = signals.gold_trend;
-    document.getElementById('hy-spreads').textContent = latest.hy.toFixed(2);
+    document.getElementById('hy-spreads').innerHTML = latest.hy.toFixed(2) + getPhasePillHtml('HYG');
     document.getElementById('hy-stress').textContent = signals.stress_level;
 
     var traces = [];
@@ -1936,6 +1778,17 @@ var lensData = null;
 var currentBucket = 'equities';
 var ariaCollapsed = false;
 
+// Phase pill helper — renders a phase pill for any symbol found in lens data
+function getPhasePillHtml(symbol) {
+  if (!lensData) return '';
+  var inst = lensData.find(function(i) { return i.symbol === symbol; });
+  if (!inst || !inst.phaseData) return '';
+  var ph = inst.phaseData;
+  var phaseColors = { 1: '#0ea5e9', 2: '#f97316', 3: '#e879f9', 4: '#f97316', 5: '#0ea5e9', 6: '#a78bfa' };
+  var c = phaseColors[ph.phaseNum] || 'var(--dim)';
+  return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;background:' + c + '22;color:' + c + ';border:1px solid ' + c + '55;margin-left:6px">' + ph.phaseShort + '</span>';
+}
+
 function loadMorningLens() {
   Promise.all([
     apiCall('/api/lens/signals'),
@@ -2153,7 +2006,7 @@ function renderInstrumentTable(bucket) {
   var tbody = document.getElementById('instrument-tbody');
   var filtered = bucket === 'all' ? lensData : lensData.filter(function(i) { return i.bucket === bucket; });
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--dim)">No instruments in this bucket</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--dim)">No instruments in this bucket</td></tr>';
     return;
   }
   var html = '';
@@ -2161,20 +2014,38 @@ function renderInstrumentTable(bucket) {
     var d = inst.daily || {};
     var w = inst.weekly || {};
     var m = inst.monthly || {};
-    var price = d.price || 0;
-    var chg1d = inst.changePct1d || 0;
     var chg30d = inst.changePct30d || 0;
     var roc20 = d.roc20d || 0;
-    var dState = d.state || '—';
     var wState = w ? (w.state || '—') : '—';
     var mState = m ? (m.state || '—') : '—';
+
+    // Phase pill — color-coded by phase number
+    var ph = inst.phaseData;
+    var phasePill = '—';
+    var signalPill = '—';
+    if (ph) {
+      var phaseColors = {
+        1: '#0ea5e9', // P1 Expansion — sky blue (BUY)
+        2: '#f97316', // P2 Accumulation — warm orange (SELL)
+        3: '#e879f9', // P3 Buy Exhaustion — magenta (SELL)
+        4: '#f97316', // P4 Reversal — warm orange (SELL)
+        5: '#0ea5e9', // P5 Sell Exhaustion — sky blue (BUY)
+        6: '#a78bfa', // P6 Collapse — purple (BUY)
+      };
+      var phColor = phaseColors[ph.phaseNum] || 'var(--dim)';
+      phasePill = '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + phColor + '22;color:' + phColor + ';border:1px solid ' + phColor + '55">' + ph.phaseShort + '</span>';
+      // Signal pill
+      var sigColors = { STRONG_BUY: '#0ea5e9', BUY: '#0ea5e9', ACCUMULATE: '#38bdf8', HOLD: '#94a3b8', REDUCE: '#f97316', SELL: '#f97316', STRONG_SELL: '#e879f9' };
+      var sigColor = sigColors[ph.overallSignal] || 'var(--dim)';
+      signalPill = '<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;color:' + sigColor + '">' + ph.overallSignal.replace('_', ' ') + '</span>';
+    }
+
     html += '<tr>';
     html += '<td style="font-weight:700;color:var(--accent)">' + inst.symbol + '</td>';
     html += '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (inst.name || '') + '</td>';
-    html += '<td>' + price.toFixed(2) + '</td>';
-    html += '<td class="pct-change ' + (chg1d >= 0 ? 'positive' : 'negative') + '">' + (chg1d >= 0 ? '+' : '') + chg1d.toFixed(2) + '%</td>';
+    html += '<td>' + phasePill + '</td>';
+    html += '<td>' + signalPill + '</td>';
     html += '<td class="pct-change ' + (chg30d >= 0 ? 'positive' : 'negative') + '">' + (chg30d >= 0 ? '+' : '') + chg30d.toFixed(2) + '%</td>';
-    html += '<td><span class="trend-pill ' + dState + '">' + dState + '</span></td>';
     html += '<td><span class="trend-pill ' + wState + '">' + wState + '</span></td>';
     html += '<td><span class="trend-pill ' + mState + '">' + mState + '</span></td>';
     html += '<td class="pct-change ' + (roc20 >= 0 ? 'positive' : 'negative') + '">' + (roc20 >= 0 ? '+' : '') + roc20.toFixed(2) + '%</td>';
@@ -2194,11 +2065,10 @@ document.addEventListener('click', function(e) {
       var av, bv;
       if (sortKey === 'symbol') { av = a.symbol; bv = b.symbol; return av < bv ? -1 : av > bv ? 1 : 0; }
       if (sortKey === 'name') { av = a.name || ''; bv = b.name || ''; return av < bv ? -1 : av > bv ? 1 : 0; }
-      if (sortKey === 'price') { av = (a.daily || {}).price || 0; bv = (b.daily || {}).price || 0; return bv - av; }
-      if (sortKey === 'chg1d') { av = a.changePct1d || 0; bv = b.changePct1d || 0; return bv - av; }
+      if (sortKey === 'phase') { av = a.phaseData ? a.phaseData.phaseNum : 99; bv = b.phaseData ? b.phaseData.phaseNum : 99; return av - bv; }
+      if (sortKey === 'signal') { av = a.phaseData ? a.phaseData.overallSignal : ''; bv = b.phaseData ? b.phaseData.overallSignal : ''; return av < bv ? -1 : av > bv ? 1 : 0; }
       if (sortKey === 'chg30d') { av = a.changePct30d || 0; bv = b.changePct30d || 0; return bv - av; }
       if (sortKey === 'roc20') { av = (a.daily || {}).roc20d || 0; bv = (b.daily || {}).roc20d || 0; return bv - av; }
-      if (sortKey === 'daily') { av = (a.daily || {}).state || ''; bv = (b.daily || {}).state || ''; return av < bv ? -1 : av > bv ? 1 : 0; }
       if (sortKey === 'weekly') { av = (a.weekly || {}).state || ''; bv = (b.weekly || {}).state || ''; return av < bv ? -1 : av > bv ? 1 : 0; }
       if (sortKey === 'monthly') { av = (a.monthly || {}).state || ''; bv = (b.monthly || {}).state || ''; return av < bv ? -1 : av > bv ? 1 : 0; }
       if (sortKey === 'ma50') { av = (a.daily || {}).ma50 || 0; bv = (b.daily || {}).ma50 || 0; return bv - av; }
@@ -2237,6 +2107,10 @@ function loadIntelFeed() {
     intelHeadlines = feed.headlines || [];
     renderIntelFeed(intelHeadlines);
   });
+
+  // Pre-load digest and research queue
+  loadDigest('11:30am');
+  loadResearchQueue();
 }
 
 function renderIntelFeed(headlines) {
@@ -2325,11 +2199,6 @@ function applyIntelFilters() {
 // ═══════════════════════════════════════════════
 // MARKET INTELLIGENCE - DASHBOARD / DIGEST
 // ═══════════════════════════════════════════════
-
-function loadIntelDash() {
-  loadDigest('11:30am');
-  loadResearchQueue();
-}
 
 function switchIntelTab(tab) {
   document.querySelectorAll('.intel-tab').forEach(function(t) { t.classList.remove('active'); });

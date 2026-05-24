@@ -8,6 +8,7 @@
 import { Router, Request, Response } from 'express';
 import YahooFinance from 'yahoo-finance2';
 import Anthropic from '@anthropic-ai/sdk';
+import { computeFullInflection, InflectionPhase, OHLCVBar } from './inflection-engine';
 
 const router = Router();
 
@@ -87,6 +88,15 @@ interface TrendClassification {
   slope20d: number; // 20-day slope direction
 }
 
+interface PhaseSnapshot {
+  phase: InflectionPhase;
+  phaseNum: number;         // 1-6
+  phaseShort: string;       // e.g. "P1 Expansion"
+  actionBias: string;       // BUY, SELL, HOLD, etc.
+  confidence: number;       // 0-100
+  overallSignal: string;    // STRONG_BUY, BUY, ACCUMULATE, HOLD, REDUCE, SELL, STRONG_SELL
+}
+
 interface InstrumentSnapshot {
   symbol: string;
   name: string;
@@ -98,6 +108,7 @@ interface InstrumentSnapshot {
   monthly: TrendClassification | null;
   changePct1d: number;
   changePct30d: number;
+  phaseData: PhaseSnapshot | null;
   lastUpdated: string;
 }
 
@@ -588,6 +599,65 @@ function computeWhatChanged(current: SignalState, previous: SignalState | null):
   return diffs;
 }
 
+// ─── PHASE HELPERS ───
+
+const PHASE_NUM_MAP: Record<InflectionPhase, number> = {
+  'NARRATIVE_EXPANSION': 1,
+  'INSTITUTIONAL_ACCUMULATION': 2,
+  'BUYING_EXHAUSTION': 3,
+  'NARRATIVE_REVERSAL': 4,
+  'SELLING_EXHAUSTION': 5,
+  'NARRATIVE_COLLAPSE': 6,
+};
+
+const PHASE_SHORT_MAP: Record<InflectionPhase, string> = {
+  'NARRATIVE_EXPANSION': 'Expansion',
+  'INSTITUTIONAL_ACCUMULATION': 'Accumulation',
+  'BUYING_EXHAUSTION': 'Buy Exhaustion',
+  'NARRATIVE_REVERSAL': 'Reversal',
+  'SELLING_EXHAUSTION': 'Sell Exhaustion',
+  'NARRATIVE_COLLAPSE': 'Collapse',
+};
+
+function computePhaseForInstrument(bars: OHLCBar[], spyCloses: number[]): PhaseSnapshot | null {
+  // Convert OHLCBar (date: Date) to OHLCVBar (date: string) for inflection engine
+  const ohlcvBars: OHLCVBar[] = bars.map(b => ({
+    date: b.date.toISOString().split('T')[0],
+    open: b.open,
+    high: b.high,
+    low: b.low,
+    close: b.close,
+    volume: b.volume,
+  }));
+
+  // Neutral defaults for non-stock instruments (ETFs, indices, commodities, FX)
+  const neutralAccel = { rocAccel: null, logAccelSmooth: null, emaAccel: null, trend: 'neutral' as const, recentSignals: [] };
+  const nullFundamentals = { revenueGrowthYoY: null, epsGrowthYoY: null, operatingMargin: null, netMargin: null, roic: null, fcfYield: null, debtToEquity: null, piotroskiFScore: null, currentRatio: null };
+  const nullValuation = { peForward: null, evToEbitda: null, pegRatio: null, fcfYield: null, pePctile: null, gfValueMargin: null };
+  const neutralNarrative = {};
+
+  try {
+    const result = computeFullInflection(
+      '', '', ohlcvBars, spyCloses,
+      neutralAccel, nullFundamentals, nullValuation, neutralNarrative,
+    );
+    if (!result) return null;
+
+    const phase = result.phase.phase;
+    return {
+      phase,
+      phaseNum: PHASE_NUM_MAP[phase] || 0,
+      phaseShort: `P${PHASE_NUM_MAP[phase]} ${PHASE_SHORT_MAP[phase] || phase}`,
+      actionBias: result.phase.actionBias,
+      confidence: result.phase.confidence,
+      overallSignal: result.overallSignal,
+    };
+  } catch (err: any) {
+    // Silently skip — some instruments (VIX, yields) may not compute well
+    return null;
+  }
+}
+
 // ─── MASTER REFRESH ───
 
 async function refreshMorningLens(): Promise<void> {
@@ -622,6 +692,10 @@ async function refreshMorningLens(): Promise<void> {
   // Compute snapshots for each instrument
   const newSnapshots: Map<string, InstrumentSnapshot> = new Map();
 
+  // Get SPY closes for relative strength in phase computation
+  const spyBars = allBars.get('SPY');
+  const spyCloses = spyBars ? spyBars.map(b => b.close) : [];
+
   for (const inst of INSTRUMENTS) {
     const bars = allBars.get(inst.symbol);
     if (!bars || bars.length < 20) continue;
@@ -642,6 +716,9 @@ async function refreshMorningLens(): Promise<void> {
     const changePct1d = +((latestClose - prevClose) / prevClose * 100).toFixed(2);
     const changePct30d = +((latestClose - close30dAgo) / close30dAgo * 100).toFixed(2);
 
+    // Compute Smart Money Cycle phase using inflection engine
+    const phaseData = bars.length >= 50 ? computePhaseForInstrument(bars, spyCloses) : null;
+
     newSnapshots.set(inst.symbol, {
       symbol: inst.symbol,
       name: inst.name,
@@ -653,6 +730,7 @@ async function refreshMorningLens(): Promise<void> {
       monthly,
       changePct1d,
       changePct30d,
+      phaseData,
       lastUpdated: new Date().toISOString(),
     });
   }
