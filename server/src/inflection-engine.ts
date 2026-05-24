@@ -1051,6 +1051,8 @@ export type InflectionPhase =
   | 'INSTITUTIONAL_ACCUMULATION'
   | 'NARRATIVE_REVERSAL';
 
+export type AccumulationSubPhase = 'EARLY_STEALTH' | 'LATE_BREAKOUT_IMMINENT';
+
 export interface PhaseClassification {
   phase: InflectionPhase;
   confidence: number;  // 0-100
@@ -1059,7 +1061,192 @@ export interface PhaseClassification {
   riskLevel: 'LOW' | 'MODERATE' | 'HIGH' | 'EXTREME';
   nextPhase: InflectionPhase;
   transitionSignals: string[];
+  // v9.0: Sub-phase for INSTITUTIONAL_ACCUMULATION (backtest-derived)
+  accumulationSubPhase?: AccumulationSubPhase;
+  // v9.0: Guru behavior prediction based on 5-year backtest patterns
+  guruSignals?: GuruBehaviorPrediction;
 }
+
+// ============================================================================
+// v9.0: GURU BEHAVIOR PREDICTION MODULE
+// Derived from 5-year backtest of Tepper & Druckenmiller 13-F patterns
+// ============================================================================
+
+export interface GuruBehaviorPrediction {
+  tepperLikely: 'BUYING' | 'TRIMMING' | 'EXITING' | 'HOLDING' | 'LOADING';
+  tepperConfidence: number;  // 0-100
+  tepperRationale: string;
+  druckLikely: 'BUYING' | 'TRIMMING' | 'ROTATING' | 'HOLDING' | 'BOTTOM_FISHING';
+  druckConfidence: number;
+  druckRationale: string;
+  convergenceScore: number;  // 0-100, how likely both gurus align
+  convergenceSignal: string;
+}
+
+/**
+ * Predict likely guru positioning based on current phase and market conditions.
+ *
+ * TEPPER PATTERNS (from 5yr backtest, 57.1% framework alignment):
+ * - Persistent seller in BULL (NET_SELLER in 7/8 BULL quarters)
+ * - Enters massively in RECOVERY/BEAR_LATE (13 buys/4 sells per Q)
+ * - Cuts extremely fast in BEAR_EARLY (38 sells/Q)
+ * - 78.8% alignment with BUYING_EXHAUSTION — his standout signal
+ * - Prefers mega-cap liquid names; avg new position = 2.4% of portfolio
+ * - Sectors: Airlines (entered BULL_LATE), China (BEAR contrarian), AI/Semis (BULL trim)
+ *
+ * DRUCKENMILLER PATTERNS (53.1% alignment):
+ * - Even buy/sell across regimes; high turnover (24 new/Q in BULL)
+ * - Extraordinary bottom-fisher (Q4-2022: 47 new positions)
+ * - Short holding periods (1-3 quarters typical)
+ * - Airlines entered exclusively in BULL_LATE
+ * - AI/Semis: aggressive rotator, entered early, trimmed fast
+ */
+export function predictGuruBehavior(
+  phase: InflectionPhase,
+  pillars: PillarScores,
+  ta: ExtendedTAResult,
+  accelTrend: 'accelerating' | 'decelerating' | 'neutral',
+): GuruBehaviorPrediction {
+  let tepperLikely: GuruBehaviorPrediction['tepperLikely'] = 'HOLDING';
+  let tepperConf = 40;
+  let tepperRat = '';
+  let druckLikely: GuruBehaviorPrediction['druckLikely'] = 'HOLDING';
+  let druckConf = 40;
+  let druckRat = '';
+
+  // --- TEPPER PREDICTION ---
+  switch (phase) {
+    case 'NARRATIVE_EXPANSION':
+      // Tepper is a persistent seller into strength (7/8 BULL quarters = NET_SELLER)
+      tepperLikely = 'TRIMMING';
+      tepperConf = 75;
+      tepperRat = 'Tepper historically trims into strength — NET_SELLER in 88% of BULL quarters';
+      break;
+    case 'BUYING_EXHAUSTION':
+      // His standout signal: 78.8% alignment — he sells aggressively here
+      tepperLikely = 'EXITING';
+      tepperConf = 85;
+      tepperRat = 'BUYING_EXHAUSTION is Tepper\'s highest-conviction sell signal (78.8% alignment across 80 trades)';
+      // Boost confidence if valuation is stretched and momentum fading
+      if (pillars.valuation < 35 && accelTrend === 'decelerating') tepperConf = 92;
+      break;
+    case 'NARRATIVE_COLLAPSE':
+      // Tepper cuts fast in BEAR_EARLY, but starts nibbling in BEAR
+      if (pillars.technical < 25) {
+        tepperLikely = 'HOLDING'; // waiting for bottom
+        tepperConf = 55;
+        tepperRat = 'Tepper waits through collapse — 38 sells/Q in BEAR_EARLY but activity drops in deep BEAR';
+      } else {
+        tepperLikely = 'EXITING';
+        tepperConf = 70;
+        tepperRat = 'Early collapse: Tepper still cutting positions aggressively';
+      }
+      break;
+    case 'SELLING_EXHAUSTION':
+      // Tepper starts nibbling — contrarian entries begin
+      tepperLikely = 'BUYING';
+      tepperConf = 65;
+      tepperRat = 'Tepper enters contrarian positions in late-bear/recovery — favors mega-cap liquid names';
+      break;
+    case 'INSTITUTIONAL_ACCUMULATION':
+      // Tepper loads massively in RECOVERY (13 buys, 4 sells per quarter)
+      tepperLikely = 'LOADING';
+      tepperConf = 80;
+      tepperRat = 'Tepper\'s highest-conviction buy zone: loads 3:1 buy/sell ratio in accumulation phases';
+      break;
+    case 'NARRATIVE_REVERSAL':
+      // Still buying but starting to be selective
+      tepperLikely = 'BUYING';
+      tepperConf = 60;
+      tepperRat = 'Tepper continues building but becomes more selective as narrative emerges';
+      break;
+  }
+
+  // --- DRUCKENMILLER PREDICTION ---
+  switch (phase) {
+    case 'NARRATIVE_EXPANSION':
+      // Druck has even buy/sell but very high turnover — he's actively rotating
+      druckLikely = 'ROTATING';
+      druckConf = 65;
+      druckRat = 'Druckenmiller runs high turnover in BULL (24 new positions/Q) — constantly rotating into next theme';
+      break;
+    case 'BUYING_EXHAUSTION':
+      // Druck trims but less aggressively than Tepper
+      druckLikely = 'TRIMMING';
+      druckConf = 60;
+      druckRat = 'Druckenmiller reduces exposure but maintains core positions — shorter holding periods mean less to unwind';
+      break;
+    case 'NARRATIVE_COLLAPSE':
+      // Druck is aggressive — he sells but also starts fishing early
+      if (pillars.technical < 20 && pillars.valuation > 65) {
+        druckLikely = 'BOTTOM_FISHING';
+        druckConf = 70;
+        druckRat = 'Deep collapse with cheap valuations: Druckenmiller begins extraordinary bottom-fishing (cf. Q4-2022: 47 new positions)';
+      } else {
+        druckLikely = 'TRIMMING';
+        druckConf = 55;
+        druckRat = 'Early collapse: Druckenmiller trimming but watching for bottom signals';
+      }
+      break;
+    case 'SELLING_EXHAUSTION':
+      // Druck's extraordinary bottom-fishing zone
+      druckLikely = 'BOTTOM_FISHING';
+      druckConf = 80;
+      druckRat = 'Druckenmiller\'s highest-conviction zone — cf. Q4-2022 bear market bottom (47 new positions in one quarter)';
+      break;
+    case 'INSTITUTIONAL_ACCUMULATION':
+      // Druck is buying but already planning rotations
+      druckLikely = 'BUYING';
+      druckConf = 65;
+      druckRat = 'Druckenmiller building positions with shorter holding horizons (1-3 quarters typical)';
+      break;
+    case 'NARRATIVE_REVERSAL':
+      // Druck already positioning for next theme
+      druckLikely = 'ROTATING';
+      druckConf = 70;
+      druckRat = 'Druckenmiller aggressively positions into new narratives early — high conviction, short duration';
+      break;
+  }
+
+  // --- CONVERGENCE SCORING ---
+  // When both gurus align on direction, signals are much stronger (80% at 5-guru convergence in backtest)
+  const tepperBullish = ['BUYING', 'LOADING'].includes(tepperLikely);
+  const tepperBearish = ['TRIMMING', 'EXITING'].includes(tepperLikely);
+  const druckBullish = ['BUYING', 'BOTTOM_FISHING'].includes(druckLikely);
+  const druckBearish = ['TRIMMING'].includes(druckLikely);
+
+  let convergenceScore = 30; // baseline
+  let convergenceSignal = 'Gurus divergent — mixed signals';
+
+  if (tepperBullish && druckBullish) {
+    convergenceScore = Math.round((tepperConf + druckConf) / 2 * 1.1); // boost for alignment
+    convergenceScore = Math.min(convergenceScore, 95);
+    convergenceSignal = 'BULLISH CONVERGENCE — Both Tepper & Druckenmiller likely accumulating';
+  } else if (tepperBearish && druckBearish) {
+    convergenceScore = Math.round((tepperConf + druckConf) / 2 * 1.1);
+    convergenceScore = Math.min(convergenceScore, 95);
+    convergenceSignal = 'BEARISH CONVERGENCE — Both Tepper & Druckenmiller likely reducing';
+  } else if (tepperBullish && druckBearish) {
+    convergenceSignal = 'DIVERGENT — Tepper buying while Druckenmiller trimming (Tepper more contrarian)';
+  } else if (tepperBearish && druckBullish) {
+    convergenceSignal = 'DIVERGENT — Druckenmiller buying while Tepper selling (watch Tepper timing)';
+  }
+
+  // Special convergence boost: both in their highest-conviction zones
+  if (phase === 'SELLING_EXHAUSTION' || phase === 'INSTITUTIONAL_ACCUMULATION') {
+    if (tepperBullish && druckBullish) {
+      convergenceScore = Math.min(convergenceScore + 10, 95);
+      convergenceSignal += ' — RECOVERY ZONE: historically strongest guru convergence (61% alignment at 3+ gurus)';
+    }
+  }
+
+  return {
+    tepperLikely, tepperConfidence: tepperConf, tepperRationale: tepperRat,
+    druckLikely, druckConfidence: druckConf, druckRationale: druckRat,
+    convergenceScore, convergenceSignal,
+  };
+}
+
 
 export function classifyPhase(
   pillars: PillarScores,
@@ -1089,12 +1276,16 @@ export function classifyPhase(
 
   // --- BUYING EXHAUSTION ---
   // High price but fading momentum + volume divergence
+  // v9.0: Enhanced with Tepper-derived signals (78.8% alignment across 80 trades)
   if (technical > 55 && inflection < 45) phaseScores.BUYING_EXHAUSTION += 25;
   if (accelTrend === 'decelerating') phaseScores.BUYING_EXHAUSTION += 20;
   if (ta.volume?.volumeExhaustion === 'buying') phaseScores.BUYING_EXHAUSTION += 20;
   if (ta.volume?.greenDayVolRatio !== undefined && ta.volume.greenDayVolRatio < 0.8) phaseScores.BUYING_EXHAUSTION += 15;
   if (ta.rsi14 !== null && ta.rsi14 > 70) phaseScores.BUYING_EXHAUSTION += 10;
   if (valuation < 35) phaseScores.BUYING_EXHAUSTION += 10; // very expensive
+  // v9.0 Tepper signals: stretched valuation + fading narrative = his highest-conviction sell
+  if (valuation < 30 && narrative > 70) phaseScores.BUYING_EXHAUSTION += 12; // peak narrative + extreme valuation
+  if (technical > 60 && inflection < 40 && valuation < 40) phaseScores.BUYING_EXHAUSTION += 8; // triple divergence
 
   // --- NARRATIVE COLLAPSE ---
   // Everything falling, momentum confirms, narrative dying
@@ -1108,12 +1299,16 @@ export function classifyPhase(
 
   // --- SELLING EXHAUSTION ---
   // Price still low but momentum inflecting, volume drying up on red days
+  // v9.0: Enhanced with Druckenmiller bottom-fishing patterns (Q4-2022: 47 new positions)
   if (technical < 40 && inflection > 50) phaseScores.SELLING_EXHAUSTION += 25;
   if (accelTrend === 'accelerating' && technical < 45) phaseScores.SELLING_EXHAUSTION += 20;
   if (ta.volume?.volumeExhaustion === 'selling') phaseScores.SELLING_EXHAUSTION += 20;
   if (ta.rsi14 !== null && ta.rsi14 < 35) phaseScores.SELLING_EXHAUSTION += 15;
   if (valuation > 65) phaseScores.SELLING_EXHAUSTION += 10; // cheap
   if (ta.failedBreaks.some(b => b.type === 'failed_breakdown')) phaseScores.SELLING_EXHAUSTION += 10;
+  // v9.0 Druckenmiller signals: deep value + inflection turning = his extraordinary entry zone
+  if (valuation > 70 && fundamental > 55) phaseScores.SELLING_EXHAUSTION += 10; // cheap + fundamentals intact
+  if (technical < 30 && accelTrend === 'accelerating') phaseScores.SELLING_EXHAUSTION += 8; // Druck bottom-fish signal
 
   // --- INSTITUTIONAL ACCUMULATION ---
   // Price flat/basing, quiet volume, fundamentals intact, narrative dead
@@ -1190,11 +1385,34 @@ export function classifyPhase(
     transitions.push(`Approaching ${nextPhase.replace(/_/g, ' ')} (${nextScore}/${bestScore} score ratio)`);
   }
 
+  // v9.0: Institutional Accumulation sub-phase detection
+  // Backtest showed splitting into EARLY_STEALTH vs LATE_BREAKOUT_IMMINENT
+  // improves signal timing — Tepper enters in EARLY, Druckenmiller in LATE
+  let accumulationSubPhase: AccumulationSubPhase | undefined;
+  if (bestPhase === 'INSTITUTIONAL_ACCUMULATION') {
+    // LATE_BREAKOUT_IMMINENT: volume expanding, inflection rising, narrative starting to turn
+    const isLate = (inflection > 52) ||
+      (ta.volume?.volumeTrend === 'expanding') ||
+      (ta.goldenCross) ||
+      (narrative > 48);
+    accumulationSubPhase = isLate ? 'LATE_BREAKOUT_IMMINENT' : 'EARLY_STEALTH';
+    if (isLate) {
+      transitions.push('Accumulation entering LATE phase — breakout imminent, Druckenmiller-style entry zone');
+    } else {
+      transitions.push('Accumulation in EARLY stealth phase — Tepper-style deep value accumulation zone');
+    }
+  }
+
+  // v9.0: Guru behavior prediction
+  const guruSignals = predictGuruBehavior(bestPhase, pillars, ta, accelTrend);
+
   return {
     phase: bestPhase,
     confidence,
     ...phaseMetadata[bestPhase],
     transitionSignals: transitions,
+    accumulationSubPhase,
+    guruSignals,
   };
 }
 
@@ -1406,6 +1624,7 @@ export function computeFullInflection(
   const sellExh = scoreSellingExhaustion(extTA, accelData, valuationData, fundamentalData);
 
   // Overall signal (combines phase + exhaustion + composite score)
+  // v9.0: Guru convergence can boost/dampen signals
   let overallSignal: FullInflectionResult['overallSignal'] = 'HOLD';
   if (buyExh.triggered) overallSignal = 'STRONG_SELL';
   else if (sellExh.triggered) overallSignal = 'STRONG_BUY';
@@ -1413,6 +1632,16 @@ export function computeFullInflection(
   else if (pillars.composite >= 60) overallSignal = 'ACCUMULATE';
   else if (pillars.composite <= 25) overallSignal = 'SELL';
   else if (pillars.composite <= 40) overallSignal = 'REDUCE';
+
+  // v9.0: If guru convergence is strong and aligns with signal, boost confidence
+  if (phase.guruSignals && phase.guruSignals.convergenceScore >= 70) {
+    const guruBullish = phase.guruSignals.convergenceSignal.includes('BULLISH');
+    const guruBearish = phase.guruSignals.convergenceSignal.includes('BEARISH');
+    // Upgrade ACCUMULATE→BUY if gurus converge bullish
+    if (guruBullish && overallSignal === 'ACCUMULATE') overallSignal = 'BUY';
+    // Upgrade REDUCE→SELL if gurus converge bearish
+    if (guruBearish && overallSignal === 'REDUCE') overallSignal = 'SELL';
+  }
 
   return {
     ticker, name,

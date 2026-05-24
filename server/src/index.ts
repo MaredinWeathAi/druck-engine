@@ -1556,7 +1556,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v8.0 — Trifecta Analyzer + Geo-Macro Intelligence`);
+  console.log(`\n  DRUCK ENGINE v9.0 — Guru-Calibrated Inflection Intelligence`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);
