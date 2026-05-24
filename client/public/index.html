@@ -395,14 +395,6 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div class="icon">🏢</div>
       <div>Industry Scanner</div>
     </div>
-    <div class="nav-item" data-page="globalmarkets">
-      <div class="icon">🌍</div>
-      <div>Global Markets</div>
-    </div>
-    <div class="nav-item" data-page="commodities">
-      <div class="icon">⚡</div>
-      <div>Commodities</div>
-    </div>
     <div class="nav-item" data-page="rotation">
       <div class="icon">🔄</div>
       <div>Rotation Radar</div>
@@ -588,120 +580,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       </div>
     </div>
 
-    <!-- Global Markets Page -->
-    <div class="page" id="page-globalmarkets">
-      <div class="action-banner" id="signal-globalmarkets">
-        <div class="action-dot"></div>
-        <div class="action-signal">Loading...</div>
-        <div class="action-rationale"></div>
-      </div>
-      <div class="card">
-        <h3>Global Markets</h3>
-        <div class="metric-row">
-          <div class="metric-card">
-            <div class="metric-label">Countries Tracked</div>
-            <div class="metric-value" id="countries-count">10</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Re-rating</div>
-            <div class="metric-value" id="rerating-count">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Stable</div>
-            <div class="metric-value" id="stable-count">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Deteriorating</div>
-            <div class="metric-value" id="deteriorating-count">—</div>
-          </div>
-        </div>
-      </div>
 
-      <div class="card">
-        <h3>Country Valuations & Signals</h3>
-        <div style="overflow-x:auto;">
-          <div style="display:grid;grid-template-columns:120px 80px 120px 60px 70px 80px 100px 80px 80px;gap:12px;padding:12px;border-bottom:2px solid var(--border);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);">
-            <div>Country</div>
-            <div>ETF</div>
-            <div>Index</div>
-            <div>P/E</div>
-            <div>Fwd P/E</div>
-            <div>Spread (bps)</div>
-            <div>Signal</div>
-            <div>YTD Return</div>
-            <div>Breadth %</div>
-          </div>
-          <div id="countries-table">
-            <!-- Populated by JS -->
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Global Indices (Top 4 Countries)</h3>
-        <div class="chart-container" id="global-indices-chart"></div>
-      </div>
-
-      <div class="card">
-        <h3>Argentina Deep Dive</h3>
-        <div class="metric-row">
-          <div class="metric-card">
-            <div class="metric-label">Spread (bps)</div>
-            <div class="metric-value" id="arg-spread">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">TECO Price</div>
-            <div class="metric-value" id="arg-teco">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">GGAL Price</div>
-            <div class="metric-value" id="arg-ggal">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Rerating Status</div>
-            <div class="metric-value" id="arg-rerating">—</div>
-          </div>
-        </div>
-        <div class="chart-container" id="argentina-chart"></div>
-      </div>
-    </div>
-
-    <!-- Commodities Page -->
-    <div class="page" id="page-commodities">
-      <div class="action-banner" id="signal-commodities">
-        <div class="action-dot"></div>
-        <div class="action-signal">Loading...</div>
-        <div class="action-rationale"></div>
-      </div>
-      <div class="card">
-        <h3>Commodities</h3>
-        <div class="metric-row">
-          <div class="metric-card">
-            <div class="metric-label">WTI Oil</div>
-            <div class="metric-value" id="oil-price">—</div>
-            <div class="metric-sub" id="oil-trend">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Copper</div>
-            <div class="metric-value" id="copper-price">—</div>
-            <div class="metric-sub" id="copper-trend">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">Gold</div>
-            <div class="metric-value" id="gold-price">—</div>
-            <div class="metric-sub" id="gold-trend">—</div>
-          </div>
-          <div class="metric-card">
-            <div class="metric-label">HY Spreads</div>
-            <div class="metric-value" id="hy-spreads">—</div>
-            <div class="metric-sub" id="hy-stress">—</div>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="chart-container" id="commodities-chart"></div>
-      </div>
-    </div>
 
     <!-- Rotation Radar Page -->
     <div class="page" id="page-rotation">
@@ -806,7 +685,6 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         <div class="bucket-tab" data-bucket="commodities" onclick="switchBucket('commodities')">Commodities</div>
         <div class="bucket-tab" data-bucket="fx" onclick="switchBucket('fx')">FX &amp; Crypto</div>
         <div class="bucket-tab" data-bucket="fixed_income" onclick="switchBucket('fixed_income')">Fixed Income</div>
-        <div class="bucket-tab" data-bucket="all" onclick="switchBucket('all')">All</div>
       </div>
       <div class="card" style="overflow-x:auto">
         <table class="instrument-table" id="instrument-table">
@@ -826,6 +704,45 @@ button:disabled{opacity:0.5;cursor:not-allowed}
           </thead>
           <tbody id="instrument-tbody"></tbody>
         </table>
+      </div>
+
+      <!-- Country Valuations (moved from Global Markets) -->
+      <div class="card" style="margin-top:16px">
+        <h3>Country Valuations & Signals</h3>
+        <div class="metric-row" style="margin-bottom:16px">
+          <div class="metric-card">
+            <div class="metric-label">Countries Tracked</div>
+            <div class="metric-value" id="countries-count">10</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Re-rating</div>
+            <div class="metric-value" id="rerating-count">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Stable</div>
+            <div class="metric-value" id="stable-count">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Deteriorating</div>
+            <div class="metric-value" id="deteriorating-count">—</div>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <div style="display:grid;grid-template-columns:120px 80px 120px 60px 70px 80px 100px 80px 80px;gap:12px;padding:12px;border-bottom:2px solid var(--border);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);">
+            <div>Country</div>
+            <div>ETF</div>
+            <div>Index</div>
+            <div>P/E</div>
+            <div>Fwd P/E</div>
+            <div>Spread (bps)</div>
+            <div>Signal</div>
+            <div>YTD Return</div>
+            <div>Breadth %</div>
+          </div>
+          <div id="countries-table">
+            <!-- Populated by JS -->
+          </div>
+        </div>
       </div>
     </div>
 
@@ -992,8 +909,6 @@ function showPage(page) {
     liquidity: 'Liquidity Deep Dive',
     breadth: 'Market Breadth',
     industries: 'Industry Scanner',
-    globalmarkets: 'Global Markets',
-    commodities: 'Commodities',
     rotation: 'Rotation Radar',
     intelfeed: 'Headline Feed',
     guruwatch: 'Guru Watch',
@@ -1015,8 +930,6 @@ function loadPageData(page) {
   else if (page === 'liquidity') loadLiquidity();
   else if (page === 'breadth') loadBreadth();
   else if (page === 'industries') loadIndustries();
-  else if (page === 'globalmarkets') loadGlobalMarkets();
-  else if (page === 'commodities') loadCommodities();
   else if (page === 'rotation') loadRotation();
   else if (page === 'intelfeed') loadIntelFeed();
   else if (page === 'guruwatch') loadGuruWatch();
@@ -1047,7 +960,7 @@ function loadActionSignals() {
 }
 
 function applySignals(data) {
-  var pages = ['dashboard', 'liquidity', 'breadth', 'industries', 'globalmarkets', 'commodities', 'rotation'];
+  var pages = ['dashboard', 'liquidity', 'breadth', 'industries', 'rotation'];
   pages.forEach(function(p) {
     var el = document.getElementById('signal-' + p);
     var sig = data[p];
@@ -1342,169 +1255,6 @@ function loadIndustrySector(sector) {
     html += '</tbody></table>';
 
     document.getElementById('industry-details').innerHTML = html;
-  });
-}
-
-// Global Markets
-function loadGlobalMarkets() {
-  apiCall('/api/global-markets').then(function(data) {
-    var countries = data.countries;
-
-    // Count signals
-    var reratings = countries.filter(function(c) { return c.signal === 'RE-RATING'; }).length;
-    var stables = countries.filter(function(c) { return c.signal === 'STABLE'; }).length;
-    var deteriors = countries.filter(function(c) { return c.signal === 'DETERIORATING'; }).length;
-
-    document.getElementById('rerating-count').textContent = reratings;
-    document.getElementById('stable-count').textContent = stables;
-    document.getElementById('deteriorating-count').textContent = deteriors;
-
-    // Country table
-    var tableHtml = '';
-    countries.forEach(function(c) {
-      var signalClass = c.signal.toLowerCase().replace('-', '').replace(/\s+/g, '');
-      if (c.signal === 'RISING') signalClass = 'rising';
-      tableHtml += '<div class="country-row">';
-      tableHtml += '<div class="name">' + c.name + '</div>';
-      tableHtml += '<div>' + c.etf + getPhasePillHtml(c.etf) + '</div>';
-      tableHtml += '<div>' + c.index + '</div>';
-      tableHtml += '<div class="numeric">' + c.pe.toFixed(1) + '</div>';
-      tableHtml += '<div class="numeric">' + c.fwdPe.toFixed(1) + '</div>';
-      tableHtml += '<div class="numeric">' + c.spread + '</div>';
-      tableHtml += '<div class="signal ' + signalClass + '">' + c.signal + '</div>';
-      tableHtml += '<div class="numeric ' + (c.ytd_return > 0 ? 'positive' : 'negative') + '">' + (c.ytd_return > 0 ? '+' : '') + c.ytd_return.toFixed(1) + '%</div>';
-      tableHtml += '<div class="numeric">' + c.breadth_pct + '%</div>';
-      tableHtml += '</div>';
-    });
-    document.getElementById('countries-table').innerHTML = tableHtml;
-
-    // Global indices chart (top 4)
-    var top4 = countries.slice(0, 4);
-    var traces = [];
-    top4.forEach(function(country) {
-      var countryData = countries.find(function(c) { return c.name === country.name; });
-      if (countryData && countryData.prices) {
-        traces.push({
-          x: data.dates,
-          y: countryData.prices,
-          name: country.name,
-          type: 'scatter',
-          mode: 'lines',
-          line: { width: 2 }
-        });
-      }
-    });
-    var layout = {
-      title: 'Global Indices (Top 4)',
-      xaxis: { title: 'Date' },
-      yaxis: { title: 'Index Level' },
-      plot_bgcolor: 'rgba(20, 25, 38, 0.5)',
-      paper_bgcolor: 'rgba(20, 25, 38, 0)',
-      font: { color: '#e2e8f0' },
-      margin: { t: 40, b: 40, l: 60, r: 60 }
-    };
-    Plotly.newPlot('global-indices-chart', traces, layout, { responsive: true });
-  });
-
-  // Argentina deep dive
-  apiCall('/api/argentina').then(function(data) {
-    var latest = data.latest;
-    document.getElementById('arg-spread').textContent = latest.spread.toFixed(0) + ' bps';
-    document.getElementById('arg-teco').textContent = '$' + latest.teco.toFixed(2);
-    document.getElementById('arg-ggal').textContent = '$' + latest.ggal.toFixed(2);
-    document.getElementById('arg-rerating').textContent = latest.structural_rerating ? 'RERATING' : 'NEUTRAL';
-
-    var trace1 = {
-      x: data.dates,
-      y: data.spread,
-      name: 'Spread (bps)',
-      type: 'scatter',
-      mode: 'lines',
-      line: { color: 'rgba(249, 115, 22, 0.8)', width: 2 }
-    };
-    var trace2 = {
-      x: data.dates,
-      y: data.teco_price,
-      name: 'TECO Price',
-      type: 'scatter',
-      mode: 'lines',
-      line: { color: 'rgba(14, 165, 233, 0.8)', width: 2 },
-      yaxis: 'y2'
-    };
-    var layout = {
-      title: 'Argentina: Spread vs TECO',
-      xaxis: { title: 'Date' },
-      yaxis: { title: 'Spread (bps)' },
-      yaxis2: { title: 'TECO Price', overlaying: 'y', side: 'right' },
-      plot_bgcolor: 'rgba(20, 25, 38, 0.5)',
-      paper_bgcolor: 'rgba(20, 25, 38, 0)',
-      font: { color: '#e2e8f0' },
-      margin: { t: 40, b: 40, l: 60, r: 60 }
-    };
-    Plotly.newPlot('argentina-chart', [trace1, trace2], layout, { responsive: true });
-  });
-}
-
-// Commodities
-function loadCommodities() {
-  apiCall('/api/commodities/detail').then(function(data) {
-    var signals = data.signals;
-    var latest = {
-      wti: data.commodities.wti[data.commodities.wti.length - 1],
-      copper: data.commodities.copper[data.commodities.copper.length - 1],
-      gold: data.commodities.gold[data.commodities.gold.length - 1],
-      hy: data.hy_spreads[data.hy_spreads.length - 1]
-    };
-
-    document.getElementById('oil-price').innerHTML = '$' + latest.wti.toFixed(2) + getPhasePillHtml('CL=F');
-    document.getElementById('oil-trend').textContent = signals.oil_trend;
-    document.getElementById('copper-price').innerHTML = '$' + latest.copper.toFixed(3) + getPhasePillHtml('HG=F');
-    document.getElementById('copper-trend').textContent = signals.copper_trend;
-    document.getElementById('gold-price').innerHTML = '$' + latest.gold.toFixed(0) + getPhasePillHtml('GC=F');
-    document.getElementById('gold-trend').textContent = signals.gold_trend;
-    document.getElementById('hy-spreads').innerHTML = latest.hy.toFixed(2) + getPhasePillHtml('HYG');
-    document.getElementById('hy-stress').textContent = signals.stress_level;
-
-    var traces = [];
-    traces.push({
-      x: data.dates,
-      y: data.commodities.wti,
-      name: 'WTI Oil',
-      type: 'scatter',
-      mode: 'lines',
-      line: { color: 'rgba(245, 158, 11, 0.8)', width: 2 }
-    });
-    traces.push({
-      x: data.dates,
-      y: data.commodities.copper,
-      name: 'Copper',
-      type: 'scatter',
-      mode: 'lines',
-      line: { color: 'rgba(232, 121, 249, 0.8)', width: 2 },
-      yaxis: 'y2'
-    });
-    traces.push({
-      x: data.dates,
-      y: data.commodities.gold,
-      name: 'Gold',
-      type: 'scatter',
-      mode: 'lines',
-      line: { color: 'rgba(14, 165, 233, 0.8)', width: 2 },
-      yaxis: 'y3'
-    });
-
-    var layout = {
-      title: 'Commodities Multi-Asset',
-      xaxis: { title: 'Date' },
-      yaxis: { title: 'WTI ($)' },
-      yaxis2: { title: 'Copper ($)', overlaying: 'y', side: 'right' },
-      yaxis3: { title: 'Gold ($)', overlaying: 'y', side: 'right', x: 1.15 },
-      plot_bgcolor: 'rgba(20, 25, 38, 0.5)',
-      paper_bgcolor: 'rgba(20, 25, 38, 0)',
-      font: { color: '#e2e8f0' },
-      margin: { t: 40, b: 40, l: 60, r: 120 }
-    };
-    Plotly.newPlot('commodities-chart', traces, layout, { responsive: true });
   });
 }
 
@@ -1990,6 +1740,37 @@ function loadChartGrid() {
     renderInstrumentTable(currentBucket);
   }).catch(function(err) {
     console.error('Chart grid load error:', err);
+  });
+
+  // Load country valuations table
+  apiCall('/api/global-markets').then(function(data) {
+    var countries = data.countries;
+    var reratings = countries.filter(function(c) { return c.signal === 'RE-RATING'; }).length;
+    var stables = countries.filter(function(c) { return c.signal === 'STABLE'; }).length;
+    var deteriors = countries.filter(function(c) { return c.signal === 'DETERIORATING'; }).length;
+    document.getElementById('rerating-count').textContent = reratings;
+    document.getElementById('stable-count').textContent = stables;
+    document.getElementById('deteriorating-count').textContent = deteriors;
+
+    var tableHtml = '';
+    countries.forEach(function(c) {
+      var signalClass = c.signal.toLowerCase().replace('-', '').replace(/\s+/g, '');
+      if (c.signal === 'RISING') signalClass = 'rising';
+      tableHtml += '<div class="country-row">';
+      tableHtml += '<div class="name">' + c.name + '</div>';
+      tableHtml += '<div>' + c.etf + getPhasePillHtml(c.etf) + '</div>';
+      tableHtml += '<div>' + c.index + '</div>';
+      tableHtml += '<div class="numeric">' + c.pe.toFixed(1) + '</div>';
+      tableHtml += '<div class="numeric">' + c.fwdPe.toFixed(1) + '</div>';
+      tableHtml += '<div class="numeric">' + c.spread + '</div>';
+      tableHtml += '<div class="signal ' + signalClass + '">' + c.signal + '</div>';
+      tableHtml += '<div class="numeric ' + (c.ytd_return > 0 ? 'positive' : 'negative') + '">' + (c.ytd_return > 0 ? '+' : '') + c.ytd_return.toFixed(1) + '%</div>';
+      tableHtml += '<div class="numeric">' + c.breadth_pct + '%</div>';
+      tableHtml += '</div>';
+    });
+    document.getElementById('countries-table').innerHTML = tableHtml;
+  }).catch(function(err) {
+    console.error('Country valuations load error:', err);
   });
 }
 
