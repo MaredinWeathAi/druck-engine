@@ -98,6 +98,41 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .rotation-group.accumulate h4{color:#0ea5e9}
 .rotation-group.hold h4{color:#3b82f6}
 .rotation-group.reduce h4{color:#f97316}
+/* Phase Transitions Alert */
+.phase-transitions-panel{margin-bottom:20px;border:2px solid rgba(245,158,11,0.5);border-radius:10px;overflow:hidden;animation:ptPulse 2s ease-in-out 3}
+.phase-transitions-panel.empty{display:none}
+@keyframes ptPulse{0%,100%{border-color:rgba(245,158,11,0.5)}50%{border-color:rgba(245,158,11,1)}}
+.pt-header{display:flex;align-items:center;gap:12px;padding:14px 20px;background:rgba(245,158,11,0.1);border-bottom:1px solid rgba(245,158,11,0.2);cursor:pointer}
+.pt-header-icon{font-size:22px;line-height:1}
+.pt-header-title{font-size:14px;font-weight:800;color:#f59e0b;text-transform:uppercase;letter-spacing:1px}
+.pt-header-count{margin-left:8px;background:#f59e0b;color:#111;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;min-width:20px;text-align:center}
+.pt-header-hint{margin-left:auto;font-size:11px;color:var(--dim)}
+.pt-list{padding:8px 12px}
+.pt-item{display:flex;align-items:center;gap:14px;padding:12px 16px;margin:4px 0;border-radius:8px;background:var(--card);border-left:4px solid}
+.pt-item.critical{border-left-color:#e879f9;background:rgba(232,121,249,0.06)}
+.pt-item.warning{border-left-color:#f97316;background:rgba(249,115,22,0.06)}
+.pt-item.info{border-left-color:#0ea5e9;background:rgba(14,165,233,0.06)}
+.pt-symbol{font-weight:800;font-size:13px;color:var(--accent);min-width:80px}
+.pt-name{font-size:11px;color:var(--dim);min-width:100px}
+.pt-arrow{display:flex;align-items:center;gap:6px;flex:1}
+.pt-phase-from,.pt-phase-to{font-size:11px;font-weight:700;padding:4px 10px;border-radius:5px;white-space:nowrap}
+.pt-phase-from{background:rgba(100,116,139,0.15);color:#94a3b8;text-decoration:line-through;opacity:0.7}
+.pt-phase-to{font-weight:800}
+.pt-phase-to.p1,.pt-phase-to.p6{background:rgba(14,165,233,0.15);color:#0ea5e9}
+.pt-phase-to.p2{background:rgba(249,115,22,0.15);color:#f97316}
+.pt-phase-to.p3{background:rgba(245,158,11,0.15);color:#f59e0b}
+.pt-phase-to.p4{background:rgba(232,121,249,0.15);color:#e879f9}
+.pt-phase-to.p5{background:rgba(14,165,233,0.15);color:#0ea5e9}
+.pt-direction-arrow{font-size:16px;font-weight:900;margin:0 4px}
+.pt-direction-arrow.deteriorating{color:#f97316}
+.pt-direction-arrow.improving{color:#0ea5e9}
+.pt-direction-arrow.advancing{color:#f59e0b}
+.pt-bias{font-size:10px;font-weight:800;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:0.5px;margin-left:auto}
+.pt-bias.buy{background:rgba(14,165,233,0.15);color:#0ea5e9}
+.pt-bias.sell{background:rgba(249,115,22,0.15);color:#f97316}
+.pt-bias.flipped{animation:biasFlash 1s ease-in-out 5}
+@keyframes biasFlash{0%,100%{opacity:1}50%{opacity:0.3}}
+.pt-no-transitions{padding:16px 20px;text-align:center;color:var(--dim);font-size:13px}
 /* Morning Lens */
 .death-nails-banner{display:flex;align-items:center;gap:16px;padding:16px 24px;border-radius:10px;margin-bottom:20px;border:2px solid}
 .death-nails-banner.dn-0{background:rgba(14,165,233,0.08);border-color:rgba(14,165,233,0.3)}
@@ -638,6 +673,18 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     <!-- Morning Lens Page -->
     <div class="page" id="page-morninglens">
       <button class="lens-refresh-btn" id="lens-refresh-btn" onclick="refreshLens()">⟳ Refresh Data</button>
+
+      <!-- Phase Transitions Alert — TOP-LEVEL, impossible to miss -->
+      <div class="phase-transitions-panel empty" id="phase-transitions-panel">
+        <div class="pt-header" onclick="toggleTransitionsPanel()">
+          <span class="pt-header-icon">⚡</span>
+          <span class="pt-header-title">Phase Transitions Detected</span>
+          <span class="pt-header-count" id="pt-count">0</span>
+          <span class="pt-header-hint" id="pt-hint">click to expand</span>
+        </div>
+        <div class="pt-list" id="pt-list" style="display:none"></div>
+      </div>
+
       <!-- Death Nails Banner -->
       <div class="death-nails-banner dn-0" id="dn-banner">
         <div class="dn-count" id="dn-count">—</div>
@@ -680,6 +727,18 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     <!-- Chart Grid Page -->
     <div class="page" id="page-chartgrid">
       <button class="lens-refresh-btn" id="cg-refresh-btn" onclick="refreshLens()">⟳ Refresh Data</button>
+
+      <!-- Phase Transitions Alert (duplicated for Chart Grid page) -->
+      <div class="phase-transitions-panel empty" id="cg-phase-transitions-panel">
+        <div class="pt-header" onclick="toggleTransitionsPanel('cg-')">
+          <span class="pt-header-icon">⚡</span>
+          <span class="pt-header-title">Phase Transitions Detected</span>
+          <span class="pt-header-count" id="cg-pt-count">0</span>
+          <span class="pt-header-hint" id="cg-pt-hint">click to expand</span>
+        </div>
+        <div class="pt-list" id="cg-pt-list" style="display:none"></div>
+      </div>
+
       <div class="bucket-tabs" id="bucket-tabs">
         <div class="bucket-tab active" data-bucket="equities" onclick="switchBucket('equities')">Equities</div>
         <div class="bucket-tab" data-bucket="commodities" onclick="switchBucket('commodities')">Commodities</div>
@@ -1537,19 +1596,85 @@ function getPhasePillHtml(symbol) {
   return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;background:' + c + '22;color:' + c + ';border:1px solid ' + c + '55;margin-left:6px">' + ph.phaseShort + '</span>';
 }
 
+// ─── Phase Transitions Renderer ───
+function renderPhaseTransitions(data, prefix) {
+  var panel = document.getElementById(prefix + 'phase-transitions-panel');
+  var countEl = document.getElementById(prefix + 'pt-count');
+  var listEl = document.getElementById(prefix + 'pt-list');
+  if (!panel || !data) return;
+
+  var transitions = data.transitions || [];
+  countEl.textContent = transitions.length;
+
+  if (transitions.length === 0) {
+    panel.classList.add('empty');
+    listEl.innerHTML = '<div class="pt-no-transitions">No phase transitions detected since last refresh. All instruments holding steady.</div>';
+    return;
+  }
+
+  panel.classList.remove('empty');
+  // Auto-expand if there are critical transitions
+  var hasCritical = transitions.some(function(t) { return t.severity === 'critical'; });
+  if (hasCritical) {
+    listEl.style.display = 'block';
+    var hintEl = document.getElementById(prefix + 'pt-hint');
+    if (hintEl) hintEl.textContent = 'click to collapse';
+  }
+
+  var html = '';
+  transitions.forEach(function(t) {
+    var dirArrow = t.direction === 'deteriorating' ? '▼' : (t.direction === 'improving' ? '▲' : '→');
+    var biasClass = t.toBias.toLowerCase().includes('buy') ? 'buy' : 'sell';
+    if (t.biasFlipped) biasClass += ' flipped';
+
+    html += '<div class="pt-item ' + t.severity + '">';
+    html += '<div class="pt-symbol">' + t.symbol + '</div>';
+    html += '<div class="pt-name">' + t.name + '</div>';
+    html += '<div class="pt-arrow">';
+    html += '<span class="pt-phase-from">' + t.fromPhaseShort + '</span>';
+    html += '<span class="pt-direction-arrow ' + t.direction + '">' + dirArrow + '</span>';
+    html += '<span class="pt-phase-to p' + t.toPhase + '">' + t.toPhaseShort + '</span>';
+    if (t.biasFlipped) {
+      html += '<span style="font-size:10px;color:#e879f9;font-weight:800;margin-left:8px">BIAS FLIPPED</span>';
+    }
+    html += '</div>';
+    html += '<div class="pt-bias ' + biasClass + '">' + t.toBias + '</div>';
+    html += '</div>';
+  });
+
+  listEl.innerHTML = html;
+}
+
+function toggleTransitionsPanel(prefix) {
+  prefix = prefix || '';
+  var listEl = document.getElementById(prefix + 'pt-list');
+  var hintEl = document.getElementById(prefix + 'pt-hint');
+  if (!listEl) return;
+  if (listEl.style.display === 'none') {
+    listEl.style.display = 'block';
+    if (hintEl) hintEl.textContent = 'click to collapse';
+  } else {
+    listEl.style.display = 'none';
+    if (hintEl) hintEl.textContent = 'click to expand';
+  }
+}
+
 function loadMorningLens() {
   Promise.all([
     apiCall('/api/lens/signals'),
     apiCall('/api/lens/death-nails'),
     apiCall('/api/lens/leading-groups'),
     apiCall('/api/lens/what-changed'),
-    apiCall('/api/lens/narrative')
+    apiCall('/api/lens/narrative'),
+    apiCall('/api/lens/transitions')
   ]).then(function(results) {
     var signals = results[0];
     var dn = results[1];
     var lg = results[2];
     var wc = results[3];
     var narrative = results[4];
+    var transitions = results[5];
+    renderPhaseTransitions(transitions, '');
     renderDeathNails(dn);
     renderSignalStrip(signals);
     renderAria(narrative);
@@ -1738,6 +1863,13 @@ function loadChartGrid() {
     renderInstrumentTable(currentBucket);
   }).catch(function(err) {
     console.error('Chart grid load error:', err);
+  });
+
+  // Load phase transitions for Chart Grid banner
+  apiCall('/api/lens/transitions').then(function(data) {
+    renderPhaseTransitions(data, 'cg-');
+  }).catch(function(err) {
+    console.error('Transitions load error:', err);
   });
 
   // Load country valuations table

@@ -169,8 +169,28 @@ interface DiffEntry {
   severity: 'critical' | 'warning' | 'info';
 }
 
+// ─── PHASE TRANSITION TYPES ───
+interface PhaseTransition {
+  symbol: string;
+  name: string;
+  bucket: string;
+  group: string;
+  fromPhase: number;       // 1-6
+  toPhase: number;         // 1-6
+  fromPhaseShort: string;  // e.g. "P1 Expansion"
+  toPhaseShort: string;
+  fromBias: string;        // BUY, SELL
+  toBias: string;
+  biasFlipped: boolean;    // true if BUY↔SELL changed
+  direction: 'advancing' | 'deteriorating' | 'improving';  // cycle direction
+  severity: 'critical' | 'warning' | 'info';
+  detectedAt: string;      // ISO timestamp
+}
+
 // ─── DATA STORAGE ───
 let instrumentSnapshots: Map<string, InstrumentSnapshot> = new Map();
+let previousPhaseMap: Map<string, PhaseSnapshot> = new Map();  // previous refresh phases
+let phaseTransitions: PhaseTransition[] = [];                   // detected transitions
 let currentSignals: SignalState | null = null;
 let previousSignals: SignalState | null = null;
 let whatChanged: DiffEntry[] = [];
@@ -599,6 +619,82 @@ function computeWhatChanged(current: SignalState, previous: SignalState | null):
   return diffs;
 }
 
+// ─── PHASE TRANSITION DETECTION ───
+
+function computePhaseTransitions(
+  newSnapshots: Map<string, InstrumentSnapshot>,
+  prevPhases: Map<string, PhaseSnapshot>
+): PhaseTransition[] {
+  const transitions: PhaseTransition[] = [];
+  const now = new Date().toISOString();
+
+  for (const [symbol, snap] of newSnapshots) {
+    if (!snap.phaseData) continue;
+    const prev = prevPhases.get(symbol);
+    if (!prev) continue; // first time seeing this instrument — no transition
+
+    // Only fire if the phase number actually changed
+    if (snap.phaseData.phaseNum === prev.phaseNum) continue;
+
+    const fromNum = prev.phaseNum;
+    const toNum = snap.phaseData.phaseNum;
+
+    // Determine direction based on cycle semantics
+    // P1→P2→P3 = advancing (bullish deteriorating as cycle matures)
+    // P4→P5→P6 = bearish cycle advancing
+    // P6→P1 or P5→P1 = improving (new bullish cycle)
+    // P3→P4 = deteriorating (shift to bearish)
+    let direction: 'advancing' | 'deteriorating' | 'improving';
+    if ((fromNum <= 3 && toNum >= 4) || (fromNum === 3 && toNum === 4)) {
+      direction = 'deteriorating'; // crossed from bullish to bearish phases
+    } else if ((fromNum >= 4 && toNum <= 2) || (fromNum === 6 && toNum === 1)) {
+      direction = 'improving'; // crossed from bearish back to bullish phases
+    } else if (toNum > fromNum) {
+      direction = 'advancing'; // moving forward in the cycle
+    } else {
+      direction = 'improving'; // moving backward = reverting to earlier/better phase
+    }
+
+    // Determine severity
+    const fromBias = prev.actionBias;
+    const toBias = snap.phaseData.actionBias;
+    const biasFlipped = (fromBias.includes('BUY') && toBias.includes('SELL')) ||
+                        (fromBias.includes('SELL') && toBias.includes('BUY'));
+
+    let severity: 'critical' | 'warning' | 'info';
+    if (biasFlipped) {
+      severity = 'critical'; // action bias flipped — requires immediate attention
+    } else if (direction === 'deteriorating') {
+      severity = 'warning';
+    } else {
+      severity = 'info';
+    }
+
+    transitions.push({
+      symbol,
+      name: snap.name,
+      bucket: snap.bucket,
+      group: snap.group,
+      fromPhase: fromNum,
+      toPhase: toNum,
+      fromPhaseShort: `P${fromNum} ${prev.phaseShort.replace(/^P\d\s*/, '')}`,
+      toPhaseShort: `P${toNum} ${snap.phaseData.phaseShort.replace(/^P\d\s*/, '')}`,
+      fromBias,
+      toBias,
+      biasFlipped,
+      direction,
+      severity,
+      detectedAt: now,
+    });
+  }
+
+  // Sort: critical first, then warning, then info
+  const severityOrder = { critical: 0, warning: 1, info: 2 };
+  transitions.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+
+  return transitions;
+}
+
 // ─── PHASE HELPERS ───
 
 const PHASE_NUM_MAP: Record<InflectionPhase, number> = {
@@ -735,6 +831,18 @@ async function refreshMorningLens(): Promise<void> {
     });
   }
 
+  // Detect phase transitions BEFORE overwriting snapshots
+  const newTransitions = computePhaseTransitions(newSnapshots, previousPhaseMap);
+  if (newTransitions.length > 0) {
+    phaseTransitions = newTransitions;
+    console.log(`[LENS] ⚡ ${newTransitions.length} phase transition(s) detected: ${newTransitions.map(t => `${t.symbol} P${t.fromPhase}→P${t.toPhase}`).join(', ')}`);
+  }
+  // Store current phases as previous for next refresh
+  previousPhaseMap = new Map();
+  for (const [symbol, snap] of newSnapshots) {
+    if (snap.phaseData) previousPhaseMap.set(symbol, snap.phaseData);
+  }
+
   instrumentSnapshots = newSnapshots;
 
   // Compute signals
@@ -858,6 +966,15 @@ router.get('/lens/what-changed', (req: Request, res: Response) => {
   res.json({
     entries: whatChanged,
     timestamp: currentSignals?.timestamp || null,
+  });
+});
+
+// Phase Transitions — detected shifts between cycle phases
+router.get('/lens/transitions', (req: Request, res: Response) => {
+  res.json({
+    count: phaseTransitions.length,
+    transitions: phaseTransitions,
+    lastRefresh: lensLastRefresh ? new Date(lensLastRefresh).toISOString() : null,
   });
 });
 
