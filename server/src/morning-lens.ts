@@ -214,39 +214,53 @@ interface OHLCBar {
 }
 
 async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar[]> {
-  try {
-    const endDate = new Date();
-    const startDate = new Date();
-    if (period === '2y') startDate.setFullYear(startDate.getFullYear() - 2);
-    else if (period === '5y') startDate.setFullYear(startDate.getFullYear() - 5);
-    else startDate.setFullYear(startDate.getFullYear() - 1);
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      if (period === '2y') startDate.setFullYear(startDate.getFullYear() - 2);
+      else if (period === '5y') startDate.setFullYear(startDate.getFullYear() - 5);
+      else startDate.setFullYear(startDate.getFullYear() - 1);
 
-    // Use historical() which is the standard method in yahoo-finance2
-    const result = await yahooFinance.historical(symbol, {
-      period1: startDate,
-      period2: endDate,
-      interval: '1d' as any,
-    }) as any[];
+      // Use historical() which is the standard method in yahoo-finance2
+      const result = await yahooFinance.historical(symbol, {
+        period1: startDate,
+        period2: endDate,
+        interval: '1d' as any,
+      }) as any[];
 
-    if (!result || result.length === 0) {
-      console.warn(`[YF] No data for ${symbol}`);
+      if (!result || result.length === 0) {
+        if (attempt < maxRetries) {
+          console.warn(`[YF] No data for ${symbol} (attempt ${attempt}/${maxRetries}), retrying in ${attempt * 3}s...`);
+          await new Promise(r => setTimeout(r, attempt * 3000));
+          continue;
+        }
+        console.warn(`[YF] No data for ${symbol} after ${maxRetries} attempts`);
+        return [];
+      }
+
+      return result
+        .filter((q: any) => q.close != null && q.close > 0)
+        .map((q: any) => ({
+          date: new Date(q.date),
+          open: q.open || q.close,
+          high: q.high || q.close,
+          low: q.low || q.close,
+          close: q.close,
+          volume: q.volume || 0,
+        }));
+    } catch (err: any) {
+      if (attempt < maxRetries) {
+        console.warn(`[YF] Error fetching ${symbol} (attempt ${attempt}/${maxRetries}): ${err?.message}, retrying...`);
+        await new Promise(r => setTimeout(r, attempt * 3000));
+        continue;
+      }
+      console.error(`[YF] Error fetching ${symbol} after ${maxRetries} attempts:`, err?.message);
       return [];
     }
-
-    return result
-      .filter((q: any) => q.close != null && q.close > 0)
-      .map((q: any) => ({
-        date: new Date(q.date),
-        open: q.open || q.close,
-        high: q.high || q.close,
-        low: q.low || q.close,
-        close: q.close,
-        volume: q.volume || 0,
-      }));
-  } catch (err: any) {
-    console.error(`[YF] Error fetching ${symbol}:`, err?.message);
-    return [];
   }
+  return [];
 }
 
 // ─── TECHNICAL ANALYSIS ENGINE ───
@@ -866,8 +880,23 @@ async function refreshMorningLens(): Promise<void> {
 }
 
 // Auto-refresh on startup (delayed 5 seconds to let server start)
-setTimeout(() => {
-  refreshMorningLens().catch(err => console.error('[LENS] Initial refresh error:', err));
+// If initial refresh gets 0 instruments (Yahoo rate-limited), retry after 30s, then 60s
+setTimeout(async () => {
+  try {
+    await refreshMorningLens();
+    if (instrumentSnapshots.size === 0) {
+      console.warn('[LENS] Initial refresh got 0 instruments — retrying in 30s...');
+      setTimeout(async () => {
+        try {
+          await refreshMorningLens();
+          if (instrumentSnapshots.size === 0) {
+            console.warn('[LENS] 2nd attempt got 0 instruments — retrying in 60s...');
+            setTimeout(() => refreshMorningLens().catch(e => console.error('[LENS] 3rd attempt error:', e)), 60000);
+          }
+        } catch (e) { console.error('[LENS] 2nd attempt error:', e); }
+      }, 30000);
+    }
+  } catch (err) { console.error('[LENS] Initial refresh error:', err); }
 }, 5000);
 
 // Auto-refresh every 4 hours
