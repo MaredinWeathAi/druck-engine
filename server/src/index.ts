@@ -101,15 +101,22 @@ async function fetchFredSeries(seriesId: string, limit: number = 100): Promise<{
     // Reverse to get chronological order
     observations.reverse();
 
+    // Filter out missing observations (value === '.') keeping dates aligned
+    const paired = observations
+      .map(o => ({ date: o.date, value: o.value === '.' ? null : parseFloat(o.value) }))
+      .filter(p => p.value !== null) as { date: string; value: number }[];
+
     return {
-      dates: observations.map(o => o.date),
-      values: observations.map(o => (o.value === '.' ? null : parseFloat(o.value))).filter(v => v !== null) as number[],
+      dates: paired.map(p => p.date),
+      values: paired.map(p => p.value),
     };
   } catch (err) {
     console.error(`Error fetching FRED series ${seriesId}:`, err);
     return null;
   }
 }
+
+interface FredSeriesRaw { dates: string[]; values: number[] }
 
 interface FredDataSet {
   walcl: number[];
@@ -126,6 +133,7 @@ interface FredDataSet {
   cpiaucsl: number[];
   napm: number[];
   dates: string[];
+  raw: Record<string, FredSeriesRaw>;
 }
 
 async function fetchAllFredData(): Promise<FredDataSet | null> {
@@ -133,19 +141,19 @@ async function fetchAllFredData(): Promise<FredDataSet | null> {
 
   try {
     const [walcl, wtregen, rrpontsyd, m2sl, pcepilfe, gdp, tcu, dgs2, dgs10, bamlh0a0hym2, unrate, cpiaucsl, napm] = await Promise.all([
-      fetchFredSeries('WALCL', 100),
-      fetchFredSeries('WTREGEN', 100),
-      fetchFredSeries('RRPONTSYD', 100),
-      fetchFredSeries('M2SL', 100),
-      fetchFredSeries('PCEPILFE', 100),
-      fetchFredSeries('A191RL1Q225SBEA', 20),
-      fetchFredSeries('TCU', 100),
-      fetchFredSeries('DGS2', 100),
-      fetchFredSeries('DGS10', 100),
-      fetchFredSeries('BAMLH0A0HYM2', 100),
-      fetchFredSeries('UNRATE', 100),
-      fetchFredSeries('CPIAUCSL', 100),
-      fetchFredSeries('NAPM', 100),
+      fetchFredSeries('WALCL', 1100),      // weekly, ~21 years
+      fetchFredSeries('WTREGEN', 1100),     // weekly
+      fetchFredSeries('RRPONTSYD', 1100),   // daily (cap at ~3 years for RRP, newer series)
+      fetchFredSeries('M2SL', 360),         // monthly, ~30 years
+      fetchFredSeries('PCEPILFE', 360),     // monthly, ~30 years
+      fetchFredSeries('A191RL1Q225SBEA', 120), // quarterly, ~30 years
+      fetchFredSeries('TCU', 360),          // monthly, ~30 years
+      fetchFredSeries('DGS2', 1100),        // daily (weekly sampled), ~20 years
+      fetchFredSeries('DGS10', 1100),       // daily (weekly sampled), ~20 years
+      fetchFredSeries('BAMLH0A0HYM2', 1100),// daily, ~20 years
+      fetchFredSeries('UNRATE', 360),       // monthly, ~30 years
+      fetchFredSeries('CPIAUCSL', 360),     // monthly, ~30 years
+      fetchFredSeries('NAPM', 360),         // monthly, ~30 years
     ]);
 
     // Check if all key series were fetched
@@ -171,6 +179,18 @@ async function fetchAllFredData(): Promise<FredDataSet | null> {
       cpiaucsl: cpiaucsl?.values || [],
       napm: napm?.values || [],
       dates: baseDates,
+      raw: {
+        pcepilfe: pcepilfe || { dates: [], values: [] },
+        a191rl1q225sbea: gdp || { dates: [], values: [] },
+        tcu: tcu || { dates: [], values: [] },
+        dgs2: dgs2 ? { dates: dgs2.dates, values: dgs2.values } : { dates: [], values: [] },
+        dgs10: dgs10 ? { dates: dgs10.dates, values: dgs10.values } : { dates: [], values: [] },
+        unrate: unrate || { dates: [], values: [] },
+        cpiaucsl: cpiaucsl || { dates: [], values: [] },
+        napm: napm || { dates: [], values: [] },
+        m2sl: m2sl ? { dates: m2sl.dates, values: m2sl.values } : { dates: [], values: [] },
+        bamlh0a0hym2: bamlh0a0hym2 || { dates: [], values: [] },
+      },
     };
 
     return result;
@@ -215,12 +235,12 @@ async function fetchGuruTrades(ticker: string): Promise<{ buy: number; sell: num
 }
 
 // ─── DATA GENERATION ───
-const N = 78;
+const N = 1040; // ~20 years of weekly data points
 const FRED_CACHE_DURATION = 4 * 60 * 60 * 1000; // 4 hours
 let dataSource: 'live' | 'simulated' = 'simulated';
 let lastFredRefresh = 0;
 
-let dates = dateRange('2024-09-01', N, 7);
+let dates = dateRange('2006-05-01', N, 7); // ~20 years of weekly dates for fallback
 let bs = randomWalk(7.4, N, -0.0003, 0.003);
 let tga = randomWalk(0.75, N, 0.0001, 0.015);
 let rrp = randomWalk(0.85, N, -0.005, 0.01).map(v => Math.max(v, 0.04));
@@ -264,6 +284,10 @@ let isStag = pce > 3.0 && gdp < 1.0;
 let lastDataRefresh = Date.now();
 let fredRefreshErrors: string[] = [];
 let gurofocusRefreshErrors: string[] = [];
+
+// ─── MACRO HISTORY — Raw FRED series with dates for 30-year clickable charts ───
+interface FredHistoricalSeries { dates: string[]; values: number[] }
+const macroHistory: Record<string, FredHistoricalSeries> = {};
 
 // ─── SEC EDGAR 13F — Live Guru Portfolio Data ───
 const SEC_HEADERS = { 'User-Agent': 'DruckEngine/1.0 (maredinwai@maredin.com)', 'Accept-Encoding': 'gzip, deflate' };
@@ -602,6 +626,65 @@ async function refreshLiveData() {
     // Recalculate all derived metrics
     recalcDerived();
 
+    // ── Build macro history for 30-year clickable charts ──
+    const raw = fredData.raw || {} as Record<string, FredSeriesRaw>;
+    // PCE YoY — compute from price index
+    if (raw.pcepilfe && raw.pcepilfe.values.length >= 13) {
+      const d: string[] = [], v: number[] = [];
+      for (let i = 12; i < raw.pcepilfe.values.length; i++) {
+        const cur = raw.pcepilfe.values[i], prev = raw.pcepilfe.values[i - 12];
+        if (prev > 0) { d.push(raw.pcepilfe.dates[i]); v.push(+((cur - prev) / prev * 100).toFixed(2)); }
+      }
+      macroHistory.pce = { dates: d, values: v };
+    }
+    // GDP — already percentage
+    if (raw.a191rl1q225sbea && raw.a191rl1q225sbea.values.length > 0) {
+      macroHistory.gdp = { dates: raw.a191rl1q225sbea.dates, values: raw.a191rl1q225sbea.values.map(v => +v.toFixed(2)) };
+    }
+    // Unemployment — already percentage
+    if (raw.unrate && raw.unrate.values.length > 0) {
+      macroHistory.unemployment = { dates: raw.unrate.dates, values: raw.unrate.values.map(v => +v.toFixed(1)) };
+    }
+    // CPI YoY — compute from price index
+    if (raw.cpiaucsl && raw.cpiaucsl.values.length >= 13) {
+      const d: string[] = [], v: number[] = [];
+      for (let i = 12; i < raw.cpiaucsl.values.length; i++) {
+        const cur = raw.cpiaucsl.values[i], prev = raw.cpiaucsl.values[i - 12];
+        if (prev > 0) { d.push(raw.cpiaucsl.dates[i]); v.push(+((cur - prev) / prev * 100).toFixed(2)); }
+      }
+      macroHistory.cpi_yoy = { dates: d, values: v };
+    }
+    // ISM Manufacturing — already an index value
+    if (raw.napm && raw.napm.values.length > 0) {
+      macroHistory.ism_mfg = { dates: raw.napm.dates, values: raw.napm.values.map(v => +v.toFixed(1)) };
+    }
+    // Capacity Utilization — already percentage
+    if (raw.tcu && raw.tcu.values.length > 0) {
+      macroHistory.cap_util = { dates: raw.tcu.dates, values: raw.tcu.values.map(v => +v.toFixed(1)) };
+    }
+    // Yield Curve 10Y-2Y spread in bps
+    if (raw.dgs10 && raw.dgs2 && raw.dgs10.values.length > 0 && raw.dgs2.values.length > 0) {
+      // Align by date — both are daily, find common dates
+      const dgs2Map = new Map<string, number>();
+      raw.dgs2.dates.forEach((d, i) => dgs2Map.set(d, raw.dgs2.values[i]));
+      const d: string[] = [], v: number[] = [];
+      raw.dgs10.dates.forEach((dt, i) => {
+        const y2 = dgs2Map.get(dt);
+        if (y2 !== undefined) { d.push(dt); v.push(Math.round((raw.dgs10.values[i] - y2) * 100)); }
+      });
+      macroHistory.yield_curve_bps = { dates: d, values: v };
+    }
+    // M2 YoY — compute from level
+    if (raw.m2sl && raw.m2sl.values.length >= 13) {
+      const d: string[] = [], v: number[] = [];
+      for (let i = 12; i < raw.m2sl.values.length; i++) {
+        const cur = raw.m2sl.values[i], prev = raw.m2sl.values[i - 12];
+        if (prev > 0) { d.push(raw.m2sl.dates[i]); v.push(+((cur - prev) / prev * 100).toFixed(2)); }
+      }
+      macroHistory.m2_yoy = { dates: d, values: v };
+    }
+    console.log(`[FRED] Macro history built: ${Object.keys(macroHistory).join(', ')} (${Object.values(macroHistory).map(s => s.dates.length + ' pts').join(', ')})`);
+
     dataSource = 'live';
     lastDataRefresh = Date.now();
     fredRefreshErrors = errors;
@@ -785,6 +868,25 @@ app.get('/api/macro', (_req, res) => {
       data_source: dataSource,
     },
   });
+});
+
+// ─── MACRO HISTORY — 30-year time series for clickable indicator charts ───
+app.get('/api/macro/history/:indicator', (req, res) => {
+  const key = req.params.indicator;
+  const valid = ['pce', 'gdp', 'unemployment', 'cpi_yoy', 'ism_mfg', 'cap_util', 'yield_curve_bps', 'm2_yoy'];
+  if (!valid.includes(key)) {
+    return res.status(400).json({ error: `Invalid indicator. Valid: ${valid.join(', ')}` });
+  }
+  const series = macroHistory[key];
+  if (!series || series.dates.length === 0) {
+    return res.status(404).json({ error: `No historical data for ${key}. Data source: ${dataSource}` });
+  }
+  res.json(series);
+});
+
+// Also expose all macro history at once for bulk loading
+app.get('/api/macro/history', (_req, res) => {
+  res.json(macroHistory);
 });
 
 app.get('/api/gurus', async (_req, res) => {

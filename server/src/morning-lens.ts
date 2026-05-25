@@ -39,11 +39,11 @@ const INSTRUMENTS: Instrument[] = [
 
   // ── LEADING GROUPS (Inside of the Market) ──
   { symbol: 'XHB', name: 'Homebuilders', bucket: 'equities', group: 'Leading Groups', druckRationale: '#1 leading group — rate-sensitive, first to break before recessions', isLeadingGroup: true },
-  { symbol: 'IYT', name: 'Transports', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Goods movement — trucking and rails lead industrial slowdowns', isLeadingGroup: true },
+  { symbol: 'IYT', name: 'Transports', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Goods movement — trucking and rails lead industrial slowdowns (autos proxy)', isLeadingGroup: true },
   { symbol: 'XRT', name: 'Retailers', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Consumer durables demand — spending weakness shows here first', isLeadingGroup: true },
   { symbol: 'KRE', name: 'Regional Banks', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Credit cycle — regional banks break before the economy does', isLeadingGroup: true },
   { symbol: 'SMH', name: 'Semiconductors', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Modern replacement for chemicals — capex and AI demand tell', isLeadingGroup: true },
-  { symbol: 'GM', name: 'General Motors (Autos proxy)', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Big-ticket consumer — autos lead discretionary spending', isLeadingGroup: true },
+  { symbol: 'ITB', name: 'Home Construction', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Pure homebuilding exposure — more concentrated than XHB', isLeadingGroup: true },
 
   // ── MAJOR INDICES ──
   { symbol: 'SPY', name: 'S&P 500', bucket: 'equities', group: 'Indices', druckRationale: 'Master tape — the reference benchmark for all signals' },
@@ -51,30 +51,49 @@ const INSTRUMENTS: Instrument[] = [
   { symbol: 'IWM', name: 'Russell 2000', bucket: 'equities', group: 'Indices', druckRationale: 'Domestic cyclicality and breadth proxy' },
   { symbol: '^VIX', name: 'VIX', bucket: 'equities', group: 'Indices', druckRationale: 'Volatility regime — complacency vs fear gauge' },
   { symbol: 'RSP', name: 'S&P 500 Equal Weight', bucket: 'equities', group: 'Indices', druckRationale: 'Mega-cap concentration risk — diverges from SPY in blow-off tops' },
+  { symbol: 'DIA', name: 'Dow Jones', bucket: 'equities', group: 'Indices', druckRationale: 'Blue chip industrials — old economy leadership gauge' },
 
-  // ── DEFENSIVES & RATIOS ──
+  // ── SECTOR ETFS ──
   { symbol: 'XLP', name: 'Consumer Staples', bucket: 'equities', group: 'Defensives', druckRationale: 'Defensive anchor — outperformance signals risk-off rotation' },
   { symbol: 'XLY', name: 'Consumer Discretionary', bucket: 'equities', group: 'Cyclicals', druckRationale: 'Cyclical consumer — underperformance vs staples = late cycle' },
   { symbol: 'XLU', name: 'Utilities', bucket: 'equities', group: 'Defensives', druckRationale: 'Bond proxy + defensive — outperformance vs tech = late cycle warning' },
   { symbol: 'XLK', name: 'Technology', bucket: 'equities', group: 'Growth', druckRationale: 'Secular growth anchor — underperformance vs utilities = risk-off' },
+  { symbol: 'XLF', name: 'Financials', bucket: 'equities', group: 'Sectors', druckRationale: 'Rate-sensitive sector — benefits from steepening curve, leads credit cycle' },
+  { symbol: 'XLE', name: 'Energy', bucket: 'equities', group: 'Sectors', druckRationale: 'Oil-linked — inflation passthrough and geopolitical proxy' },
+  { symbol: 'XLI', name: 'Industrials', bucket: 'equities', group: 'Sectors', druckRationale: 'Capex and infrastructure cycle — ISM manufacturing proxy' },
+  { symbol: 'XLV', name: 'Healthcare', bucket: 'equities', group: 'Sectors', druckRationale: 'Defensive growth — policy risk and innovation cycle' },
+  { symbol: 'XLRE', name: 'Real Estate', bucket: 'equities', group: 'Sectors', druckRationale: 'Rate-sensitive assets — cap rate expansion/compression with duration' },
+  { symbol: 'XLC', name: 'Communications', bucket: 'equities', group: 'Sectors', druckRationale: 'Meta/Google heavy — ad spending proxy and secular growth overlap' },
+  { symbol: 'XLB', name: 'Materials', bucket: 'equities', group: 'Sectors', druckRationale: 'Commodity-linked equities — global demand barometer' },
 
   // ── COMMODITIES ──
   { symbol: 'GC=F', name: 'Gold', bucket: 'commodities', group: 'Precious Metals', druckRationale: 'Real rates and debasement signal — rises when faith in fiat drops' },
   { symbol: 'HG=F', name: 'Copper', bucket: 'commodities', group: 'Industrial Metals', druckRationale: 'Dr. Copper — global industrial demand barometer' },
   { symbol: 'SI=F', name: 'Silver', bucket: 'commodities', group: 'Precious Metals', druckRationale: 'Industrial + monetary hybrid — confirms gold or diverges' },
   { symbol: 'BZ=F', name: 'Brent Crude', bucket: 'commodities', group: 'Energy', druckRationale: 'Global oil benchmark — pairs with WTI for spread analysis' },
+  { symbol: 'NG=F', name: 'Natural Gas', bucket: 'commodities', group: 'Energy', druckRationale: 'Heating/power/LNG — weather-driven with geopolitical overlay' },
+  { symbol: 'ZW=F', name: 'Wheat', bucket: 'commodities', group: 'Agriculture', druckRationale: 'Staple food commodity — geopolitical supply disruption risk' },
+  { symbol: 'ZC=F', name: 'Corn', bucket: 'commodities', group: 'Agriculture', druckRationale: 'Feed + ethanol — links energy and food inflation chains' },
+  { symbol: 'ZS=F', name: 'Soybeans', bucket: 'commodities', group: 'Agriculture', druckRationale: 'China demand proxy — US-China trade barometer' },
+  { symbol: 'URA', name: 'Uranium ETF', bucket: 'commodities', group: 'Energy', druckRationale: 'Nuclear renaissance play — secular energy transition demand' },
+  { symbol: 'LIT', name: 'Lithium & Battery ETF', bucket: 'commodities', group: 'Industrial Metals', druckRationale: 'EV supply chain — battery metals demand cycle' },
 
   // ── CURRENCIES ──
   { symbol: 'EURUSD=X', name: 'EUR/USD', bucket: 'fx', group: 'Major Crosses', druckRationale: 'Largest cross — ECB-Fed differential drives global capital flows' },
   { symbol: 'JPY=X', name: 'USD/JPY', bucket: 'fx', group: 'Major Crosses', druckRationale: 'Carry trade barometer — BoJ policy drives global risk appetite' },
   { symbol: 'BTC-USD', name: 'Bitcoin', bucket: 'fx', group: 'Digital', druckRationale: 'Liquidity/debasement tell — leads risk-on moves in loose policy' },
+  { symbol: 'GBP=X', name: 'GBP/USD', bucket: 'fx', group: 'Major Crosses', druckRationale: 'BoE policy — Soros/Druckenmiller famously traded the pound' },
 
   // ── FIXED INCOME ──
   { symbol: '^IRX', name: 'US 3-Month T-Bill', bucket: 'fixed_income', group: 'US Treasuries', druckRationale: 'Fed policy rate proxy — front end of the curve' },
   { symbol: '^FVX', name: 'US 5Y Yield', bucket: 'fixed_income', group: 'US Treasuries', druckRationale: 'Belly of the curve — intermediate rate expectations' },
   { symbol: '^TYX', name: 'US 30Y Yield', bucket: 'fixed_income', group: 'US Treasuries', druckRationale: 'Long end — term premium and inflation expectations' },
+  { symbol: 'TLH', name: '10-20 Year Treasury ETF', bucket: 'fixed_income', group: 'Duration', druckRationale: '20Y proxy — the most important duration bucket for rate cycle analysis' },
   { symbol: 'HYG', name: 'High Yield Bond ETF', bucket: 'fixed_income', group: 'Credit', druckRationale: 'Credit risk appetite — widening = stress, tightening = risk-on' },
-  { symbol: 'TLT', name: 'Long Treasury ETF', bucket: 'fixed_income', group: 'Duration', druckRationale: 'Duration trade — flight to quality vs inflation fear' },
+  { symbol: 'TLT', name: 'Long Treasury ETF (20Y+)', bucket: 'fixed_income', group: 'Duration', druckRationale: 'Duration trade — flight to quality vs inflation fear' },
+  { symbol: 'IEF', name: '7-10 Year Treasury ETF', bucket: 'fixed_income', group: 'Duration', druckRationale: 'Mid-duration — 10Y rate sensitivity without long-end vol' },
+  { symbol: 'SHY', name: '1-3 Year Treasury ETF', bucket: 'fixed_income', group: 'Duration', druckRationale: 'Short duration — Fed funds rate sensitivity and cash alternative' },
+  { symbol: 'TIP', name: 'TIPS Bond ETF', bucket: 'fixed_income', group: 'Inflation', druckRationale: 'Inflation breakeven proxy — real vs nominal rate expectations' },
 ];
 
 // ─── TYPES ───

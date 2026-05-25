@@ -64,6 +64,19 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg)
 .regime-reading .reading-trend.falling{color:var(--red)}
 .regime-reading .reading-trend.flat{color:var(--accent)}
 .regime-section-intro{font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:16px;padding:12px 16px;background:rgba(245,158,11,0.05);border-left:3px solid var(--accent);border-radius:0 6px 6px 0}
+/* Clickable regime cards */
+.regime-card.clickable{cursor:pointer;transition:transform 0.15s, box-shadow 0.15s}
+.regime-card.clickable:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,0.3);border-color:var(--accent)}
+/* Macro Chart Modal Overlay */
+.macro-modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 0.2s;pointer-events:none}
+.macro-modal-overlay.active{opacity:1;pointer-events:all}
+.macro-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;width:92vw;max-width:1100px;height:75vh;max-height:700px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.5)}
+.macro-modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border)}
+.macro-modal-header h3{margin:0;font-size:16px;font-weight:700;color:var(--text)}
+.macro-modal-header .modal-close{background:none;border:none;color:var(--dim);font-size:24px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:background 0.15s}
+.macro-modal-header .modal-close:hover{background:rgba(255,255,255,0.1);color:var(--text)}
+.macro-modal-body{flex:1;padding:16px;overflow:hidden}
+.macro-modal-body #macro-history-chart{width:100%;height:100%}
 /* Action Signal Banner */
 .action-banner{display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:8px;margin-bottom:20px;border:1px solid}
 .action-banner.green{background:rgba(34,197,94,0.08);border-color:rgba(34,197,94,0.25)}
@@ -1094,6 +1107,19 @@ button:disabled{opacity:0.5;cursor:not-allowed}
   </div>
 </div>
 
+<!-- Macro History Chart Modal -->
+<div class="macro-modal-overlay" id="macro-modal-overlay" onclick="closeMacroModal(event)">
+  <div class="macro-modal">
+    <div class="macro-modal-header">
+      <h3 id="macro-modal-title">Loading...</h3>
+      <button class="modal-close" onclick="closeMacroModal()">&times;</button>
+    </div>
+    <div class="macro-modal-body">
+      <div id="macro-history-chart"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 // State
 var currentPage = 'commandcenter';
@@ -1248,9 +1274,9 @@ function loadDashboard() {
       var barHealth = latestHealth;
       var suffix = m.unit ? m.unit : '';
 
-      html += '<div class="regime-card">';
+      html += '<div class="regime-card clickable" onclick="openMacroChart(\'' + key + '\')" title="Click for 30-year history">';
       html += '<div class="regime-status-bar ' + barHealth + '"></div>';
-      html += '<div class="regime-title">' + m.name + '</div>';
+      html += '<div class="regime-title">' + m.name + ' <span style="font-size:9px;color:var(--dim);font-weight:400">📈 click</span></div>';
       html += '<div class="regime-context">' + m.context + '</div>';
       html += '<div class="regime-readings">';
       html += '<div class="regime-reading"><div class="reading-label">12M Avg</div><div class="reading-value ' + avgHealth + '">' + ind.trailing_12m.toFixed(1) + (suffix ? '<span style="font-size:12px;font-weight:600"> ' + suffix + '</span>' : '') + '</div></div>';
@@ -2028,9 +2054,9 @@ function loadCommandCenter() {
         var trendLabel = trend === 'rising' ? '↑' : trend === 'falling' ? '↓' : trend === 'steepening' ? '↑' : trend === 'flattening' ? '↓' : '→';
         var latestHealth = m.healthFn(ind.latest);
         var suffix = m.unit || '';
-        regHtml += '<div class="regime-card">';
+        regHtml += '<div class="regime-card clickable" onclick="openMacroChart(\'' + key + '\')" title="Click for 30-year history">';
         regHtml += '<div class="regime-status-bar ' + latestHealth + '"></div>';
-        regHtml += '<div class="regime-title">' + m.name + '</div>';
+        regHtml += '<div class="regime-title">' + m.name + ' <span style="font-size:9px;color:var(--dim);font-weight:400">📈 click</span></div>';
         regHtml += '<div class="regime-readings"><div class="regime-reading">';
         regHtml += '<div class="reading-label">Latest</div>';
         regHtml += '<div class="reading-value ' + latestHealth + '">' + ind.latest.toFixed(1) + (suffix ? ' ' + suffix : '') + ' ' + trendLabel + '</div>';
@@ -2952,6 +2978,139 @@ function renderEarningsCal(entries) {
 
   el.innerHTML = html;
 }
+
+// ─── MACRO HISTORY CHART MODAL ───
+var macroMeta = {
+  pce: { name: 'PCE Core Inflation (YoY)', unit: '%', color: '#f97316', refLine: 2.0, refLabel: 'Fed Target 2%' },
+  gdp: { name: 'Real GDP Growth (QoQ)', unit: '%', color: '#0ea5e9', refLine: 0, refLabel: 'Zero Growth' },
+  unemployment: { name: 'Unemployment Rate', unit: '%', color: '#e879f9', refLine: null, refLabel: null },
+  cpi_yoy: { name: 'CPI Inflation (YoY)', unit: '%', color: '#f97316', refLine: 2.0, refLabel: 'Fed Target 2%' },
+  ism_mfg: { name: 'ISM Manufacturing PMI', unit: '', color: '#0ea5e9', refLine: 50, refLabel: 'Expansion/Contraction' },
+  cap_util: { name: 'Capacity Utilization', unit: '%', color: '#22c55e', refLine: 80, refLabel: 'Inflationary Threshold' },
+  yield_curve_bps: { name: 'Yield Curve (10Y-2Y Spread)', unit: 'bps', color: '#f59e0b', refLine: 0, refLabel: 'Inversion Line' },
+  m2_yoy: { name: 'M2 Money Supply (YoY)', unit: '%', color: '#0ea5e9', refLine: 0, refLabel: 'Zero Growth' }
+};
+
+function openMacroChart(indicator) {
+  var meta = macroMeta[indicator];
+  if (!meta) return;
+  document.getElementById('macro-modal-title').textContent = meta.name + ' — 30-Year History';
+  document.getElementById('macro-modal-overlay').classList.add('active');
+  document.getElementById('macro-history-chart').innerHTML = '<div style="text-align:center;padding:60px;color:var(--dim)">Loading historical data...</div>';
+
+  apiCall('/api/macro/history/' + indicator).then(function(data) {
+    if (!data || !data.dates || data.dates.length === 0) {
+      document.getElementById('macro-history-chart').innerHTML = '<div style="text-align:center;padding:60px;color:var(--dim)">No historical data available (FRED API may not be connected)</div>';
+      return;
+    }
+
+    var shapes = [];
+    if (meta.refLine !== null) {
+      shapes.push({
+        type: 'line', x0: data.dates[0], x1: data.dates[data.dates.length - 1],
+        y0: meta.refLine, y1: meta.refLine,
+        line: { color: 'rgba(255,255,255,0.3)', width: 1, dash: 'dash' }
+      });
+    }
+
+    // Color areas: green below ref for inflation metrics, red above
+    var fillColors = data.values.map(function(v) {
+      if (indicator === 'yield_curve_bps') return v < 0 ? 'rgba(249,115,22,0.6)' : 'rgba(14,165,233,0.4)';
+      if (indicator === 'ism_mfg') return v < 50 ? 'rgba(249,115,22,0.6)' : 'rgba(34,197,94,0.4)';
+      return meta.color;
+    });
+
+    var trace = {
+      x: data.dates, y: data.values,
+      type: 'scatter', mode: 'lines',
+      line: { color: meta.color, width: 2 },
+      fill: 'tozeroy',
+      fillcolor: meta.color.replace(')', ',0.08)').replace('rgb', 'rgba').replace('#', ''),
+      hovertemplate: '%{x|%b %Y}<br><b>%{y:.1f}' + (meta.unit ? ' ' + meta.unit : '') + '</b><extra></extra>'
+    };
+    // Fix fillcolor for hex colors
+    if (meta.color.startsWith('#')) {
+      var hex = meta.color.slice(1);
+      var r = parseInt(hex.substring(0,2), 16), g = parseInt(hex.substring(2,4), 16), b = parseInt(hex.substring(4,6), 16);
+      trace.fillcolor = 'rgba(' + r + ',' + g + ',' + b + ',0.08)';
+    }
+
+    var annotations = [];
+    if (meta.refLabel && meta.refLine !== null) {
+      annotations.push({
+        x: data.dates[Math.floor(data.dates.length * 0.05)], y: meta.refLine,
+        text: meta.refLabel, showarrow: false,
+        font: { size: 10, color: 'rgba(255,255,255,0.5)' },
+        yshift: 12
+      });
+    }
+
+    // Add recession shading (approximate NBER dates)
+    var recessions = [
+      ['2001-03-01', '2001-11-01'], ['2007-12-01', '2009-06-01'], ['2020-02-01', '2020-04-01']
+    ];
+    recessions.forEach(function(r) {
+      if (r[0] >= data.dates[0]) {
+        shapes.push({
+          type: 'rect', x0: r[0], x1: r[1], y0: 0, y1: 1, yref: 'paper',
+          fillcolor: 'rgba(255,255,255,0.04)', line: { width: 0 }
+        });
+        annotations.push({
+          x: r[0], y: 1, yref: 'paper', text: 'Recession', showarrow: false,
+          font: { size: 9, color: 'rgba(255,255,255,0.25)' }, xshift: 30, yshift: -8
+        });
+      }
+    });
+
+    var layout = {
+      xaxis: {
+        type: 'date', rangeslider: { visible: true, thickness: 0.06 },
+        rangeselector: {
+          buttons: [
+            { count: 5, label: '5Y', step: 'year', stepmode: 'backward' },
+            { count: 10, label: '10Y', step: 'year', stepmode: 'backward' },
+            { count: 20, label: '20Y', step: 'year', stepmode: 'backward' },
+            { step: 'all', label: 'ALL' }
+          ],
+          font: { size: 11, color: '#e2e8f0' },
+          bgcolor: 'rgba(255,255,255,0.05)',
+          activecolor: 'rgba(245,158,11,0.3)',
+          borderwidth: 0
+        },
+        color: '#94a3b8'
+      },
+      yaxis: { title: meta.unit || 'Value', color: '#94a3b8', gridcolor: 'rgba(255,255,255,0.05)' },
+      shapes: shapes,
+      annotations: annotations,
+      plot_bgcolor: 'rgba(15,20,30,0.95)',
+      paper_bgcolor: 'rgba(15,20,30,0)',
+      font: { color: '#e2e8f0', family: 'Inter, system-ui, sans-serif' },
+      margin: { t: 20, b: 40, l: 60, r: 20 },
+      hovermode: 'x unified'
+    };
+
+    Plotly.newPlot('macro-history-chart', [trace], layout, {
+      responsive: true, displayModeBar: true,
+      modeBarButtonsToRemove: ['lasso2d', 'select2d', 'autoScale2d'],
+      displaylogo: false
+    });
+  }).catch(function(err) {
+    document.getElementById('macro-history-chart').innerHTML = '<div style="text-align:center;padding:60px;color:var(--dim)">Error loading data: ' + err.message + '</div>';
+  });
+}
+
+function closeMacroModal(event) {
+  if (event && event.target !== document.getElementById('macro-modal-overlay') && !event.target.classList.contains('modal-close')) return;
+  document.getElementById('macro-modal-overlay').classList.remove('active');
+  Plotly.purge('macro-history-chart');
+}
+
+// Close modal on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('macro-modal-overlay').classList.contains('active')) {
+    closeMacroModal();
+  }
+});
 
 </script>
 </body>
