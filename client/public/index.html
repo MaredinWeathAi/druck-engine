@@ -376,6 +376,59 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 .guru-pct.med{color:#eab308}
 .guru-pct.low{color:var(--dim)}
 .guru-notes{font-size:11px;color:var(--dim);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ══════════ COMMAND CENTER ══════════ */
+.cc-grid{display:grid;gap:16px}
+.cc-top{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:1200px){.cc-top{grid-template-columns:1fr}}
+.cc-left,.cc-right{display:flex;flex-direction:column;gap:16px}
+
+/* Compact Aria in Command Center */
+.cc-aria{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;position:relative}
+.cc-aria h3{font-size:14px;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.cc-aria-body{font-size:12px;line-height:1.7;color:#94a3b8;max-height:200px;overflow-y:auto;white-space:pre-wrap}
+.cc-aria-body::-webkit-scrollbar{width:4px}
+.cc-aria-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.cc-aria-ts{font-size:10px;color:var(--dim);margin-top:8px}
+
+/* Compact Headline Feed in Command Center */
+.cc-headlines{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;max-height:420px;overflow-y:auto}
+.cc-headlines::-webkit-scrollbar{width:4px}
+.cc-headlines::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.cc-headlines h3{font-size:14px;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.cc-hl-item{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.cc-hl-item:last-child{border-bottom:none}
+.cc-hl-dir{font-size:14px;min-width:16px;margin-top:1px}
+.cc-hl-ticker{font-weight:700;color:var(--accent);min-width:48px}
+.cc-hl-text{color:#94a3b8;flex:1;line-height:1.4}
+.cc-hl-badge{padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase}
+.cc-hl-badge.critical{background:rgba(239,68,68,.15);color:#ef4444}
+.cc-hl-badge.major{background:rgba(249,115,22,.15);color:#f97316}
+.cc-hl-badge.significant{background:rgba(245,158,11,.15);color:#f59e0b}
+.cc-hl-badge.monitor{background:rgba(100,116,139,.15);color:#94a3b8}
+.cc-hl-reaction{font-size:11px;font-weight:700;min-width:48px;text-align:right}
+.cc-hl-reaction.pos{color:#0ea5e9}
+.cc-hl-reaction.neg{color:#f97316}
+
+/* Signal strip inline row */
+.cc-signals{display:flex;flex-wrap:wrap;gap:8px}
+
+/* Bottom grid */
+.cc-bottom{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:1200px){.cc-bottom{grid-template-columns:1fr}}
+
+/* Status pills row */
+.cc-status-row{display:flex;gap:10px;flex-wrap:wrap}
+.cc-stat-pill{display:flex;align-items:center;gap:6px;padding:6px 14px;background:var(--card);border:1px solid var(--border);border-radius:6px;font-size:12px}
+.cc-stat-pill .label{color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.5px;font-size:10px}
+.cc-stat-pill .val{font-weight:700;font-size:14px}
+.cc-stat-pill .val.positive{color:#0ea5e9}
+.cc-stat-pill .val.negative{color:#f97316}
+.cc-stat-pill .val.neutral{color:var(--text)}
+
+/* View-all link */
+.cc-viewall{font-size:11px;color:var(--dim);cursor:pointer;font-weight:600;text-decoration:none}
+.cc-viewall:hover{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -387,6 +440,12 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     <div class="ver">v10.0</div>
   </div>
   <div class="sidebar-nav">
+    <!-- Command Center -->
+    <div class="nav-item active" data-page="commandcenter">
+      <div class="icon">🎛️</div>
+      <div>Command Center</div>
+    </div>
+
     <!-- Morning Lens -->
     <div class="nav-section">Morning Lens</div>
     <div class="nav-item" data-page="morninglens">
@@ -411,7 +470,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
     <!-- Trifecta -->
     <div class="nav-section">Trifecta</div>
-    <div class="nav-item active" data-page="dashboard">
+    <div class="nav-item" data-page="dashboard">
       <div class="icon">📊</div>
       <div>Dashboard</div>
     </div>
@@ -457,12 +516,114 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 <!-- Main Content -->
 <div class="main">
   <div class="header">
-    <h2 id="page-title">Dashboard</h2>
+    <h2 id="page-title">Command Center</h2>
   </div>
   <div class="pages">
 
+    <!-- ══════════ COMMAND CENTER PAGE ══════════ -->
+    <div class="page active" id="page-commandcenter">
+
+      <!-- Phase Transitions — top-level alert -->
+      <div class="phase-transitions-panel empty" id="cc-phase-transitions-panel">
+        <div class="pt-header" onclick="toggleTransitionsPanel('cc-')">
+          <span class="pt-header-icon">⚡</span>
+          <span class="pt-header-title">Phase Transitions Detected</span>
+          <span class="pt-header-count" id="cc-pt-count">0</span>
+          <span class="pt-header-hint" id="cc-pt-hint">click to expand</span>
+        </div>
+        <div class="pt-list" id="cc-pt-list" style="display:none"></div>
+      </div>
+
+      <!-- Action Banner -->
+      <div class="action-banner" id="signal-commandcenter">
+        <div class="action-dot"></div>
+        <div class="action-signal">Loading...</div>
+        <div class="action-rationale"></div>
+      </div>
+
+      <!-- Status Pills: Trifecta + Death Nails + Headline counts inline -->
+      <div class="cc-status-row" id="cc-status-row">
+        <div class="cc-stat-pill"><span class="label">Trifecta</span><span class="val neutral" id="cc-trifecta">—</span></div>
+        <div class="cc-stat-pill"><span class="label">Liquidity</span><span class="val neutral" id="cc-liq">—</span></div>
+        <div class="cc-stat-pill"><span class="label">Smart Money</span><span class="val neutral" id="cc-sm">—</span></div>
+        <div class="cc-stat-pill"><span class="label">Breadth</span><span class="val neutral" id="cc-br">—</span></div>
+        <div class="cc-stat-pill"><span class="label">Death Nails</span><span class="val neutral" id="cc-dn">—</span></div>
+        <div class="cc-stat-pill"><span class="label">Hedge</span><span class="val neutral" id="cc-hedge">—</span></div>
+      </div>
+
+      <!-- Two-column: Aria Brief (left) + Headlines (right) -->
+      <div class="cc-top" style="margin-top:16px">
+        <div class="cc-left">
+          <!-- Aria Morning Brief -->
+          <div class="cc-aria">
+            <h3><span style="font-size:18px">🤖</span> Aria's Morning Brief</h3>
+            <div class="cc-aria-body" id="cc-aria-body">Loading narrative...</div>
+            <div class="cc-aria-ts" id="cc-aria-ts"></div>
+          </div>
+
+          <!-- Signal Strip -->
+          <div class="card" style="padding:12px 16px">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:8px">Market Signals</div>
+            <div class="cc-signals" id="cc-signal-strip"></div>
+          </div>
+
+          <!-- Death Nails compact -->
+          <div class="death-nails-banner dn-0" id="cc-dn-banner" style="margin:0">
+            <div class="dn-count" id="cc-dn-count">—</div>
+            <div>
+              <div class="dn-label" id="cc-dn-label">Loading...</div>
+              <div class="dn-detail" id="cc-dn-detail"></div>
+            </div>
+            <div class="dn-nails" id="cc-dn-nails"></div>
+          </div>
+        </div>
+
+        <div class="cc-right">
+          <!-- Headline Feed — compact -->
+          <div class="cc-headlines" id="cc-headlines">
+            <h3>
+              <span><span style="font-size:14px">⚡</span> Live Headlines</span>
+              <span class="cc-viewall" onclick="showPage('intelfeed')">View All →</span>
+            </h3>
+            <div id="cc-headline-list">Loading headlines...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom: What Changed + Macro Regime -->
+      <div class="cc-bottom" style="margin-top:16px">
+        <div class="card">
+          <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+            What Changed Since Yesterday
+            <span class="cc-viewall" onclick="showPage('morninglens')">Full Brief →</span>
+          </h3>
+          <div class="what-changed-feed" id="cc-what-changed">
+            <div class="lens-loading">Waiting for data...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+            Macro Regime Indicators
+            <span class="cc-viewall" onclick="showPage('dashboard')">Full Dashboard →</span>
+          </h3>
+          <div class="grid-4" id="cc-regime-indicators"></div>
+        </div>
+      </div>
+
+      <!-- Leading Groups -->
+      <div class="card" style="margin-top:16px">
+        <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+          Inside-of-the-Market Leading Groups
+          <span class="cc-viewall" onclick="showPage('morninglens')">Full View →</span>
+        </h3>
+        <div class="grid-3" id="cc-leading-groups"></div>
+      </div>
+
+    </div>
+
     <!-- Dashboard Page -->
-    <div class="page active" id="page-dashboard">
+    <div class="page" id="page-dashboard">
       <div class="action-banner" id="signal-dashboard">
         <div class="action-dot"></div>
         <div class="action-signal">Loading...</div>
@@ -935,7 +1096,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
 <script>
 // State
-var currentPage = 'dashboard';
+var currentPage = 'commandcenter';
 var apiKey = '';
 
 // Navigation
@@ -960,6 +1121,7 @@ function showPage(page) {
   document.querySelector('[data-page="' + page + '"]').classList.add('active');
   // Update title
   var titles = {
+    commandcenter: 'Command Center',
     morninglens: 'Morning Brief',
     chartgrid: 'Chart Grid',
     dashboard: 'Dashboard',
@@ -981,7 +1143,8 @@ function showPage(page) {
 }
 
 function loadPageData(page) {
-  if (page === 'morninglens') loadMorningLens();
+  if (page === 'commandcenter') loadCommandCenter();
+  else if (page === 'morninglens') loadMorningLens();
   else if (page === 'chartgrid') loadChartGrid();
   else if (page === 'dashboard') loadDashboard();
   else if (page === 'liquidity') loadLiquidity();
@@ -1026,6 +1189,13 @@ function applySignals(data) {
       el.innerHTML = '<div class="action-dot"></div><div class="action-signal">' + sig.signal + '</div><div class="action-rationale">' + sig.rationale + '</div>';
     }
   });
+  // Command Center uses the dashboard signal
+  var ccEl = document.getElementById('signal-commandcenter');
+  var ccSig = data['dashboard'];
+  if (ccEl && ccSig) {
+    ccEl.className = 'action-banner ' + ccSig.color;
+    ccEl.innerHTML = '<div class="action-dot"></div><div class="action-signal">' + ccSig.signal + '</div><div class="action-rationale">' + ccSig.rationale + '</div>';
+  }
 }
 
 // Dashboard
@@ -1659,6 +1829,242 @@ function toggleTransitionsPanel(prefix) {
   }
 }
 
+// ═══════════════════════════════════════════════
+// COMMAND CENTER — unified landing page
+// ═══════════════════════════════════════════════
+function loadCommandCenter() {
+  // Parallel fetch: Morning Lens data + Trifecta + Headlines + Macro + Transitions
+  Promise.all([
+    apiCall('/api/lens/signals'),
+    apiCall('/api/lens/death-nails'),
+    apiCall('/api/lens/leading-groups'),
+    apiCall('/api/lens/what-changed'),
+    apiCall('/api/lens/narrative'),
+    apiCall('/api/lens/transitions'),
+    apiCall('/api/trifecta'),
+    apiCall('/api/intel/headlines?limit=25'),
+    apiCall('/api/macro')
+  ]).then(function(results) {
+    var signals = results[0];
+    var dn = results[1];
+    var lg = results[2];
+    var wc = results[3];
+    var narrative = results[4];
+    var transitions = results[5];
+    var trifecta = results[6];
+    var headlines = results[7];
+    var macro = results[8];
+
+    // 1. Phase Transitions
+    renderPhaseTransitions(transitions, 'cc-');
+
+    // 2. Trifecta status pills
+    if (trifecta) {
+      var tri = trifecta.trifecta_score;
+      var m1 = trifecta.modules.m1_liquidity;
+      var m2 = trifecta.modules.m2_conviction;
+      var m3 = trifecta.modules.m3_breadth;
+      document.getElementById('cc-trifecta').textContent = tri;
+      document.getElementById('cc-trifecta').className = 'val ' + (tri > 0 ? 'positive' : tri < 0 ? 'negative' : 'neutral');
+      document.getElementById('cc-liq').textContent = (m1.score > 0 ? '+' : '') + m1.score;
+      document.getElementById('cc-liq').className = 'val ' + (m1.score > 0 ? 'positive' : m1.score < 0 ? 'negative' : 'neutral');
+      document.getElementById('cc-sm').textContent = (m2.score > 0 ? '+' : '') + m2.score;
+      document.getElementById('cc-sm').className = 'val ' + (m2.score > 0 ? 'positive' : m2.score < 0 ? 'negative' : 'neutral');
+      document.getElementById('cc-br').textContent = (m3.score > 0 ? '+' : '') + m3.score;
+      document.getElementById('cc-br').className = 'val ' + (m3.score > 0 ? 'positive' : m3.score < 0 ? 'negative' : 'neutral');
+      document.getElementById('cc-hedge').textContent = trifecta.hedge.recommendation;
+    }
+
+    // 3. Death Nails — compact banner
+    if (dn && dn.components) {
+      var count = dn.count || 0;
+      var banner = document.getElementById('cc-dn-banner');
+      banner.className = 'death-nails-banner dn-' + count;
+      document.getElementById('cc-dn-count').textContent = count + '/3';
+      var labels = ['All Clear', '1 Death Nail', '2 Death Nails', 'ALL 3 FIRING'];
+      document.getElementById('cc-dn-label').textContent = labels[count];
+      var details = [
+        'Rates, dollar, and oil contained. Risk-on.',
+        'One headwind building. Monitor closely.',
+        'Two headwinds active. Reduce exposure.',
+        'Full trifecta of headwinds. Maximum caution.'
+      ];
+      document.getElementById('cc-dn-detail').textContent = details[count];
+      var nailsHtml = '';
+      var nailNames = { 'Rising Rates': 'RATES', 'Rising Dollar': 'DOLLAR', 'Rising Oil': 'OIL' };
+      dn.components.forEach(function(n) {
+        var cls = n.firing ? 'firing' : 'safe';
+        var label = nailNames[n.component] || n.component;
+        nailsHtml += '<div class="dn-nail ' + cls + '">' + label + (n.firing ? ' ⚠' : ' ✓') + '</div>';
+      });
+      document.getElementById('cc-dn-nails').innerHTML = nailsHtml;
+      // Also update status pill
+      document.getElementById('cc-dn').textContent = count + '/3';
+      document.getElementById('cc-dn').className = 'val ' + (count === 0 ? 'positive' : count <= 1 ? 'neutral' : 'negative');
+    }
+
+    // 4. Signal strip
+    if (signals) {
+      var strip = document.getElementById('cc-signal-strip');
+      var html = '';
+      var dnSig = signals.deathNails;
+      if (dnSig) {
+        var c = dnSig.count || 0;
+        var g = c === 0 ? 'healthy' : c === 1 ? 'warning' : c === 2 ? 'danger' : 'critical';
+        html += '<div class="signal-pill ' + g + '"><span class="pill-label">Death Nails</span>' + c + '/3</div>';
+      }
+      var lgSig = signals.leadingGroups;
+      if (lgSig) {
+        var h = lgSig.healthyCount || 0; var b = lgSig.brokenCount || 0;
+        var g2 = h >= 4 ? 'healthy' : b >= 3 ? 'danger' : 'warning';
+        html += '<div class="signal-pill ' + g2 + '"><span class="pill-label">Leading Groups</span>' + h + 'H / ' + b + 'B</div>';
+      }
+      var dc = signals.defensivesVsCyclicals;
+      if (dc) {
+        var riskyCount = 0;
+        if (dc.xlpXly && dc.xlpXly.trend13w === 'RISING') riskyCount++;
+        if (dc.xluXlk && dc.xluXlk.trend13w === 'RISING') riskyCount++;
+        if (dc.goldCopper && dc.goldCopper.trend13w === 'RISING') riskyCount++;
+        var g3 = riskyCount === 0 ? 'healthy' : riskyCount <= 1 ? 'warning' : 'danger';
+        var dcLabel = riskyCount === 0 ? 'RISK ON' : riskyCount >= 2 ? 'RISK OFF' : 'MIXED';
+        html += '<div class="signal-pill ' + g3 + '"><span class="pill-label">Def / Cyc</span>' + dcLabel + '</div>';
+      }
+      var br = signals.breadth;
+      if (br) {
+        var g4 = br.breadthHealth === 'HEALTHY' ? 'healthy' : br.breadthHealth === 'BROKEN' ? 'danger' : 'warning';
+        html += '<div class="signal-pill ' + g4 + '"><span class="pill-label">Breadth</span>' + br.breadthHealth + '</div>';
+      }
+      var cc = signals.curveCredit;
+      if (cc) {
+        var spread = cc.yieldCurve2s10s || 0;
+        var g5 = spread > 0 ? 'healthy' : spread > -50 ? 'warning' : 'danger';
+        html += '<div class="signal-pill ' + g5 + '"><span class="pill-label">Curve 2s10s</span>' + spread.toFixed(0) + 'bp</div>';
+        var hySpread = cc.hySpread || 0;
+        var g6 = hySpread < 400 ? 'healthy' : hySpread < 600 ? 'warning' : 'danger';
+        html += '<div class="signal-pill ' + g6 + '"><span class="pill-label">HY Spread</span>' + hySpread.toFixed(0) + 'bp</div>';
+      }
+      strip.innerHTML = html;
+    }
+
+    // 5. Aria narrative
+    var ariaBody = document.getElementById('cc-aria-body');
+    var ariaTs = document.getElementById('cc-aria-ts');
+    if (narrative && narrative.text) {
+      ariaBody.textContent = narrative.text;
+      if (narrative.generatedAt) {
+        var d = new Date(narrative.generatedAt);
+        ariaTs.textContent = 'Generated ' + d.toLocaleString();
+      }
+    } else {
+      ariaBody.textContent = 'Aria narrative not yet generated. Visit Morning Brief and click Refresh.';
+      ariaTs.textContent = '';
+    }
+
+    // 6. Headlines — compact rendering
+    var hlList = document.getElementById('cc-headline-list');
+    var hlData = headlines.headlines || [];
+    if (hlData.length === 0) {
+      hlList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px">No headlines available</div>';
+    } else {
+      var hlHtml = '';
+      for (var i = 0; i < Math.min(hlData.length, 20); i++) {
+        var hl = hlData[i];
+        var dirIcon = hl.direction === 'positive' ? '▲' : hl.direction === 'negative' ? '▼' : '◆';
+        var dirColor = hl.direction === 'positive' ? '#0ea5e9' : hl.direction === 'negative' ? '#f97316' : '#94a3b8';
+        var rxClass = hl.marketReactionPct >= 0 ? 'pos' : 'neg';
+        var rxStr = (hl.marketReactionPct >= 0 ? '+' : '') + hl.marketReactionPct.toFixed(1) + '%';
+
+        hlHtml += '<div class="cc-hl-item">';
+        hlHtml += '<span class="cc-hl-dir" style="color:' + dirColor + '">' + dirIcon + '</span>';
+        hlHtml += '<span class="cc-hl-ticker">' + hl.ticker + '</span>';
+        hlHtml += '<span class="cc-hl-text">' + hl.headline + '</span>';
+        hlHtml += '<span class="cc-hl-badge ' + hl.impactLevel + '">' + hl.impactLevel + '</span>';
+        hlHtml += '<span class="cc-hl-reaction ' + rxClass + '">' + rxStr + '</span>';
+        hlHtml += '</div>';
+      }
+      hlList.innerHTML = hlHtml;
+    }
+
+    // 7. What Changed
+    var wcFeed = document.getElementById('cc-what-changed');
+    if (!wc || !wc.entries || wc.entries.length === 0) {
+      wcFeed.innerHTML = '<div class="lens-empty"><div class="empty-icon">📋</div><p>No changes detected since yesterday.</p></div>';
+    } else {
+      var icons = { death_nail: '💀', leading_group: '🏗️', breadth: '📊', defensives: '🛡️', curve_credit: '📈', trend_state: '📉' };
+      var severityClass = { critical: 'downgrade', warning: 'new_signal', info: 'cleared' };
+      var wcHtml = '';
+      wc.entries.forEach(function(e) {
+        var cat = e.category || 'trend_state';
+        var cls = severityClass[e.severity] || 'cleared';
+        wcHtml += '<div class="wc-entry ' + cls + '">';
+        wcHtml += '<div class="wc-icon">' + (icons[cat] || '📌') + '</div>';
+        wcHtml += '<div class="wc-text"><div class="wc-headline">' + (e.message || '') + '</div>';
+        if (e.symbol) wcHtml += '<div class="wc-detail">' + e.symbol + ' • ' + (e.category || '') + '</div>';
+        wcHtml += '</div></div>';
+      });
+      wcFeed.innerHTML = wcHtml;
+    }
+
+    // 8. Macro regime indicators
+    if (macro && macro.indicators) {
+      var indicators = macro.indicators;
+      var indicatorList = ['pce', 'gdp', 'unemployment', 'cpi_yoy', 'ism_mfg', 'cap_util', 'yield_curve_bps', 'm2_yoy'];
+      var meta = {
+        pce: { name: 'PCE Inflation', unit: '%', healthFn: function(v){ return v < 2.5 ? 'healthy' : v < 3.0 ? 'warning' : 'danger'; } },
+        gdp: { name: 'GDP Growth', unit: '%', healthFn: function(v){ return v >= 2.0 ? 'healthy' : v >= 1.0 ? 'warning' : 'danger'; } },
+        unemployment: { name: 'Unemployment', unit: '%', healthFn: function(v){ return v < 4.0 ? 'healthy' : v < 5.0 ? 'warning' : 'danger'; } },
+        cpi_yoy: { name: 'CPI YoY', unit: '%', healthFn: function(v){ return v < 2.5 ? 'healthy' : v < 3.5 ? 'warning' : 'danger'; } },
+        ism_mfg: { name: 'ISM Mfg', unit: '', healthFn: function(v){ return v >= 50 ? 'healthy' : v >= 47 ? 'warning' : 'danger'; } },
+        cap_util: { name: 'Cap Util', unit: '%', healthFn: function(v){ return v >= 75 && v <= 80 ? 'healthy' : (v > 80 || v < 72) ? 'danger' : 'warning'; } },
+        yield_curve_bps: { name: 'Curve 10Y-2Y', unit: 'bps', healthFn: function(v){ return v > 50 ? 'healthy' : v > 0 ? 'warning' : 'danger'; } },
+        m2_yoy: { name: 'M2 YoY', unit: '%', healthFn: function(v){ return v > 3 ? 'healthy' : v > 0 ? 'warning' : 'danger'; } }
+      };
+      var regHtml = '';
+      indicatorList.forEach(function(key) {
+        var ind = indicators[key];
+        var m = meta[key];
+        if (!ind || !m) return;
+        var trend = ind.trend.toLowerCase();
+        var trendLabel = trend === 'rising' ? '↑' : trend === 'falling' ? '↓' : trend === 'steepening' ? '↑' : trend === 'flattening' ? '↓' : '→';
+        var latestHealth = m.healthFn(ind.latest);
+        var suffix = m.unit || '';
+        regHtml += '<div class="regime-card">';
+        regHtml += '<div class="regime-status-bar ' + latestHealth + '"></div>';
+        regHtml += '<div class="regime-title">' + m.name + '</div>';
+        regHtml += '<div class="regime-readings"><div class="regime-reading">';
+        regHtml += '<div class="reading-label">Latest</div>';
+        regHtml += '<div class="reading-value ' + latestHealth + '">' + ind.latest.toFixed(1) + (suffix ? ' ' + suffix : '') + ' ' + trendLabel + '</div>';
+        regHtml += '</div></div></div>';
+      });
+      document.getElementById('cc-regime-indicators').innerHTML = regHtml;
+    }
+
+    // 9. Leading Groups
+    var lgGrid = document.getElementById('cc-leading-groups');
+    if (lg && lg.groups) {
+      var lgHtml = '';
+      lg.groups.forEach(function(g) {
+        var statusClass = g.health === 'HEALTHY' ? 'healthy' : g.health === 'BROKEN' ? 'danger' : 'warning';
+        lgHtml += '<div class="regime-card">';
+        lgHtml += '<div class="regime-status-bar ' + statusClass + '"></div>';
+        lgHtml += '<div class="regime-title">' + g.symbol + ' — ' + (g.name || '') + '</div>';
+        lgHtml += '<div class="regime-context">' + (g.trendState || '—') + '</div>';
+        lgHtml += '<div class="regime-readings"><div class="regime-reading">';
+        lgHtml += '<div class="reading-label">Health</div>';
+        lgHtml += '<div class="reading-value ' + statusClass + '">' + (g.health || '—') + '</div>';
+        lgHtml += '</div><div class="regime-reading">';
+        lgHtml += '<div class="reading-label">vs SPY 3M</div>';
+        lgHtml += '<div class="reading-value">' + (g.relPerf3m != null ? (g.relPerf3m > 0 ? '+' : '') + g.relPerf3m.toFixed(1) + '%' : '—') + '</div>';
+        lgHtml += '</div></div></div>';
+      });
+      lgGrid.innerHTML = lgHtml;
+    }
+
+  }).catch(function(err) {
+    console.error('Command Center load error:', err);
+  });
+}
+
 function loadMorningLens() {
   Promise.all([
     apiCall('/api/lens/signals'),
@@ -1840,6 +2246,7 @@ function refreshLens() {
   if (btn2) { btn2.disabled = true; btn2.textContent = '⟳ Refreshing...'; }
   apiCall('/api/lens/refresh', 'POST').then(function() {
     setTimeout(function() {
+      if (currentPage === 'commandcenter') loadCommandCenter();
       if (currentPage === 'morninglens') loadMorningLens();
       if (currentPage === 'chartgrid') loadChartGrid();
       if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh Data'; }
@@ -1998,7 +2405,7 @@ document.addEventListener('click', function(e) {
 });
 
 // Load initial page
-loadPageData('dashboard');
+loadPageData('commandcenter');
 loadActionSignals();
 
 // ═══════════════════════════════════════════════
