@@ -12,10 +12,11 @@ import { computeFullInflection, InflectionPhase, OHLCVBar } from './inflection-e
 
 const router = Router();
 
-// Initialize yahoo-finance2 v3 (requires instantiation)
-const yahooFinance = new (YahooFinance as any)();
-try { yahooFinance.setGlobalConfig({ validation: { logErrors: false } }); } catch {}
-try { yahooFinance.suppressNotices(['yahooSurvey']); } catch {}
+// Initialize yahoo-finance2 v3 (requires instantiation with config)
+const yahooFinance = new (YahooFinance as any)({
+  validation: { logErrors: false },
+  suppressNotices: ['yahooSurvey', 'ripHistorical'],
+});
 
 // ─── INSTRUMENT REGISTRY (Phase 1: ~30 instruments) ───
 interface Instrument {
@@ -223,14 +224,16 @@ async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar
       else if (period === '5y') startDate.setFullYear(startDate.getFullYear() - 5);
       else startDate.setFullYear(startDate.getFullYear() - 1);
 
-      // Use historical() which is the standard method in yahoo-finance2
-      const result = await yahooFinance.historical(symbol, {
+      // Use chart() — the native v3 API (historical() is deprecated and maps to chart internally)
+      const result = await yahooFinance.chart(symbol, {
         period1: startDate,
         period2: endDate,
         interval: '1d' as any,
-      }) as any[];
+      }) as any;
 
-      if (!result || result.length === 0) {
+      // chart() returns { quotes: [...], meta: {...} }
+      const quotes = result?.quotes || result || [];
+      if (!quotes || quotes.length === 0) {
         if (attempt < maxRetries) {
           console.warn(`[YF] No data for ${symbol} (attempt ${attempt}/${maxRetries}), retrying in ${attempt * 3}s...`);
           await new Promise(r => setTimeout(r, attempt * 3000));
@@ -240,7 +243,7 @@ async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar
         return [];
       }
 
-      return result
+      return quotes
         .filter((q: any) => q.close != null && q.close > 0)
         .map((q: any) => ({
           date: new Date(q.date),
@@ -912,6 +915,30 @@ async function generateAriaNarrative(apiKey: string): Promise<string> {
   try {
     const anthropic = new Anthropic({ apiKey });
 
+    // Build enriched instrument data with phase information
+    const enrichedInstruments = Object.fromEntries(
+      Array.from(instrumentSnapshots.entries()).map(([k, v]) => [k, {
+        name: v.name,
+        bucket: v.bucket,
+        group: v.group,
+        dailyState: v.daily.state,
+        weeklyState: v.weekly?.state || 'N/A',
+        price: v.daily.price,
+        ma50: v.daily.ma50,
+        ma200: v.daily.ma200,
+        roc20d: v.daily.roc20d,
+        changePct1d: v.changePct1d,
+        changePct30d: v.changePct30d,
+        phase: v.phaseData ? {
+          phaseNum: v.phaseData.phaseNum,
+          phaseShort: v.phaseData.phaseShort,
+          actionBias: v.phaseData.actionBias,
+          confidence: v.phaseData.confidence,
+          overallSignal: v.phaseData.overallSignal,
+        } : null,
+      }])
+    );
+
     const signalPayload = {
       date: new Date().toISOString().slice(0, 10),
       deathNails: currentSignals.deathNails,
@@ -920,22 +947,39 @@ async function generateAriaNarrative(apiKey: string): Promise<string> {
       defensivesVsCyclicals: currentSignals.defensivesVsCyclicals,
       curveCredit: currentSignals.curveCredit,
       whatChanged,
-      instruments: Object.fromEntries(
-        Array.from(instrumentSnapshots.entries()).map(([k, v]) => [k, {
-          name: v.name,
-          dailyState: v.daily.state,
-          weeklyState: v.weekly?.state || 'N/A',
-          price: v.daily.price,
-          changePct1d: v.changePct1d,
-          changePct30d: v.changePct30d,
-        }])
-      ),
+      phaseTransitions,
+      instruments: enrichedInstruments,
     };
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 600,
-      system: `You are Aria, Marcelo's AI research partner at Maredin Wealth Advisors. You write his morning macro brief in his voice: direct, no fluff, no hedging, no bullet lists unless absolutely needed. 250-350 words. Cover: (1) Are the three death nails firing, and what changed in their state since yesterday? (2) Which leading groups changed state since yesterday? (3) What is the biggest tape divergence right now? (4) One specific thing to watch today. End with one sentence on portfolio implication for Maredin's current book. Use only the attached JSON state — do not invent any data not in it. If a field is null or stale, say so explicitly.`,
+      max_tokens: 1200,
+      system: `You are Aria, Marcelo's AI research partner at Maredin Wealth Advisors. You write his morning macro brief in his voice: direct, no fluff, no hedging, no bullet lists unless absolutely needed. 400-600 words.
+
+STRUCTURE (follow this order):
+
+1. PHASE TRANSITIONS (if any exist in phaseTransitions array — this is the LEAD):
+   Open with any detected phase transitions. These are the most actionable signals. For each, explain the cascade: what moved, why it matters for the portfolio, and what second-order effect to expect. If a bias flipped (BUY→SELL or vice versa), flag it prominently.
+
+2. GEOPOLITICAL-MACRO TRANSMISSION ANALYSIS:
+   This is your most important analytical contribution. Look at the data and reason through the macro transmission chains. The key chains to analyze:
+
+   • OIL CHAIN: Oil (CL=F, BZ=F) → inflation expectations → rates (^TNX, ^TYX) → TLT/duration → mortgage rates → XHB/housing → consumer
+   • DOLLAR CHAIN: DXY (DX-Y.NYB) → EM stress → commodity repricing → gold/copper → industrial cycle
+   • RATES CHAIN: Front-end (^IRX) vs long-end (^TYX) spread → curve shape → bank profitability (KRE) → credit availability → HYG spreads
+   • GOLD-OIL-DOLLAR TRIANGLE: Gold (GC=F) vs Oil (CL=F) vs DXY — when gold rises as oil falls, it signals geopolitical risk premium unwinding. When both fall, it signals deflationary pulse.
+
+   Look at what the PRICES are actually telling you about geopolitical events you cannot directly observe. If oil is falling while gold is rising, reason about what that implies (sanctions relief? Iran deal? supply normalization?). If the 30Y yield is diverging from the 5Y, reason about term premium and fiscal concerns vs. policy rate expectations.
+
+   DO NOT fabricate news events. Instead, read the price action and phase data to INFER what macro/geopolitical forces may be at work, and state your inferences as market-implied readings, not facts.
+
+3. DEATH NAILS & LEADING GROUPS: Which are firing/changed? Quick status.
+
+4. BIGGEST TAPE DIVERGENCE: What is the most notable disagreement between instruments?
+
+5. TODAY'S WATCH: One specific thing to monitor.
+
+End with a portfolio implication sentence for Maredin's book. Use only the attached JSON state — do not invent data not in it. If a field is null or stale, say so.`,
       messages: [
         { role: 'user', content: `Generate this morning's brief from the following signal state:\n\n${JSON.stringify(signalPayload, null, 2)}` },
       ],
