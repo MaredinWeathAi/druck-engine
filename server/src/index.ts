@@ -148,9 +148,9 @@ async function fetchAllFredData(): Promise<FredDataSet | null> {
       fetchFredSeries('PCEPILFE', 360),     // monthly, ~30 years
       fetchFredSeries('A191RL1Q225SBEA', 120), // quarterly, ~30 years
       fetchFredSeries('TCU', 360),          // monthly, ~30 years
-      fetchFredSeries('DGS2', 1100),        // daily (weekly sampled), ~20 years
-      fetchFredSeries('DGS10', 1100),       // daily (weekly sampled), ~20 years
-      fetchFredSeries('BAMLH0A0HYM2', 1100),// daily, ~20 years
+      fetchFredSeries('DGS2', 7800),        // daily, ~30 years
+      fetchFredSeries('DGS10', 7800),       // daily, ~30 years
+      fetchFredSeries('BAMLH0A0HYM2', 7800),// daily, ~30 years
       fetchFredSeries('UNRATE', 360),       // monthly, ~30 years
       fetchFredSeries('CPIAUCSL', 360),     // monthly, ~30 years
       fetchFredSeries('NAPM', 360),         // monthly, ~30 years
