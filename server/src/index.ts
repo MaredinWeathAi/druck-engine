@@ -1660,40 +1660,7 @@ app.get('/api/history/stats', (_req, res) => {
   }
 });
 
-// Full history for a symbol
-app.get('/api/history/:symbol', (req, res) => {
-  try {
-    const symbol = decodeURIComponent(req.params.symbol);
-    const limit = parseInt(req.query.limit as string) || 365;
-    const history = getSymbolHistory(symbol, limit);
-    res.json({ symbol, count: history.length, snapshots: history });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message });
-  }
-});
-
-// Phase timeline for a symbol (date + phase + confidence)
-app.get('/api/history/:symbol/phases', (req, res) => {
-  try {
-    const symbol = decodeURIComponent(req.params.symbol);
-    const timeline = getSymbolPhaseTimeline(symbol);
-    res.json({ symbol, count: timeline.length, timeline });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message });
-  }
-});
-
-// Phase transitions for a symbol
-app.get('/api/history/:symbol/transitions', (req, res) => {
-  try {
-    const symbol = decodeURIComponent(req.params.symbol);
-    const transitions = getSymbolTransitions(symbol);
-    res.json({ symbol, count: transitions.length, transitions });
-  } catch (err: any) {
-    res.status(500).json({ error: err?.message });
-  }
-});
-
+// IMPORTANT: Specific routes MUST come before parameterized :symbol routes
 // Recent transitions across all instruments
 app.get('/api/history/transitions/recent', (req, res) => {
   try {
@@ -1775,6 +1742,41 @@ app.post('/api/history/algorithm/request-update', (req, res) => {
       requestId: id,
       message: 'Update request created. Do you want the system to go through all the data and make updates to the phase algorithm? This requires your explicit approval.',
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Parameterized symbol routes MUST come AFTER specific routes
+// Full history for a symbol
+app.get('/api/history/:symbol', (req, res) => {
+  try {
+    const symbol = decodeURIComponent(req.params.symbol);
+    const limit = parseInt(req.query.limit as string) || 365;
+    const history = getSymbolHistory(symbol, limit);
+    res.json({ symbol, count: history.length, snapshots: history });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Phase timeline for a symbol (date + phase + confidence)
+app.get('/api/history/:symbol/phases', (req, res) => {
+  try {
+    const symbol = decodeURIComponent(req.params.symbol);
+    const timeline = getSymbolPhaseTimeline(symbol);
+    res.json({ symbol, count: timeline.length, timeline });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Phase transitions for a symbol
+app.get('/api/history/:symbol/transitions', (req, res) => {
+  try {
+    const symbol = decodeURIComponent(req.params.symbol);
+    const transitions = getSymbolTransitions(symbol);
+    res.json({ symbol, count: transitions.length, transitions });
   } catch (err: any) {
     res.status(500).json({ error: err?.message });
   }
