@@ -9,6 +9,11 @@ import { Router, Request, Response } from 'express';
 import YahooFinance from 'yahoo-finance2';
 import Anthropic from '@anthropic-ai/sdk';
 import { computeFullInflection, InflectionPhase, OHLCVBar } from './inflection-engine';
+import {
+  recordSnapshotBatch, recordTransitionBatch,
+  updateTransitionOutcomes,
+  SnapshotRecord, TransitionRecord,
+} from './history-store';
 
 const router = Router();
 
@@ -32,68 +37,218 @@ interface Instrument {
 }
 
 const INSTRUMENTS: Instrument[] = [
-  // ── DEATH NAIL TRIO ──
+  // ═══════════════════════════════════════════════════════════════
+  // DEATH NAIL TRIO
+  // ═══════════════════════════════════════════════════════════════
   { symbol: '^TNX', name: 'US 10Y Yield', bucket: 'fixed_income', group: 'US Treasuries', druckRationale: 'Death Nail #1 — rising rates squeeze multiples and housing', isDeathNail: true },
   { symbol: 'DX-Y.NYB', name: 'US Dollar Index (DXY)', bucket: 'fx', group: 'Dollar', druckRationale: 'Death Nail #2 — strong dollar tightens global financial conditions', isDeathNail: true },
   { symbol: 'CL=F', name: 'WTI Crude Oil', bucket: 'commodities', group: 'Energy', druckRationale: 'Death Nail #3 — rising oil is a tax on the consumer and input costs', isDeathNail: true },
 
-  // ── LEADING GROUPS (Inside of the Market) ──
+  // ═══════════════════════════════════════════════════════════════
+  // LEADING GROUPS (Inside of the Market)
+  // ═══════════════════════════════════════════════════════════════
   { symbol: 'XHB', name: 'Homebuilders', bucket: 'equities', group: 'Leading Groups', druckRationale: '#1 leading group — rate-sensitive, first to break before recessions', isLeadingGroup: true },
-  { symbol: 'IYT', name: 'Transports', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Goods movement — trucking and rails lead industrial slowdowns (autos proxy)', isLeadingGroup: true },
+  { symbol: 'IYT', name: 'Transports', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Goods movement — trucking and rails lead industrial slowdowns', isLeadingGroup: true },
   { symbol: 'XRT', name: 'Retailers', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Consumer durables demand — spending weakness shows here first', isLeadingGroup: true },
   { symbol: 'KRE', name: 'Regional Banks', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Credit cycle — regional banks break before the economy does', isLeadingGroup: true },
   { symbol: 'SMH', name: 'Semiconductors', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Modern replacement for chemicals — capex and AI demand tell', isLeadingGroup: true },
   { symbol: 'ITB', name: 'Home Construction', bucket: 'equities', group: 'Leading Groups', druckRationale: 'Pure homebuilding exposure — more concentrated than XHB', isLeadingGroup: true },
 
-  // ── MAJOR INDICES ──
+  // ═══════════════════════════════════════════════════════════════
+  // MAJOR US INDICES
+  // ═══════════════════════════════════════════════════════════════
   { symbol: 'SPY', name: 'S&P 500', bucket: 'equities', group: 'Indices', druckRationale: 'Master tape — the reference benchmark for all signals' },
   { symbol: 'QQQ', name: 'Nasdaq 100', bucket: 'equities', group: 'Indices', druckRationale: 'Growth/secular leadership — tech and AI concentration' },
   { symbol: 'IWM', name: 'Russell 2000', bucket: 'equities', group: 'Indices', druckRationale: 'Domestic cyclicality and breadth proxy' },
   { symbol: '^VIX', name: 'VIX', bucket: 'equities', group: 'Indices', druckRationale: 'Volatility regime — complacency vs fear gauge' },
   { symbol: 'RSP', name: 'S&P 500 Equal Weight', bucket: 'equities', group: 'Indices', druckRationale: 'Mega-cap concentration risk — diverges from SPY in blow-off tops' },
   { symbol: 'DIA', name: 'Dow Jones', bucket: 'equities', group: 'Indices', druckRationale: 'Blue chip industrials — old economy leadership gauge' },
+  { symbol: 'MDY', name: 'S&P MidCap 400', bucket: 'equities', group: 'Indices', druckRationale: 'Mid-cap growth — sweet spot between small-cap risk and large-cap safety' },
 
-  // ── SECTOR ETFS ──
-  { symbol: 'XLP', name: 'Consumer Staples', bucket: 'equities', group: 'Defensives', druckRationale: 'Defensive anchor — outperformance signals risk-off rotation' },
-  { symbol: 'XLY', name: 'Consumer Discretionary', bucket: 'equities', group: 'Cyclicals', druckRationale: 'Cyclical consumer — underperformance vs staples = late cycle' },
-  { symbol: 'XLU', name: 'Utilities', bucket: 'equities', group: 'Defensives', druckRationale: 'Bond proxy + defensive — outperformance vs tech = late cycle warning' },
-  { symbol: 'XLK', name: 'Technology', bucket: 'equities', group: 'Growth', druckRationale: 'Secular growth anchor — underperformance vs utilities = risk-off' },
+  // ═══════════════════════════════════════════════════════════════
+  // GICS SECTOR SPDR ETFs (Complete S&P Sector Coverage)
+  // ═══════════════════════════════════════════════════════════════
+  { symbol: 'XLK', name: 'Technology', bucket: 'equities', group: 'Sectors', druckRationale: 'Secular growth anchor — underperformance vs utilities = risk-off' },
   { symbol: 'XLF', name: 'Financials', bucket: 'equities', group: 'Sectors', druckRationale: 'Rate-sensitive sector — benefits from steepening curve, leads credit cycle' },
   { symbol: 'XLE', name: 'Energy', bucket: 'equities', group: 'Sectors', druckRationale: 'Oil-linked — inflation passthrough and geopolitical proxy' },
-  { symbol: 'XLI', name: 'Industrials', bucket: 'equities', group: 'Sectors', druckRationale: 'Capex and infrastructure cycle — ISM manufacturing proxy' },
   { symbol: 'XLV', name: 'Healthcare', bucket: 'equities', group: 'Sectors', druckRationale: 'Defensive growth — policy risk and innovation cycle' },
+  { symbol: 'XLI', name: 'Industrials', bucket: 'equities', group: 'Sectors', druckRationale: 'Capex and infrastructure cycle — ISM manufacturing proxy' },
+  { symbol: 'XLP', name: 'Consumer Staples', bucket: 'equities', group: 'Sectors', druckRationale: 'Defensive anchor — outperformance signals risk-off rotation' },
+  { symbol: 'XLY', name: 'Consumer Discretionary', bucket: 'equities', group: 'Sectors', druckRationale: 'Cyclical consumer — underperformance vs staples = late cycle' },
+  { symbol: 'XLU', name: 'Utilities', bucket: 'equities', group: 'Sectors', druckRationale: 'Bond proxy + defensive — outperformance vs tech = late cycle warning' },
   { symbol: 'XLRE', name: 'Real Estate', bucket: 'equities', group: 'Sectors', druckRationale: 'Rate-sensitive assets — cap rate expansion/compression with duration' },
   { symbol: 'XLC', name: 'Communications', bucket: 'equities', group: 'Sectors', druckRationale: 'Meta/Google heavy — ad spending proxy and secular growth overlap' },
   { symbol: 'XLB', name: 'Materials', bucket: 'equities', group: 'Sectors', druckRationale: 'Commodity-linked equities — global demand barometer' },
 
-  // ── COMMODITIES ──
-  { symbol: 'GC=F', name: 'Gold', bucket: 'commodities', group: 'Precious Metals', druckRationale: 'Real rates and debasement signal — rises when faith in fiat drops' },
-  { symbol: 'HG=F', name: 'Copper', bucket: 'commodities', group: 'Industrial Metals', druckRationale: 'Dr. Copper — global industrial demand barometer' },
-  { symbol: 'SI=F', name: 'Silver', bucket: 'commodities', group: 'Precious Metals', druckRationale: 'Industrial + monetary hybrid — confirms gold or diverges' },
+  // ═══════════════════════════════════════════════════════════════
+  // INDUSTRY / SUB-SECTOR ETFs
+  // ═══════════════════════════════════════════════════════════════
+  // -- Technology Sub-Sectors --
+  { symbol: 'IGV', name: 'Software', bucket: 'equities', group: 'Tech Industries', druckRationale: 'Enterprise software — SaaS recurring revenue proxy, rate-sensitive valuations' },
+  { symbol: 'SKYY', name: 'Cloud Computing', bucket: 'equities', group: 'Tech Industries', druckRationale: 'Cloud infrastructure spend — secular digital transformation gauge' },
+  { symbol: 'CIBR', name: 'Cybersecurity', bucket: 'equities', group: 'Tech Industries', druckRationale: 'Cybersecurity spend — non-discretionary IT budget, geopolitical risk driver' },
+  { symbol: 'BOTZ', name: 'Robotics & AI', bucket: 'equities', group: 'Tech Industries', druckRationale: 'AI/automation capex — secular theme with industrial cycle overlay' },
+  { symbol: 'SOXX', name: 'Semiconductors (PHLX)', bucket: 'equities', group: 'Tech Industries', druckRationale: 'Broader semi coverage — PHLX index includes foundries and equipment' },
+
+  // -- Healthcare Sub-Sectors --
+  { symbol: 'XBI', name: 'Biotech', bucket: 'equities', group: 'Healthcare Industries', druckRationale: 'Speculative biotech — risk appetite gauge, M&A activity proxy' },
+  { symbol: 'IHI', name: 'Medical Devices', bucket: 'equities', group: 'Healthcare Industries', druckRationale: 'Med-tech innovation — procedure volume and hospital capex cycle' },
+  { symbol: 'XPH', name: 'Pharmaceuticals', bucket: 'equities', group: 'Healthcare Industries', druckRationale: 'Big pharma — defensive yield with patent cliff and pipeline risk' },
+
+  // -- Financials Sub-Sectors --
+  { symbol: 'KBE', name: 'Banks', bucket: 'equities', group: 'Financial Industries', druckRationale: 'Broad banking — NIM sensitivity, credit quality, curve shape' },
+  { symbol: 'IAI', name: 'Broker-Dealers & Exchanges', bucket: 'equities', group: 'Financial Industries', druckRationale: 'Capital markets activity — IPO/M&A cycle, trading volume proxy' },
+  { symbol: 'KIE', name: 'Insurance', bucket: 'equities', group: 'Financial Industries', druckRationale: 'Insurance cycle — underwriting profitability, catastrophe risk' },
+
+  // -- Energy Sub-Sectors --
+  { symbol: 'XOP', name: 'Oil & Gas E&P', bucket: 'equities', group: 'Energy Industries', druckRationale: 'Upstream oil — pure commodity leverage, highest beta to oil prices' },
+  { symbol: 'OIH', name: 'Oil Services', bucket: 'equities', group: 'Energy Industries', druckRationale: 'Oilfield services — capex cycle, rig count, drilling activity' },
+  { symbol: 'AMLP', name: 'MLPs (Midstream)', bucket: 'equities', group: 'Energy Industries', druckRationale: 'Pipeline infrastructure — fee-based cash flow, yield play with energy overlay' },
+
+  // -- Industrials Sub-Sectors --
+  { symbol: 'ITA', name: 'Aerospace & Defense', bucket: 'equities', group: 'Industrial Sub-Sectors', druckRationale: 'Defense spending — geopolitical premium, long-cycle government contracts' },
+  { symbol: 'PAVE', name: 'Infrastructure', bucket: 'equities', group: 'Industrial Sub-Sectors', druckRationale: 'US infrastructure build-out — fiscal stimulus, construction cycle' },
+  { symbol: 'JETS', name: 'Airlines', bucket: 'equities', group: 'Industrial Sub-Sectors', druckRationale: 'Consumer travel demand — fuel cost sensitivity, economic cycle indicator' },
+
+  // -- Consumer Sub-Sectors --
+  { symbol: 'IBUY', name: 'Online Retail', bucket: 'equities', group: 'Consumer Industries', druckRationale: 'E-commerce penetration — consumer spending migration online' },
+  { symbol: 'PBJ', name: 'Food & Beverage', bucket: 'equities', group: 'Consumer Industries', druckRationale: 'Staples sub-sector — food inflation passthrough, defensive earnings' },
+
+  // -- Real Estate Sub-Sectors --
+  { symbol: 'VNQ', name: 'REITs (Broad)', bucket: 'equities', group: 'Real Estate Industries', druckRationale: 'Broad REIT exposure — rate-sensitive income, property cycle' },
+  { symbol: 'MORT', name: 'Mortgage REITs', bucket: 'equities', group: 'Real Estate Industries', druckRationale: 'Mortgage market stress — spread compression, prepayment risk' },
+
+  // -- Thematic / Macro --
+  { symbol: 'ARKK', name: 'ARK Innovation', bucket: 'equities', group: 'Thematic', druckRationale: 'Speculative growth proxy — retail sentiment and liquidity gauge' },
+  { symbol: 'ICLN', name: 'Clean Energy', bucket: 'equities', group: 'Thematic', druckRationale: 'Energy transition — policy-driven, subsidy-dependent growth' },
+  { symbol: 'TAN', name: 'Solar', bucket: 'equities', group: 'Thematic', druckRationale: 'Solar industry — IRA subsidy beneficiary, rate-sensitive project economics' },
+  { symbol: 'KWEB', name: 'China Internet', bucket: 'equities', group: 'Thematic', druckRationale: 'Chinese tech — regulatory risk, US-China decoupling barometer' },
+  { symbol: 'HACK', name: 'Cybersecurity (ISE)', bucket: 'equities', group: 'Thematic', druckRationale: 'Cybersecurity broader coverage — ISE index, different weighting than CIBR' },
+
+  // ═══════════════════════════════════════════════════════════════
+  // INTERNATIONAL / REGIONAL ETFs
+  // ═══════════════════════════════════════════════════════════════
+  // -- Broad International --
+  { symbol: 'EFA', name: 'EAFE (Developed ex-US)', bucket: 'equities', group: 'International', druckRationale: 'Developed markets ex-US — Europe, Australia, Far East aggregate' },
+  { symbol: 'VWO', name: 'Emerging Markets (Vanguard)', bucket: 'equities', group: 'International', druckRationale: 'Broad EM — China/India/Brazil/Taiwan, dollar-sensitive' },
+  { symbol: 'EEM', name: 'Emerging Markets (iShares)', bucket: 'equities', group: 'International', druckRationale: 'Most liquid EM ETF — options market for EM hedging' },
+  { symbol: 'IEMG', name: 'EM Core (iShares)', bucket: 'equities', group: 'International', druckRationale: 'Broader EM coverage — includes small-caps, lower cost than EEM' },
+  { symbol: 'VEA', name: 'Developed Markets (Vanguard)', bucket: 'equities', group: 'International', druckRationale: 'Broad developed ex-US — high liquidity, low cost benchmark' },
+  { symbol: 'ACWI', name: 'All Country World', bucket: 'equities', group: 'International', druckRationale: 'Global equity benchmark — US + international in one, allocation gauge' },
+
+  // -- Europe --
+  { symbol: 'VGK', name: 'Europe (Vanguard)', bucket: 'equities', group: 'Europe', druckRationale: 'Broad Europe — ECB policy, energy crisis, Euro direction' },
+  { symbol: 'EWG', name: 'Germany (iShares)', bucket: 'equities', group: 'Europe', druckRationale: 'European industrial engine — manufacturing PMI, China export exposure' },
+  { symbol: 'EWU', name: 'United Kingdom (iShares)', bucket: 'equities', group: 'Europe', druckRationale: 'UK equities — BoE policy, commodity-heavy FTSE, GBP sensitivity' },
+  { symbol: 'EWQ', name: 'France (iShares)', bucket: 'equities', group: 'Europe', druckRationale: 'French equities — luxury sector exposure, political risk premium' },
+  { symbol: 'EWP', name: 'Spain (iShares)', bucket: 'equities', group: 'Europe', druckRationale: 'Southern Europe — banking exposure, tourism cycle, ECB peripheral risk' },
+  { symbol: 'EWI', name: 'Italy (iShares)', bucket: 'equities', group: 'Europe', druckRationale: 'Italian equities — BTP-Bund spread, banking system health' },
+  { symbol: 'EWL', name: 'Switzerland (iShares)', bucket: 'equities', group: 'Europe', druckRationale: 'Swiss defensives — Nestle/Novartis/Roche, safe haven proxy' },
+
+  // -- Asia-Pacific --
+  { symbol: 'EWJ', name: 'Japan (iShares)', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'Japan equities — BoJ yield curve control, yen carry trade unwind risk' },
+  { symbol: 'FXI', name: 'China Large-Cap (iShares)', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'Chinese large-caps — stimulus gauge, property crisis, US-China tensions' },
+  { symbol: 'MCHI', name: 'China (MSCI iShares)', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'Broader China — includes A-shares, better coverage than FXI' },
+  { symbol: 'EWY', name: 'South Korea (iShares)', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'Korea/Samsung heavy — semiconductor cycle, global trade proxy' },
+  { symbol: 'EWT', name: 'Taiwan (iShares)', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'Taiwan/TSMC heavy — chip supply chain, geopolitical flashpoint' },
+  { symbol: 'INDA', name: 'India (iShares)', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'India growth story — demographic dividend, manufacturing shift from China' },
+  { symbol: 'EWA', name: 'Australia (iShares)', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'Australia — commodity exporter, China demand proxy, housing market' },
+  { symbol: 'EWH', name: 'Hong Kong (iShares)', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'Hong Kong — China gateway, USD-pegged, financial hub stress gauge' },
+  { symbol: 'THD', name: 'Thailand (iShares)', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'Thai equities — tourism recovery, EM Asia manufacturing shift' },
+  { symbol: 'EPHE', name: 'Philippines (iShares)', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'Philippines — remittance economy, EM frontier growth' },
+
+  // -- Latin America --
+  { symbol: 'EWZ', name: 'Brazil (iShares)', bucket: 'equities', group: 'Latin America', druckRationale: 'Brazil — commodity superpower, Selic rate cycle, fiscal risk' },
+  { symbol: 'EWW', name: 'Mexico (iShares)', bucket: 'equities', group: 'Latin America', druckRationale: 'Mexico — nearshoring beneficiary, US trade dependency, peso carry' },
+  { symbol: 'ECH', name: 'Chile (iShares)', bucket: 'equities', group: 'Latin America', druckRationale: 'Chile — copper mining leverage, LatAm rate cycle leader' },
+  { symbol: 'ARGT', name: 'Argentina (Global X)', bucket: 'equities', group: 'Latin America', druckRationale: 'Argentina — Milei reform play, sovereign spread compression bet' },
+
+  // -- Other EM / Frontier --
+  { symbol: 'TUR', name: 'Turkey (iShares)', bucket: 'equities', group: 'Other EM', druckRationale: 'Turkey — orthodox policy pivot, lira stabilization, re-rating thesis' },
+  { symbol: 'RSX', name: 'Russia (VanEck)', bucket: 'equities', group: 'Other EM', druckRationale: 'Russia exposure — sanctions proxy, energy geopolitics (may be halted)' },
+  { symbol: 'EZA', name: 'South Africa (iShares)', bucket: 'equities', group: 'Other EM', druckRationale: 'South Africa — mining/gold exposure, rand, EM risk sentiment' },
+  { symbol: 'EWS', name: 'Singapore (iShares)', bucket: 'equities', group: 'Other EM', druckRationale: 'Singapore — Asia financial hub, REIT-heavy, trade flow proxy' },
+  { symbol: 'QAT', name: 'Qatar (iShares)', bucket: 'equities', group: 'Other EM', druckRationale: 'Qatar — LNG superpower, Gulf petrodollar, sovereign wealth' },
+  { symbol: 'KSA', name: 'Saudi Arabia (iShares)', bucket: 'equities', group: 'Other EM', druckRationale: 'Saudi Arabia — OPEC price-setter, Vision 2030, Aramco proxy' },
+
+  // ═══════════════════════════════════════════════════════════════
+  // COMMODITIES
+  // ═══════════════════════════════════════════════════════════════
+  // -- Precious Metals --
+  { symbol: 'GC=F', name: 'Gold Futures', bucket: 'commodities', group: 'Precious Metals', druckRationale: 'Real rates and debasement signal — rises when faith in fiat drops' },
+  { symbol: 'GLD', name: 'Gold ETF (SPDR)', bucket: 'commodities', group: 'Precious Metals', druckRationale: 'Physical gold ETF — most liquid gold vehicle, central bank demand proxy' },
+  { symbol: 'SI=F', name: 'Silver Futures', bucket: 'commodities', group: 'Precious Metals', druckRationale: 'Industrial + monetary hybrid — confirms gold or diverges' },
+  { symbol: 'SLV', name: 'Silver ETF (iShares)', bucket: 'commodities', group: 'Precious Metals', druckRationale: 'Silver ETF — retail precious metals demand gauge' },
+  { symbol: 'GDX', name: 'Gold Miners', bucket: 'commodities', group: 'Precious Metals', druckRationale: 'Gold miners — leveraged gold play, margin expansion in rising gold' },
+  { symbol: 'GDXJ', name: 'Junior Gold Miners', bucket: 'commodities', group: 'Precious Metals', druckRationale: 'Junior miners — speculative gold exposure, M&A targets' },
+
+  // -- Energy Commodities --
   { symbol: 'BZ=F', name: 'Brent Crude', bucket: 'commodities', group: 'Energy', druckRationale: 'Global oil benchmark — pairs with WTI for spread analysis' },
   { symbol: 'NG=F', name: 'Natural Gas', bucket: 'commodities', group: 'Energy', druckRationale: 'Heating/power/LNG — weather-driven with geopolitical overlay' },
-  { symbol: 'ZW=F', name: 'Wheat', bucket: 'commodities', group: 'Agriculture', druckRationale: 'Staple food commodity — geopolitical supply disruption risk' },
-  { symbol: 'ZC=F', name: 'Corn', bucket: 'commodities', group: 'Agriculture', druckRationale: 'Feed + ethanol — links energy and food inflation chains' },
-  { symbol: 'ZS=F', name: 'Soybeans', bucket: 'commodities', group: 'Agriculture', druckRationale: 'China demand proxy — US-China trade barometer' },
+  { symbol: 'USO', name: 'US Oil Fund', bucket: 'commodities', group: 'Energy', druckRationale: 'Crude oil ETF — retail oil exposure, contango/backwardation gauge' },
+  { symbol: 'UNG', name: 'US Natural Gas Fund', bucket: 'commodities', group: 'Energy', druckRationale: 'Nat gas ETF — weather/storage play, LNG export demand' },
   { symbol: 'URA', name: 'Uranium ETF', bucket: 'commodities', group: 'Energy', druckRationale: 'Nuclear renaissance play — secular energy transition demand' },
-  { symbol: 'LIT', name: 'Lithium & Battery ETF', bucket: 'commodities', group: 'Industrial Metals', druckRationale: 'EV supply chain — battery metals demand cycle' },
 
-  // ── CURRENCIES ──
+  // -- Industrial Metals --
+  { symbol: 'HG=F', name: 'Copper Futures', bucket: 'commodities', group: 'Industrial Metals', druckRationale: 'Dr. Copper — global industrial demand barometer' },
+  { symbol: 'COPX', name: 'Copper Miners', bucket: 'commodities', group: 'Industrial Metals', druckRationale: 'Copper equity exposure — leveraged to copper price, EV supply chain' },
+  { symbol: 'LIT', name: 'Lithium & Battery ETF', bucket: 'commodities', group: 'Industrial Metals', druckRationale: 'EV supply chain — battery metals demand cycle' },
+  { symbol: 'SLX', name: 'Steel', bucket: 'commodities', group: 'Industrial Metals', druckRationale: 'Steel equities — infrastructure build, China demand, tariff proxy' },
+
+  // -- Agriculture --
+  { symbol: 'ZW=F', name: 'Wheat Futures', bucket: 'commodities', group: 'Agriculture', druckRationale: 'Staple food commodity — geopolitical supply disruption risk' },
+  { symbol: 'ZC=F', name: 'Corn Futures', bucket: 'commodities', group: 'Agriculture', druckRationale: 'Feed + ethanol — links energy and food inflation chains' },
+  { symbol: 'ZS=F', name: 'Soybean Futures', bucket: 'commodities', group: 'Agriculture', druckRationale: 'China demand proxy — US-China trade barometer' },
+  { symbol: 'DBA', name: 'Agriculture ETF', bucket: 'commodities', group: 'Agriculture', druckRationale: 'Broad agriculture — food inflation basket, weather risk diversified' },
+  { symbol: 'MOO', name: 'Agribusiness', bucket: 'commodities', group: 'Agriculture', druckRationale: 'Agribusiness equities — Deere, Archer Daniels, food supply chain' },
+
+  // -- Broad Commodities --
+  { symbol: 'DBC', name: 'Commodity Index (Invesco)', bucket: 'commodities', group: 'Broad', druckRationale: 'Broad commodity benchmark — energy-heavy, inflation correlation' },
+  { symbol: 'GSG', name: 'Commodity Index (iShares)', bucket: 'commodities', group: 'Broad', druckRationale: 'S&P GSCI tracking — broad commodity exposure, energy-weighted' },
+
+  // ═══════════════════════════════════════════════════════════════
+  // CURRENCIES
+  // ═══════════════════════════════════════════════════════════════
   { symbol: 'EURUSD=X', name: 'EUR/USD', bucket: 'fx', group: 'Major Crosses', druckRationale: 'Largest cross — ECB-Fed differential drives global capital flows' },
   { symbol: 'JPY=X', name: 'USD/JPY', bucket: 'fx', group: 'Major Crosses', druckRationale: 'Carry trade barometer — BoJ policy drives global risk appetite' },
-  { symbol: 'BTC-USD', name: 'Bitcoin', bucket: 'fx', group: 'Digital', druckRationale: 'Liquidity/debasement tell — leads risk-on moves in loose policy' },
   { symbol: 'GBP=X', name: 'GBP/USD', bucket: 'fx', group: 'Major Crosses', druckRationale: 'BoE policy — Soros/Druckenmiller famously traded the pound' },
+  { symbol: 'BTC-USD', name: 'Bitcoin', bucket: 'fx', group: 'Digital', druckRationale: 'Liquidity/debasement tell — leads risk-on moves in loose policy' },
+  { symbol: 'ETH-USD', name: 'Ethereum', bucket: 'fx', group: 'Digital', druckRationale: 'DeFi/smart contract platform — risk-on speculative gauge' },
+  { symbol: 'CNY=X', name: 'USD/CNY', bucket: 'fx', group: 'EM FX', druckRationale: 'Yuan — PBOC policy, trade war barometer, EM anchor currency' },
+  { symbol: 'MXN=X', name: 'USD/MXN', bucket: 'fx', group: 'EM FX', druckRationale: 'Peso — high-carry EM currency, US trade dependency, nearshoring' },
 
-  // ── FIXED INCOME ──
+  // ═══════════════════════════════════════════════════════════════
+  // FIXED INCOME
+  // ═══════════════════════════════════════════════════════════════
+  // -- US Treasuries (Yields) --
   { symbol: '^IRX', name: 'US 3-Month T-Bill', bucket: 'fixed_income', group: 'US Treasuries', druckRationale: 'Fed policy rate proxy — front end of the curve' },
   { symbol: '^FVX', name: 'US 5Y Yield', bucket: 'fixed_income', group: 'US Treasuries', druckRationale: 'Belly of the curve — intermediate rate expectations' },
   { symbol: '^TYX', name: 'US 30Y Yield', bucket: 'fixed_income', group: 'US Treasuries', druckRationale: 'Long end — term premium and inflation expectations' },
-  { symbol: 'TLH', name: '10-20 Year Treasury ETF', bucket: 'fixed_income', group: 'Duration', druckRationale: '20Y proxy — the most important duration bucket for rate cycle analysis' },
-  { symbol: 'HYG', name: 'High Yield Bond ETF', bucket: 'fixed_income', group: 'Credit', druckRationale: 'Credit risk appetite — widening = stress, tightening = risk-on' },
-  { symbol: 'TLT', name: 'Long Treasury ETF (20Y+)', bucket: 'fixed_income', group: 'Duration', druckRationale: 'Duration trade — flight to quality vs inflation fear' },
-  { symbol: 'IEF', name: '7-10 Year Treasury ETF', bucket: 'fixed_income', group: 'Duration', druckRationale: 'Mid-duration — 10Y rate sensitivity without long-end vol' },
+
+  // -- Duration ETFs --
   { symbol: 'SHY', name: '1-3 Year Treasury ETF', bucket: 'fixed_income', group: 'Duration', druckRationale: 'Short duration — Fed funds rate sensitivity and cash alternative' },
+  { symbol: 'IEI', name: '3-7 Year Treasury ETF', bucket: 'fixed_income', group: 'Duration', druckRationale: 'Intermediate duration — belly of the curve exposure' },
+  { symbol: 'IEF', name: '7-10 Year Treasury ETF', bucket: 'fixed_income', group: 'Duration', druckRationale: 'Mid-duration — 10Y rate sensitivity without long-end vol' },
+  { symbol: 'TLH', name: '10-20 Year Treasury ETF', bucket: 'fixed_income', group: 'Duration', druckRationale: '20Y proxy — the most important duration bucket for rate cycle analysis' },
+  { symbol: 'TLT', name: 'Long Treasury ETF (20Y+)', bucket: 'fixed_income', group: 'Duration', druckRationale: 'Duration trade — flight to quality vs inflation fear' },
+
+  // -- Credit --
+  { symbol: 'HYG', name: 'High Yield Bond ETF', bucket: 'fixed_income', group: 'Credit', druckRationale: 'Credit risk appetite — widening = stress, tightening = risk-on' },
+  { symbol: 'JNK', name: 'High Yield (SPDR)', bucket: 'fixed_income', group: 'Credit', druckRationale: 'Junk bonds — higher-yield HY exposure, default risk gauge' },
+  { symbol: 'LQD', name: 'Investment Grade Corp', bucket: 'fixed_income', group: 'Credit', druckRationale: 'IG corporate bonds — spread compression/widening, duration + credit risk' },
+  { symbol: 'BKLN', name: 'Senior Loans (Leveraged)', bucket: 'fixed_income', group: 'Credit', druckRationale: 'Floating rate loans — rate-hedged credit, CLO underlying, default risk' },
+
+  // -- Inflation / TIPS --
   { symbol: 'TIP', name: 'TIPS Bond ETF', bucket: 'fixed_income', group: 'Inflation', druckRationale: 'Inflation breakeven proxy — real vs nominal rate expectations' },
+  { symbol: 'STIP', name: 'Short-Term TIPS', bucket: 'fixed_income', group: 'Inflation', druckRationale: 'Near-term inflation expectations — front-end breakevens' },
+
+  // -- International Bonds --
+  { symbol: 'EMB', name: 'EM Sovereign Bonds (USD)', bucket: 'fixed_income', group: 'International Bonds', druckRationale: 'EM sovereign debt — dollar-denominated, spread risk, EM stress gauge' },
+  { symbol: 'BNDX', name: 'International Bond (Vanguard)', bucket: 'fixed_income', group: 'International Bonds', druckRationale: 'Global ex-US bonds — hedged, global rate cycle diversification' },
+  { symbol: 'BWX', name: 'Intl Treasury (SPDR)', bucket: 'fixed_income', group: 'International Bonds', druckRationale: 'Foreign government bonds — unhedged, FX + rate exposure' },
+
+  // -- Mortgage --
+  { symbol: 'MBB', name: 'Mortgage-Backed Securities', bucket: 'fixed_income', group: 'Mortgage', druckRationale: 'Agency MBS — prepayment risk, Fed balance sheet, housing finance' },
 ];
 
 // ─── TYPES ───
@@ -797,25 +952,31 @@ async function refreshMorningLens(): Promise<void> {
   const errors: string[] = [];
   const startTime = Date.now();
 
-  // Fetch OHLC sequentially with delays to avoid Yahoo Finance rate limits on cloud IPs
+  // Fetch OHLC in small batches (3 concurrent) with delays to avoid Yahoo Finance rate limits
   const allBars: Map<string, OHLCBar[]> = new Map();
+  const BATCH_SIZE = 3;
+  const BATCH_DELAY_MS = 2000; // 2s between batches to respect rate limits
 
-  for (let i = 0; i < INSTRUMENTS.length; i++) {
-    try {
-      const bars = await fetchOHLC(INSTRUMENTS[i].symbol, '1y');
-      if (bars.length > 0) {
-        allBars.set(INSTRUMENTS[i].symbol, bars);
+  for (let i = 0; i < INSTRUMENTS.length; i += BATCH_SIZE) {
+    const batch = INSTRUMENTS.slice(i, i + BATCH_SIZE);
+    const batchResults = await Promise.allSettled(
+      batch.map(inst => fetchOHLC(inst.symbol, '1y').then(bars => ({ symbol: inst.symbol, bars })))
+    );
+
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled' && result.value.bars.length > 0) {
+        allBars.set(result.value.symbol, result.value.bars);
       } else {
-        errors.push(`${INSTRUMENTS[i].symbol}: No data`);
-        console.warn(`[LENS] Failed to fetch ${INSTRUMENTS[i].symbol}: No data`);
+        const symbol = result.status === 'fulfilled' ? result.value.symbol : batch[batchResults.indexOf(result)]?.symbol || '?';
+        const errMsg = result.status === 'rejected' ? result.reason?.message : 'No data';
+        errors.push(`${symbol}: ${errMsg}`);
+        console.warn(`[LENS] Failed to fetch ${symbol}: ${errMsg}`);
       }
-    } catch (err: any) {
-      errors.push(`${INSTRUMENTS[i].symbol}: ${err?.message || 'Unknown error'}`);
-      console.warn(`[LENS] Failed to fetch ${INSTRUMENTS[i].symbol}: ${err?.message}`);
     }
-    // Delay between each request to avoid rate limiting
-    if (i < INSTRUMENTS.length - 1) {
-      await new Promise(r => setTimeout(r, 1500));
+
+    // Delay between batches
+    if (i + BATCH_SIZE < INSTRUMENTS.length) {
+      await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
     }
   }
 
@@ -898,6 +1059,76 @@ async function refreshMorningLens(): Promise<void> {
   lensLastRefresh = Date.now();
   lensRefreshErrors = errors;
 
+  // ── Record to Historical Database ──
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const snapshotRecords: SnapshotRecord[] = [];
+
+    for (const [symbol, snap] of newSnapshots) {
+      const bars = allBars.get(symbol);
+      const latestBar = bars && bars.length > 0 ? bars[bars.length - 1] : null;
+
+      snapshotRecords.push({
+        symbol,
+        date: today,
+        open: latestBar?.open || null,
+        high: latestBar?.high || null,
+        low: latestBar?.low || null,
+        close: latestBar?.close || snap.daily.price,
+        volume: latestBar?.volume || null,
+        changePct1d: snap.changePct1d,
+        changePct30d: snap.changePct30d,
+        dailyTrend: snap.daily.state,
+        weeklyTrend: snap.weekly?.state || null,
+        monthlyTrend: snap.monthly?.state || null,
+        phaseNum: snap.phaseData?.phaseNum || null,
+        phaseShort: snap.phaseData?.phaseShort || null,
+        actionBias: snap.phaseData?.actionBias || null,
+        confidence: snap.phaseData?.confidence || null,
+        overallSignal: snap.phaseData?.overallSignal || null,
+        technicalData: {
+          ma50: snap.daily.ma50,
+          ma200: snap.daily.ma200,
+          roc20d: snap.daily.roc20d,
+          slope20d: snap.daily.slope20d,
+        },
+      });
+    }
+
+    if (snapshotRecords.length > 0) {
+      recordSnapshotBatch(snapshotRecords);
+    }
+
+    // Record phase transitions
+    if (newTransitions.length > 0) {
+      const transitionRecords: TransitionRecord[] = newTransitions.map(t => {
+        const snap = newSnapshots.get(t.symbol);
+        return {
+          symbol: t.symbol,
+          date: today,
+          fromPhase: t.fromPhase,
+          toPhase: t.toPhase,
+          fromPhaseShort: t.fromPhaseShort,
+          toPhaseShort: t.toPhaseShort,
+          fromBias: t.fromBias,
+          toBias: t.toBias,
+          biasFlipped: t.biasFlipped,
+          direction: t.direction,
+          severity: t.severity,
+          priceAtTransition: snap?.daily.price || null,
+        };
+      });
+      recordTransitionBatch(transitionRecords);
+    }
+
+    // Update prediction accuracy for older transitions
+    updateTransitionOutcomes();
+
+    console.log(`[HISTORY] Recorded ${snapshotRecords.length} snapshots, ${newTransitions.length} transitions`);
+  } catch (histErr: any) {
+    console.error(`[HISTORY] Error recording to database: ${histErr?.message}`);
+  }
+
   console.log(`[LENS] ✓ Refresh complete — ${newSnapshots.size} instruments, Death Nails: ${currentSignals.deathNails.count}/3, Leading Groups: ${currentSignals.leadingGroups.healthyCount}H/${currentSignals.leadingGroups.brokenCount}B`);
 }
 
@@ -921,10 +1152,12 @@ setTimeout(async () => {
   } catch (err) { console.error('[LENS] Initial refresh error:', err); }
 }, 5000);
 
-// Auto-refresh every 4 hours
+// Auto-refresh every 2 hours for intraday recording
+// (was 4 hours — reduced to capture more intraday snapshots for historical tracking)
+const INTRADAY_REFRESH_MS = 2 * 60 * 60 * 1000; // 2 hours
 setInterval(() => {
   refreshMorningLens().catch(err => console.error('[LENS] Auto-refresh error:', err));
-}, LENS_CACHE_MS);
+}, INTRADAY_REFRESH_MS);
 
 // ─── ARIA NARRATIVE ───
 

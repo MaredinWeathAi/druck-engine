@@ -10,6 +10,12 @@ import fundamentalRouter from './fundamental-data';
 import industryRouter from './industry-drivers';
 import alertRouter from './alert-system';
 import geoEventsRouter, { setGeoEventKeys } from './geo-events';
+import {
+  initDatabase, getDbStats, getSymbolHistory, getSymbolPhaseTimeline,
+  getSymbolTransitions, getRecentTransitions, getLatestSnapshots,
+  computeAccuracyMetrics, getActiveAlgorithmVersion, getAllAlgorithmVersions,
+  getPendingUpdateRequests, requestAlgorithmUpdate, approveAlgorithmUpdate,
+} from './history-store';
 // mtrp-client bridge removed — Market Intel lives entirely in Druck Engine
 
 const app = express();
@@ -695,6 +701,14 @@ async function refreshLiveData() {
   }
 }
 
+// Initialize historical database
+try {
+  initDatabase();
+  console.log('[STARTUP] Historical database initialized');
+} catch (err: any) {
+  console.error('[STARTUP] Failed to init database:', err?.message);
+}
+
 // Initial data refresh
 refreshLiveData();
 
@@ -709,7 +723,7 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '10.0.0',
+    version: '10.1.0',
     name: 'Druck Engine — Smart Money Cycle Inflection Intelligence',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
@@ -1633,6 +1647,139 @@ Return ONLY valid JSON, no markdown fences.`,
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// HISTORICAL DATA TRACKING API
+// ═══════════════════════════════════════════════════════════════════
+
+// Database stats
+app.get('/api/history/stats', (_req, res) => {
+  try {
+    res.json(getDbStats());
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Full history for a symbol
+app.get('/api/history/:symbol', (req, res) => {
+  try {
+    const symbol = decodeURIComponent(req.params.symbol);
+    const limit = parseInt(req.query.limit as string) || 365;
+    const history = getSymbolHistory(symbol, limit);
+    res.json({ symbol, count: history.length, snapshots: history });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Phase timeline for a symbol (date + phase + confidence)
+app.get('/api/history/:symbol/phases', (req, res) => {
+  try {
+    const symbol = decodeURIComponent(req.params.symbol);
+    const timeline = getSymbolPhaseTimeline(symbol);
+    res.json({ symbol, count: timeline.length, timeline });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Phase transitions for a symbol
+app.get('/api/history/:symbol/transitions', (req, res) => {
+  try {
+    const symbol = decodeURIComponent(req.params.symbol);
+    const transitions = getSymbolTransitions(symbol);
+    res.json({ symbol, count: transitions.length, transitions });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Recent transitions across all instruments
+app.get('/api/history/transitions/recent', (req, res) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+    const transitions = getRecentTransitions(days);
+    res.json({ count: transitions.length, days, transitions });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Latest snapshots for all instruments
+app.get('/api/history/snapshots/latest', (_req, res) => {
+  try {
+    const snapshots = getLatestSnapshots();
+    res.json({ count: snapshots.length, snapshots });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Prediction accuracy metrics
+app.get('/api/history/accuracy', (req, res) => {
+  try {
+    const version = req.query.version as string | undefined;
+    const metrics = computeAccuracyMetrics(version);
+    res.json(metrics);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Algorithm version management
+app.get('/api/history/algorithm/versions', (_req, res) => {
+  try {
+    const versions = getAllAlgorithmVersions();
+    const active = getActiveAlgorithmVersion();
+    res.json({ active, versions });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.get('/api/history/algorithm/pending-updates', (_req, res) => {
+  try {
+    const pending = getPendingUpdateRequests();
+    res.json({ count: pending.length, requests: pending });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// CRITICAL: Algorithm update approval — requires explicit user action
+app.post('/api/history/algorithm/approve-update', (req, res) => {
+  try {
+    const { requestId, newVersionId, description, configSnapshot, approvalNote } = req.body;
+    if (!requestId || !newVersionId || !description) {
+      return res.status(400).json({ error: 'Missing required fields: requestId, newVersionId, description' });
+    }
+    approveAlgorithmUpdate(requestId, newVersionId, description, configSnapshot, 'Marcelo', approvalNote || '');
+    res.json({
+      status: 'approved',
+      message: `Algorithm updated to ${newVersionId}. All future classifications will use this version.`,
+      activeVersion: getActiveAlgorithmVersion(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// Request algorithm update (system can call this, but it does NOT auto-apply)
+app.post('/api/history/algorithm/request-update', (req, res) => {
+  try {
+    const { reason, accuracyData } = req.body;
+    if (!reason) return res.status(400).json({ error: 'Missing reason' });
+    const id = requestAlgorithmUpdate({ reason, accuracyData });
+    res.json({
+      status: 'pending',
+      requestId: id,
+      message: 'Update request created. Do you want the system to go through all the data and make updates to the phase algorithm? This requires your explicit approval.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
 // ─── MORNING LENS MODULE ───
 app.use('/api', morningLensRouter);
 app.use('/api', marketIntelRouter);
@@ -1658,7 +1805,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v10.0 — Smart Money Cycle Inflection Intelligence`);
+  console.log(`\n  DRUCK ENGINE v10.1 — Smart Money Cycle Inflection Intelligence + Historical Tracking`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);
