@@ -542,9 +542,11 @@ export interface ExtendedTAResult {
   priceVsSma200: number | null;
   goldenCross: boolean;
   deathCross: boolean;
+  sma50Above200: boolean;          // v10.2: structural trend — is 50d above 200d?
   // Momentum
   rsi14: number | null;
   macd: MACDResult;
+  macdHistSlope: number | null;    // v10.2: 5-day slope of MACD histogram (rate of change of momentum)
   atr14: number | null;
   atrPct: number | null;       // ATR as % of price (volatility)
   // 52-week
@@ -594,6 +596,9 @@ export function computeExtendedTA(
     if (sma50[i - 1]! > sma200[i - 1]! && sma50[i]! <= sma200[i]!) deathCross = true;
   }
 
+  // v10.2: Structural trend — is 50d above 200d?
+  const sma50Above200 = (lastSma50 !== null && lastSma200 !== null) ? lastSma50 > lastSma200 : false;
+
   // RSI
   const rsi = calcRSI(closes);
   const lastRsi = rsi[rsi.length - 1];
@@ -601,6 +606,25 @@ export function computeExtendedTA(
   // MACD
   const macdArr = calcMACD(closes);
   const lastMacd = macdArr[macdArr.length - 1];
+
+  // v10.2: MACD histogram slope — rate of change of momentum over last 5 bars
+  // Positive slope = momentum improving, negative slope = momentum fading
+  let macdHistSlope: number | null = null;
+  if (macdArr.length >= 6) {
+    const recent5 = macdArr.slice(-5).map(m => m.histogram);
+    if (recent5.every(h => h !== null)) {
+      // Linear regression slope of histogram over 5 periods
+      const vals = recent5 as number[];
+      const n = vals.length;
+      const xMean = (n - 1) / 2;  // 0,1,2,3,4 → mean = 2
+      let num = 0, den = 0;
+      for (let i = 0; i < n; i++) {
+        num += (i - xMean) * (vals[i] - vals.reduce((a, b) => a + b, 0) / n);
+        den += (i - xMean) * (i - xMean);
+      }
+      macdHistSlope = den !== 0 ? Math.round((num / den) * 1000) / 1000 : 0;
+    }
+  }
 
   // ATR
   const atr = calcATR(normalized);
@@ -631,9 +655,10 @@ export function computeExtendedTA(
     priceVsSma20: lastSma20 !== null ? Math.round(((current - lastSma20) / lastSma20) * 10000) / 100 : null,
     priceVsSma50: lastSma50 !== null ? Math.round(((current - lastSma50) / lastSma50) * 10000) / 100 : null,
     priceVsSma200: lastSma200 !== null ? Math.round(((current - lastSma200) / lastSma200) * 10000) / 100 : null,
-    goldenCross, deathCross,
+    goldenCross, deathCross, sma50Above200,
     rsi14: lastRsi,
     macd: lastMacd,
+    macdHistSlope,
     atr14: lastAtr,
     atrPct: lastAtr !== null ? Math.round((lastAtr / current) * 10000) / 100 : null,
     highLow,
@@ -1273,23 +1298,308 @@ export function predictGuruBehavior(
 }
 
 
+// ============================================================================
+// v10.2: STRUCTURAL REGIME CLASSIFIER — Druckenmiller Decision-Tree
+// ============================================================================
+//
+// For ETFs/instruments without fundamental data. Classifies regimes using
+// structural market conditions in priority order:
+//
+//   1. TREND STRUCTURE: Price vs 200d MA, 50d vs 200d MA relationship
+//   2. MOMENTUM DIRECTION: MACD histogram sign and slope
+//   3. CONFIRMATION: Volume, RSI, failed breaks adjust confidence only
+//
+// Transition rules are explicit structural events (death cross, break below
+// 200d, MACD histogram flip) — not score fluctuations from noise.
+//
+// Phase lifecycle:
+//   P1 Expansion → P2 Distribution → P3 Exhaustion →
+//   P4 Reversal → P5 Sell Exhaustion → P6 Collapse → P1 ...
+//
+function classifyPhaseStructural(
+  ta: ExtendedTAResult,
+  currentPhase?: InflectionPhase,
+): PhaseClassification {
+  const above200 = ta.priceVsSma200 !== null && ta.priceVsSma200 > 0;
+  const above50 = ta.priceVsSma50 !== null && ta.priceVsSma50 > 0;
+  const sma50Over200 = ta.sma50Above200;
+  const histPositive = ta.macd.histogram !== null && ta.macd.histogram > 0;
+  const histExpanding = ta.macdHistSlope !== null && ta.macdHistSlope > 0.05;   // momentum improving
+  const histContracting = ta.macdHistSlope !== null && ta.macdHistSlope < -0.05; // momentum fading
+
+  // ── DECISION TREE: determine the "natural" regime from structure ──
+  let structuralPhase: InflectionPhase;
+
+  if (above200 && sma50Over200 && histPositive) {
+    // Full uptrend: price > 200d, 50d > 200d, MACD histogram positive
+    structuralPhase = 'NARRATIVE_EXPANSION';  // P1
+  } else if (above200 && sma50Over200 && !histPositive) {
+    // Uptrend but momentum fading: histogram turned negative while still above MAs
+    structuralPhase = 'INSTITUTIONAL_ACCUMULATION';  // P2 — distribution zone
+  } else if (above200 && !sma50Over200) {
+    // Price above 200d but 50d crossed below — death cross territory
+    structuralPhase = 'BUYING_EXHAUSTION';  // P3 — trend structure breaking
+  } else if (!above200 && !sma50Over200 && !histPositive && !histContracting) {
+    // Below 200d, bearish MA alignment, steady negative momentum
+    structuralPhase = 'NARRATIVE_REVERSAL';  // P4 — confirmed downtrend
+  } else if (!above200 && !sma50Over200 && (histContracting || histPositive)) {
+    // Below 200d but momentum inflecting (histogram contracting toward zero or turning positive)
+    // This is the "rate of change of rate of change" — decline decelerating
+    structuralPhase = 'SELLING_EXHAUSTION';  // P5 — momentum inflection in downtrend
+  } else if (!above200 && sma50Over200) {
+    // Price below 200d but 50d is crossing back above — golden cross forming
+    structuralPhase = 'NARRATIVE_COLLAPSE';  // P6 — recovery forming
+  } else {
+    // Edge case fallback — use the most neutral phase
+    structuralPhase = 'INSTITUTIONAL_ACCUMULATION';
+  }
+
+  // ── TRANSITION RULES: structural events required to leave current phase ──
+  // If we have a previous phase, check whether a structural event justifies the transition.
+  // Without a definitive event, the current phase persists (natural anti-noise).
+  if (currentPhase && currentPhase !== structuralPhase) {
+    const shouldTransition = checkStructuralTransition(currentPhase, structuralPhase, ta);
+    if (!shouldTransition) {
+      structuralPhase = currentPhase;  // stay in current phase
+    }
+  }
+
+  // ── CONFIDENCE from confirmation signals ──
+  let confidence = 50;  // base confidence
+  const transitions: string[] = [];
+
+  // Volume confirmation
+  if (ta.volume) {
+    if (structuralPhase === 'NARRATIVE_EXPANSION') {
+      if (ta.volume.greenDayVolRatio > 1.2) { confidence += 10; transitions.push('Volume confirms: green days leading'); }
+      if (ta.volume.volumeExhaustion === 'buying') { confidence -= 15; transitions.push('Warning: buying volume exhaustion detected'); }
+    }
+    if (structuralPhase === 'NARRATIVE_REVERSAL' || structuralPhase === 'NARRATIVE_COLLAPSE') {
+      if (ta.volume.volumeExhaustion === 'selling') { confidence += 10; transitions.push('Selling exhaustion forming in volume'); }
+      if (ta.volume.volumeTrend === 'contracting') { confidence += 5; transitions.push('Volume contracting — selling pressure drying up'); }
+    }
+    if (structuralPhase === 'INSTITUTIONAL_ACCUMULATION') {
+      if (ta.volume.volumeTrend === 'contracting') { confidence += 10; transitions.push('Quiet volume confirms distribution/basing'); }
+    }
+  }
+
+  // RSI confirmation
+  if (ta.rsi14 !== null) {
+    if (structuralPhase === 'NARRATIVE_EXPANSION' && ta.rsi14 >= 50 && ta.rsi14 <= 70) confidence += 10;  // healthy momentum
+    if (structuralPhase === 'NARRATIVE_EXPANSION' && ta.rsi14 > 75) { confidence -= 10; transitions.push('RSI overextended — watch for pullback'); }
+    if (structuralPhase === 'SELLING_EXHAUSTION' && ta.rsi14 < 30) { confidence += 15; transitions.push('RSI deeply oversold — high probability inflection zone'); }
+    if (structuralPhase === 'NARRATIVE_REVERSAL' && ta.rsi14 < 25) { confidence += 10; transitions.push('Extreme RSI oversold — momentum inflection likely'); }
+  }
+
+  // 52-week position
+  if (ta.highLow) {
+    if (structuralPhase === 'NARRATIVE_EXPANSION' && ta.highLow.pctFromHigh > -5) confidence += 5;  // near highs = healthy
+    if (structuralPhase === 'NARRATIVE_REVERSAL' && ta.highLow.pctFromHigh < -25) confidence += 5;  // deep drawdown confirms
+    if (structuralPhase === 'NARRATIVE_COLLAPSE' && ta.highLow.pctFromHigh < -30) { confidence += 10; transitions.push('Deep capitulation — maximum fear zone'); }
+  }
+
+  // Failed breaks
+  if (ta.failedBreaks.length > 0) {
+    const recentFailed = ta.failedBreaks.filter(b => b.day >= ta.failedBreaks[0].day - 10);
+    if (recentFailed.some(b => b.type === 'failed_breakout')) {
+      if (structuralPhase === 'NARRATIVE_EXPANSION') { confidence -= 10; transitions.push('Failed breakout — potential bull trap'); }
+    }
+    if (recentFailed.some(b => b.type === 'failed_breakdown')) {
+      if (structuralPhase === 'SELLING_EXHAUSTION' || structuralPhase === 'NARRATIVE_COLLAPSE') {
+        confidence += 10; transitions.push('Failed breakdown — bears losing control');
+      }
+    }
+  }
+
+  // Relative strength vs SPY
+  if (ta.rsVsSpy20d !== null) {
+    if (Math.abs(ta.rsVsSpy20d) > 5) {
+      if (ta.rsVsSpy20d > 5 && (structuralPhase === 'NARRATIVE_EXPANSION' || structuralPhase === 'SELLING_EXHAUSTION')) {
+        confidence += 5;
+      }
+      if (ta.rsVsSpy20d < -5 && (structuralPhase === 'NARRATIVE_REVERSAL' || structuralPhase === 'BUYING_EXHAUSTION')) {
+        confidence += 5;
+      }
+    }
+  }
+
+  // Approaching next phase signals
+  if (structuralPhase === 'NARRATIVE_EXPANSION' && histContracting) {
+    transitions.push('MACD momentum fading — approaching Distribution zone');
+  }
+  if (structuralPhase === 'INSTITUTIONAL_ACCUMULATION' && ta.deathCross) {
+    transitions.push('Death cross imminent — approaching Exhaustion');
+  }
+  if (structuralPhase === 'NARRATIVE_REVERSAL' && ta.macdHistSlope !== null && ta.macdHistSlope > 0) {
+    transitions.push('Momentum decelerating — approaching Sell Exhaustion');
+  }
+  if (structuralPhase === 'SELLING_EXHAUSTION' && ta.goldenCross) {
+    transitions.push('Golden cross forming — approaching Recovery');
+  }
+
+  confidence = Math.max(20, Math.min(95, confidence));
+
+  // Phase metadata
+  const phaseMetadata: Record<InflectionPhase, Omit<PhaseClassification, 'phase' | 'confidence' | 'transitionSignals'>> = {
+    NARRATIVE_EXPANSION: {
+      description: 'FULL UPTREND — Price above 200d, 50d above 200d, positive momentum. Ride the trend.',
+      actionBias: 'BUY', riskLevel: 'LOW',
+      nextPhase: 'INSTITUTIONAL_ACCUMULATION',
+    },
+    INSTITUTIONAL_ACCUMULATION: {
+      description: 'MOMENTUM FADING — Still above MAs but MACD rolling over. Smart money distributes into strength.',
+      actionBias: 'REDUCE', riskLevel: 'MODERATE',
+      nextPhase: 'BUYING_EXHAUSTION',
+    },
+    BUYING_EXHAUSTION: {
+      description: 'TREND BREAKING — Death cross forming, 50d crossing below 200d. Exit zone.',
+      actionBias: 'SHORT', riskLevel: 'HIGH',
+      nextPhase: 'NARRATIVE_REVERSAL',
+    },
+    NARRATIVE_REVERSAL: {
+      description: 'CONFIRMED DOWNTREND — Below 200d, bearish MA alignment, negative momentum.',
+      actionBias: 'REDUCE', riskLevel: 'EXTREME',
+      nextPhase: 'SELLING_EXHAUSTION',
+    },
+    SELLING_EXHAUSTION: {
+      description: 'MOMENTUM INFLECTION — Still below 200d but decline decelerating. Smart money starts buying.',
+      actionBias: 'ACCUMULATE', riskLevel: 'HIGH',
+      nextPhase: 'NARRATIVE_COLLAPSE',
+    },
+    NARRATIVE_COLLAPSE: {
+      description: 'RECOVERY FORMING — Golden cross building, momentum turning. Highest conviction entry zone.',
+      actionBias: 'BUY', riskLevel: 'MODERATE',
+      nextPhase: 'NARRATIVE_EXPANSION',
+    },
+  };
+
+  // Sub-phase detection for Distribution
+  let accumulationSubPhase: AccumulationSubPhase | undefined;
+  if (structuralPhase === 'INSTITUTIONAL_ACCUMULATION') {
+    const isLate = ta.deathCross || (ta.priceVsSma50 !== null && ta.priceVsSma50 < 1)
+      || (ta.macdHistSlope !== null && ta.macdHistSlope < -0.1);
+    accumulationSubPhase = isLate ? 'LATE_BREAKOUT_IMMINENT' : 'EARLY_STEALTH';
+    if (isLate) {
+      transitions.push('Distribution entering LATE phase — trend structure weakening');
+    }
+  }
+
+  const guruSignals = predictGuruBehavior(structuralPhase, { technical: 50, fundamental: 50, valuation: 50, inflection: 50, narrative: 50, composite: 50, weights: { technical: 0.25, fundamental: 0.20, valuation: 0.20, inflection: 0.25, narrative: 0.10 } }, ta, 'neutral');
+
+  return {
+    phase: structuralPhase,
+    confidence,
+    ...phaseMetadata[structuralPhase],
+    transitionSignals: transitions,
+    accumulationSubPhase,
+    guruSignals,
+  };
+}
+
+// ── Structural transition rules ──
+// Returns true if there is a definitive structural event justifying the move
+// from currentPhase to newPhase. Without one, the current phase holds.
+function checkStructuralTransition(
+  current: InflectionPhase,
+  proposed: InflectionPhase,
+  ta: ExtendedTAResult,
+): boolean {
+  const above200 = ta.priceVsSma200 !== null && ta.priceVsSma200 > 0;
+  const below200 = ta.priceVsSma200 !== null && ta.priceVsSma200 < 0;
+  const above50 = ta.priceVsSma50 !== null && ta.priceVsSma50 > 0;
+  const histPos = ta.macd.histogram !== null && ta.macd.histogram > 0;
+  const histNeg = ta.macd.histogram !== null && ta.macd.histogram < 0;
+  const deepBelow200 = ta.priceVsSma200 !== null && ta.priceVsSma200 < -3;  // clearly below, not just touching
+
+  switch (current) {
+    case 'NARRATIVE_EXPANSION':
+      // P1 → P2: MACD histogram turns negative while still above 200d
+      if (proposed === 'INSTITUTIONAL_ACCUMULATION') return histNeg && above200;
+      // P1 → P3: 50d crosses below 200d (death cross) — skip P2
+      if (proposed === 'BUYING_EXHAUSTION') return ta.deathCross;
+      // P1 → P4: price breaks below 200d with negative MACD — rapid deterioration
+      if (proposed === 'NARRATIVE_REVERSAL') return below200 && histNeg && !ta.sma50Above200;
+      return false;
+
+    case 'INSTITUTIONAL_ACCUMULATION':
+      // P2 → P1: MACD histogram turns positive again — momentum recovered
+      if (proposed === 'NARRATIVE_EXPANSION') return histPos && above200 && ta.sma50Above200;
+      // P2 → P3: death cross fires or price breaks below 200d
+      if (proposed === 'BUYING_EXHAUSTION') return ta.deathCross || !ta.sma50Above200;
+      // P2 → P4: full breakdown — below 200d, bearish MAs
+      if (proposed === 'NARRATIVE_REVERSAL') return deepBelow200 && !ta.sma50Above200 && histNeg;
+      return false;
+
+    case 'BUYING_EXHAUSTION':
+      // P3 → P4: price closes well below 200d — downtrend confirmed
+      if (proposed === 'NARRATIVE_REVERSAL') return deepBelow200 && histNeg;
+      // P3 → P2: recovery — price reclaims above 200d, histogram improving
+      if (proposed === 'INSTITUTIONAL_ACCUMULATION') return above200 && !ta.deathCross;
+      // P3 → P1: strong recovery — full trend restored (rare)
+      if (proposed === 'NARRATIVE_EXPANSION') return above200 && ta.sma50Above200 && histPos;
+      return false;
+
+    case 'NARRATIVE_REVERSAL':
+      // P4 → P5: MACD histogram starts contracting (becoming less negative) or turns positive
+      if (proposed === 'SELLING_EXHAUSTION') return (ta.macdHistSlope !== null && ta.macdHistSlope > 0.05) || histPos;
+      // P4 → P6: golden cross forming while still below 200d
+      if (proposed === 'NARRATIVE_COLLAPSE') return ta.goldenCross || ta.sma50Above200;
+      // P4 → P1: V-shaped recovery straight to uptrend (rare but possible)
+      if (proposed === 'NARRATIVE_EXPANSION') return above200 && ta.sma50Above200 && histPos;
+      return false;
+
+    case 'SELLING_EXHAUSTION':
+      // P5 → P6: golden cross fires or 50d crosses above 200d
+      if (proposed === 'NARRATIVE_COLLAPSE') return ta.goldenCross || ta.sma50Above200;
+      // P5 → P1: strong recovery — price reclaims above 200d with positive momentum
+      if (proposed === 'NARRATIVE_EXPANSION') return above200 && ta.sma50Above200 && histPos;
+      // P5 → P4: failed bottom — momentum rolls back over negative
+      if (proposed === 'NARRATIVE_REVERSAL') return histNeg && (ta.macdHistSlope !== null && ta.macdHistSlope < -0.05);
+      return false;
+
+    case 'NARRATIVE_COLLAPSE':
+      // P6 → P1: price breaks above 200d — full uptrend restored
+      if (proposed === 'NARRATIVE_EXPANSION') return above200 && histPos;
+      // P6 → P2: price above 200d but momentum already fading
+      if (proposed === 'INSTITUTIONAL_ACCUMULATION') return above200 && histNeg;
+      // P6 → P4: golden cross failed, rolls back to downtrend
+      if (proposed === 'NARRATIVE_REVERSAL') return !ta.sma50Above200 && histNeg && deepBelow200;
+      return false;
+
+    default:
+      return true;  // unknown state — allow transition
+  }
+}
+
+
 export function classifyPhase(
   pillars: PillarScores,
   ta: ExtendedTAResult,
   accelTrend: 'accelerating' | 'decelerating' | 'neutral',
-  currentPhase?: InflectionPhase,  // v10.1: previous phase for hysteresis
-  hasRealFundamentals: boolean = true,  // v10.1: false when fundamental/valuation/narrative are null defaults
+  currentPhase?: InflectionPhase,
+  hasRealFundamentals: boolean = true,
 ): PhaseClassification {
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // v10.2: STRUCTURAL REGIME CLASSIFIER (ETF path)
+  // Replaces point-accumulation scoring for instruments without fundamental data.
+  //
+  // Based on how Druckenmiller reads charts:
+  //   1. Trend structure first (price vs 200d, 50d vs 200d)
+  //   2. Momentum direction (MACD histogram slope = rate of change of momentum)
+  //   3. Confirmation signals adjust confidence, never flip the phase
+  //   4. Explicit transition rules — only structural breaks change the regime
+  // ════════════════════════════════════════════════════════════════════════════
+
+  if (!hasRealFundamentals) {
+    return classifyPhaseStructural(ta, currentPhase);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // ORIGINAL PILLAR-BASED SCORER (stock path — has real fundamental/valuation data)
+  // ════════════════════════════════════════════════════════════════════════════
   const { technical, fundamental, valuation, inflection, narrative } = pillars;
 
-  // v10.1: Detect if pillars are "real" data vs null defaults stuck at 50
-  // When fundamental/valuation/narrative are all exactly 50, they carry no signal —
-  // don't let them participate in threshold checks they can never meaningfully pass
-  const hasFund = hasRealFundamentals && fundamental !== 50;
-  const hasVal = hasRealFundamentals && valuation !== 50;
-  const hasNarr = hasRealFundamentals && narrative !== 50;
-
-  // Phase scoring: each phase gets a confidence score based on pillar patterns
   const phaseScores: Record<InflectionPhase, number> = {
     NARRATIVE_EXPANSION: 0,
     BUYING_EXHAUSTION: 0,
@@ -1300,109 +1610,76 @@ export function classifyPhase(
   };
 
   // --- NARRATIVE EXPANSION ---
-  // Strong uptrend near highs with healthy momentum — requires conviction from multiple TA signals
   if (technical > 65) phaseScores.NARRATIVE_EXPANSION += 20;
-  if (hasNarr && narrative > 65) phaseScores.NARRATIVE_EXPANSION += 20;
+  if (narrative > 65) phaseScores.NARRATIVE_EXPANSION += 20;
   if (accelTrend === 'accelerating') phaseScores.NARRATIVE_EXPANSION += 20;
-  if (hasVal && valuation < 40) phaseScores.NARRATIVE_EXPANSION += 10; // expensive = expansion
+  if (valuation < 40) phaseScores.NARRATIVE_EXPANSION += 10;
   if (ta.rsi14 !== null && ta.rsi14 > 60) phaseScores.NARRATIVE_EXPANSION += 15;
-  if (ta.highLow && ta.highLow.pctFromHigh > -5) phaseScores.NARRATIVE_EXPANSION += 15;  // v10.1: tightened from -10 to -5
-  // v10.1: When no fundamental data, require STRONG technicals (above 200dma, above 50dma, positive MACD)
-  if (!hasRealFundamentals && ta.priceVsSma200 !== null && ta.priceVsSma200 > 5
-      && ta.priceVsSma50 !== null && ta.priceVsSma50 > 2
-      && ta.macd.histogram !== null && ta.macd.histogram > 0) {
-    phaseScores.NARRATIVE_EXPANSION += 15;
-  }
+  if (ta.highLow && ta.highLow.pctFromHigh > -5) phaseScores.NARRATIVE_EXPANSION += 15;
 
   // --- BUYING EXHAUSTION ---
-  // High price but fading momentum + volume divergence — needs clear divergence signals
-  // v10.0: Enhanced with Tepper-derived signals — Smart Money Cycle calibrated
-  if (technical > 55 && inflection < 40) phaseScores.BUYING_EXHAUSTION += 25;  // v10.1: tightened inflection from <45 to <40
+  if (technical > 55 && inflection < 40) phaseScores.BUYING_EXHAUSTION += 25;
   if (accelTrend === 'decelerating') phaseScores.BUYING_EXHAUSTION += 20;
   if (ta.volume?.volumeExhaustion === 'buying') phaseScores.BUYING_EXHAUSTION += 20;
-  if (ta.volume?.greenDayVolRatio !== undefined && ta.volume.greenDayVolRatio < 0.7) phaseScores.BUYING_EXHAUSTION += 15;  // v10.1: tightened from 0.8 to 0.7
+  if (ta.volume?.greenDayVolRatio !== undefined && ta.volume.greenDayVolRatio < 0.7) phaseScores.BUYING_EXHAUSTION += 15;
   if (ta.rsi14 !== null && ta.rsi14 > 70) phaseScores.BUYING_EXHAUSTION += 10;
-  if (hasVal && valuation < 35) phaseScores.BUYING_EXHAUSTION += 10; // very expensive
-  // v10.0 Tepper signals: stretched valuation + fading narrative = his highest-conviction sell
-  if (hasVal && hasNarr && valuation < 30 && narrative > 70) phaseScores.BUYING_EXHAUSTION += 12;
-  if (hasVal && technical > 60 && inflection < 40 && valuation < 40) phaseScores.BUYING_EXHAUSTION += 8; // triple divergence
+  if (valuation < 35) phaseScores.BUYING_EXHAUSTION += 10;
+  if (valuation < 30 && narrative > 70) phaseScores.BUYING_EXHAUSTION += 12;
+  if (technical > 60 && inflection < 40 && valuation < 40) phaseScores.BUYING_EXHAUSTION += 8;
 
   // --- NARRATIVE COLLAPSE ---
-  // Everything falling, momentum confirms — needs death cross or deep drawdown, not just a dip
-  if (technical < 30) phaseScores.NARRATIVE_COLLAPSE += 20;  // v10.1: tightened from <35 to <30
-  if (hasNarr && narrative < 40) phaseScores.NARRATIVE_COLLAPSE += 15;
+  if (technical < 30) phaseScores.NARRATIVE_COLLAPSE += 20;
+  if (narrative < 40) phaseScores.NARRATIVE_COLLAPSE += 15;
   if (accelTrend === 'decelerating') phaseScores.NARRATIVE_COLLAPSE += 15;
-  if (inflection < 30) phaseScores.NARRATIVE_COLLAPSE += 15;  // v10.1: tightened from <35 to <30
-  if (ta.deathCross) phaseScores.NARRATIVE_COLLAPSE += 20;  // v10.1: boosted from 15 to 20 — death cross is definitive
+  if (inflection < 30) phaseScores.NARRATIVE_COLLAPSE += 15;
+  if (ta.deathCross) phaseScores.NARRATIVE_COLLAPSE += 20;
   if (ta.highLow && ta.highLow.pctFromHigh < -25) phaseScores.NARRATIVE_COLLAPSE += 10;
-  if (ta.rsi14 !== null && ta.rsi14 < 35) phaseScores.NARRATIVE_COLLAPSE += 10;  // v10.1: tightened from <40 to <35
-  // v10.1: When no fundamental data, require CLEAR breakdown (below both MAs, negative MACD)
-  if (!hasRealFundamentals && ta.priceVsSma200 !== null && ta.priceVsSma200 < -10
-      && ta.priceVsSma50 !== null && ta.priceVsSma50 < -5
-      && ta.macd.histogram !== null && ta.macd.histogram < 0) {
-    phaseScores.NARRATIVE_COLLAPSE += 15;
-  }
+  if (ta.rsi14 !== null && ta.rsi14 < 35) phaseScores.NARRATIVE_COLLAPSE += 10;
 
   // --- SELLING EXHAUSTION ---
-  // Price still low but momentum inflecting, volume drying up on red days
-  // v10.0: Enhanced with Druckenmiller bottom-fishing patterns (Q4-2022: 47 new positions)
-  if (technical < 35 && inflection > 55) phaseScores.SELLING_EXHAUSTION += 25;  // v10.1: tightened both thresholds
-  if (accelTrend === 'accelerating' && technical < 40) phaseScores.SELLING_EXHAUSTION += 20;  // v10.1: tightened from <45 to <40
+  if (technical < 35 && inflection > 55) phaseScores.SELLING_EXHAUSTION += 25;
+  if (accelTrend === 'accelerating' && technical < 40) phaseScores.SELLING_EXHAUSTION += 20;
   if (ta.volume?.volumeExhaustion === 'selling') phaseScores.SELLING_EXHAUSTION += 20;
-  if (ta.rsi14 !== null && ta.rsi14 < 30) phaseScores.SELLING_EXHAUSTION += 15;  // v10.1: tightened from <35 to <30
-  if (hasVal && valuation > 65) phaseScores.SELLING_EXHAUSTION += 10; // cheap
+  if (ta.rsi14 !== null && ta.rsi14 < 30) phaseScores.SELLING_EXHAUSTION += 15;
+  if (valuation > 65) phaseScores.SELLING_EXHAUSTION += 10;
   if (ta.failedBreaks.some(b => b.type === 'failed_breakdown')) phaseScores.SELLING_EXHAUSTION += 10;
-  // v10.0 Druckenmiller signals: deep value + inflection turning = his extraordinary entry zone
-  if (hasVal && hasFund && valuation > 70 && fundamental > 55) phaseScores.SELLING_EXHAUSTION += 10;
-  if (technical < 25 && accelTrend === 'accelerating') phaseScores.SELLING_EXHAUSTION += 8;  // v10.1: tightened from <30 to <25
+  if (valuation > 70 && fundamental > 55) phaseScores.SELLING_EXHAUSTION += 10;
+  if (technical < 25 && accelTrend === 'accelerating') phaseScores.SELLING_EXHAUSTION += 8;
 
   // --- INSTITUTIONAL ACCUMULATION ---
-  // Price flat/basing, quiet volume — a "nothing happening" regime
   if (technical >= 40 && technical <= 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 15;
-  if (hasFund && fundamental > 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 15;
-  if (hasNarr && narrative < 45) phaseScores.INSTITUTIONAL_ACCUMULATION += 10;
+  if (fundamental > 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 15;
+  if (narrative < 45) phaseScores.INSTITUTIONAL_ACCUMULATION += 10;
   if (ta.volume?.volumeTrend === 'contracting') phaseScores.INSTITUTIONAL_ACCUMULATION += 15;
-  if (ta.atrPct !== null && ta.atrPct < 2) phaseScores.INSTITUTIONAL_ACCUMULATION += 10; // low volatility
-  if (hasVal && valuation > 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 15; // reasonable valuation
-  if (inflection >= 45 && inflection <= 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 10; // neutral accel
-  // v10.1: When no fundamental data, this is the "sideways/range-bound" default for mid-range technicals
-  if (!hasRealFundamentals && ta.atrPct !== null && ta.atrPct < 2.5
-      && ta.rsi14 !== null && ta.rsi14 >= 40 && ta.rsi14 <= 60) {
-    phaseScores.INSTITUTIONAL_ACCUMULATION += 15;  // quiet range = accumulation
-  }
+  if (ta.atrPct !== null && ta.atrPct < 2) phaseScores.INSTITUTIONAL_ACCUMULATION += 10;
+  if (valuation > 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 15;
+  if (inflection >= 45 && inflection <= 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 10;
 
   // --- NARRATIVE REVERSAL ---
-  // New momentum starting after a base — requires golden cross or strong inflection, not just a bounce
   if (inflection > 60) phaseScores.NARRATIVE_REVERSAL += 20;
   if (accelTrend === 'accelerating') phaseScores.NARRATIVE_REVERSAL += 20;
   if (technical > 45 && technical < 65) phaseScores.NARRATIVE_REVERSAL += 15;
-  if (hasNarr && narrative > 50 && narrative < 70) phaseScores.NARRATIVE_REVERSAL += 10;
-  if (ta.goldenCross) phaseScores.NARRATIVE_REVERSAL += 20;  // v10.1: boosted from 15 to 20 — golden cross is definitive
+  if (narrative > 50 && narrative < 70) phaseScores.NARRATIVE_REVERSAL += 10;
+  if (ta.goldenCross) phaseScores.NARRATIVE_REVERSAL += 20;
   if (ta.volume?.greenDayVolRatio !== undefined && ta.volume.greenDayVolRatio > 1.3) phaseScores.NARRATIVE_REVERSAL += 10;
   if (ta.failedBreaks.some(b => b.type === 'failed_breakdown')) phaseScores.NARRATIVE_REVERSAL += 10;
 
-  // Find winning phase
   let bestPhase: InflectionPhase = 'NARRATIVE_EXPANSION';
   let bestScore = 0;
   for (const [phase, score] of Object.entries(phaseScores)) {
     if (score > bestScore) { bestPhase = phase as InflectionPhase; bestScore = score; }
   }
 
-  // v10.1: PHASE HYSTERESIS — prevent oscillation from minor score fluctuations
-  // A phase transition represents a regime change and should require decisive evidence.
-  // The current phase persists unless a new phase beats it by at least HYSTERESIS_MARGIN points.
-  const HYSTERESIS_MARGIN = 15;  // new phase must lead current by 15+ points to transition
+  // Hysteresis for stock path too
+  const HYSTERESIS_MARGIN = 15;
   if (currentPhase && currentPhase !== bestPhase) {
     const currentScore = phaseScores[currentPhase];
-    const margin = bestScore - currentScore;
-    if (margin < HYSTERESIS_MARGIN) {
-      // Not enough conviction to switch — stay in current phase
+    if (bestScore - currentScore < HYSTERESIS_MARGIN) {
       bestPhase = currentPhase;
       bestScore = currentScore;
     }
   }
 
-  // Confidence = how much the winning phase leads the second place
   const sorted = Object.values(phaseScores).sort((a, b) => b - a);
   const confidence = sorted[0] > 0
     ? Math.min(95, Math.round(((sorted[0] - (sorted[1] || 0)) / sorted[0]) * 100 + 30))
