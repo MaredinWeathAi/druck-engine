@@ -1277,8 +1277,17 @@ export function classifyPhase(
   pillars: PillarScores,
   ta: ExtendedTAResult,
   accelTrend: 'accelerating' | 'decelerating' | 'neutral',
+  currentPhase?: InflectionPhase,  // v10.1: previous phase for hysteresis
+  hasRealFundamentals: boolean = true,  // v10.1: false when fundamental/valuation/narrative are null defaults
 ): PhaseClassification {
   const { technical, fundamental, valuation, inflection, narrative } = pillars;
+
+  // v10.1: Detect if pillars are "real" data vs null defaults stuck at 50
+  // When fundamental/valuation/narrative are all exactly 50, they carry no signal —
+  // don't let them participate in threshold checks they can never meaningfully pass
+  const hasFund = hasRealFundamentals && fundamental !== 50;
+  const hasVal = hasRealFundamentals && valuation !== 50;
+  const hasNarr = hasRealFundamentals && narrative !== 50;
 
   // Phase scoring: each phase gets a confidence score based on pillar patterns
   const phaseScores: Record<InflectionPhase, number> = {
@@ -1291,67 +1300,84 @@ export function classifyPhase(
   };
 
   // --- NARRATIVE EXPANSION ---
-  // High technical + high narrative + accelerating + stretched valuation
+  // Strong uptrend near highs with healthy momentum — requires conviction from multiple TA signals
   if (technical > 65) phaseScores.NARRATIVE_EXPANSION += 20;
-  if (narrative > 65) phaseScores.NARRATIVE_EXPANSION += 20;
+  if (hasNarr && narrative > 65) phaseScores.NARRATIVE_EXPANSION += 20;
   if (accelTrend === 'accelerating') phaseScores.NARRATIVE_EXPANSION += 20;
-  if (valuation < 40) phaseScores.NARRATIVE_EXPANSION += 10; // expensive = expansion
+  if (hasVal && valuation < 40) phaseScores.NARRATIVE_EXPANSION += 10; // expensive = expansion
   if (ta.rsi14 !== null && ta.rsi14 > 60) phaseScores.NARRATIVE_EXPANSION += 15;
-  if (ta.highLow && ta.highLow.pctFromHigh > -10) phaseScores.NARRATIVE_EXPANSION += 15;
+  if (ta.highLow && ta.highLow.pctFromHigh > -5) phaseScores.NARRATIVE_EXPANSION += 15;  // v10.1: tightened from -10 to -5
+  // v10.1: When no fundamental data, require STRONG technicals (above 200dma, above 50dma, positive MACD)
+  if (!hasRealFundamentals && ta.priceVsSma200 !== null && ta.priceVsSma200 > 5
+      && ta.priceVsSma50 !== null && ta.priceVsSma50 > 2
+      && ta.macd.histogram !== null && ta.macd.histogram > 0) {
+    phaseScores.NARRATIVE_EXPANSION += 15;
+  }
 
   // --- BUYING EXHAUSTION ---
-  // High price but fading momentum + volume divergence
+  // High price but fading momentum + volume divergence — needs clear divergence signals
   // v10.0: Enhanced with Tepper-derived signals — Smart Money Cycle calibrated
-  if (technical > 55 && inflection < 45) phaseScores.BUYING_EXHAUSTION += 25;
+  if (technical > 55 && inflection < 40) phaseScores.BUYING_EXHAUSTION += 25;  // v10.1: tightened inflection from <45 to <40
   if (accelTrend === 'decelerating') phaseScores.BUYING_EXHAUSTION += 20;
   if (ta.volume?.volumeExhaustion === 'buying') phaseScores.BUYING_EXHAUSTION += 20;
-  if (ta.volume?.greenDayVolRatio !== undefined && ta.volume.greenDayVolRatio < 0.8) phaseScores.BUYING_EXHAUSTION += 15;
+  if (ta.volume?.greenDayVolRatio !== undefined && ta.volume.greenDayVolRatio < 0.7) phaseScores.BUYING_EXHAUSTION += 15;  // v10.1: tightened from 0.8 to 0.7
   if (ta.rsi14 !== null && ta.rsi14 > 70) phaseScores.BUYING_EXHAUSTION += 10;
-  if (valuation < 35) phaseScores.BUYING_EXHAUSTION += 10; // very expensive
+  if (hasVal && valuation < 35) phaseScores.BUYING_EXHAUSTION += 10; // very expensive
   // v10.0 Tepper signals: stretched valuation + fading narrative = his highest-conviction sell
-  if (valuation < 30 && narrative > 70) phaseScores.BUYING_EXHAUSTION += 12; // peak narrative + extreme valuation
-  if (technical > 60 && inflection < 40 && valuation < 40) phaseScores.BUYING_EXHAUSTION += 8; // triple divergence
+  if (hasVal && hasNarr && valuation < 30 && narrative > 70) phaseScores.BUYING_EXHAUSTION += 12;
+  if (hasVal && technical > 60 && inflection < 40 && valuation < 40) phaseScores.BUYING_EXHAUSTION += 8; // triple divergence
 
   // --- NARRATIVE COLLAPSE ---
-  // Everything falling, momentum confirms, narrative dying
-  if (technical < 35) phaseScores.NARRATIVE_COLLAPSE += 20;
-  if (narrative < 40) phaseScores.NARRATIVE_COLLAPSE += 15;
+  // Everything falling, momentum confirms — needs death cross or deep drawdown, not just a dip
+  if (technical < 30) phaseScores.NARRATIVE_COLLAPSE += 20;  // v10.1: tightened from <35 to <30
+  if (hasNarr && narrative < 40) phaseScores.NARRATIVE_COLLAPSE += 15;
   if (accelTrend === 'decelerating') phaseScores.NARRATIVE_COLLAPSE += 15;
-  if (inflection < 35) phaseScores.NARRATIVE_COLLAPSE += 15;
-  if (ta.deathCross) phaseScores.NARRATIVE_COLLAPSE += 15;
+  if (inflection < 30) phaseScores.NARRATIVE_COLLAPSE += 15;  // v10.1: tightened from <35 to <30
+  if (ta.deathCross) phaseScores.NARRATIVE_COLLAPSE += 20;  // v10.1: boosted from 15 to 20 — death cross is definitive
   if (ta.highLow && ta.highLow.pctFromHigh < -25) phaseScores.NARRATIVE_COLLAPSE += 10;
-  if (ta.rsi14 !== null && ta.rsi14 < 40) phaseScores.NARRATIVE_COLLAPSE += 10;
+  if (ta.rsi14 !== null && ta.rsi14 < 35) phaseScores.NARRATIVE_COLLAPSE += 10;  // v10.1: tightened from <40 to <35
+  // v10.1: When no fundamental data, require CLEAR breakdown (below both MAs, negative MACD)
+  if (!hasRealFundamentals && ta.priceVsSma200 !== null && ta.priceVsSma200 < -10
+      && ta.priceVsSma50 !== null && ta.priceVsSma50 < -5
+      && ta.macd.histogram !== null && ta.macd.histogram < 0) {
+    phaseScores.NARRATIVE_COLLAPSE += 15;
+  }
 
   // --- SELLING EXHAUSTION ---
   // Price still low but momentum inflecting, volume drying up on red days
   // v10.0: Enhanced with Druckenmiller bottom-fishing patterns (Q4-2022: 47 new positions)
-  if (technical < 40 && inflection > 50) phaseScores.SELLING_EXHAUSTION += 25;
-  if (accelTrend === 'accelerating' && technical < 45) phaseScores.SELLING_EXHAUSTION += 20;
+  if (technical < 35 && inflection > 55) phaseScores.SELLING_EXHAUSTION += 25;  // v10.1: tightened both thresholds
+  if (accelTrend === 'accelerating' && technical < 40) phaseScores.SELLING_EXHAUSTION += 20;  // v10.1: tightened from <45 to <40
   if (ta.volume?.volumeExhaustion === 'selling') phaseScores.SELLING_EXHAUSTION += 20;
-  if (ta.rsi14 !== null && ta.rsi14 < 35) phaseScores.SELLING_EXHAUSTION += 15;
-  if (valuation > 65) phaseScores.SELLING_EXHAUSTION += 10; // cheap
+  if (ta.rsi14 !== null && ta.rsi14 < 30) phaseScores.SELLING_EXHAUSTION += 15;  // v10.1: tightened from <35 to <30
+  if (hasVal && valuation > 65) phaseScores.SELLING_EXHAUSTION += 10; // cheap
   if (ta.failedBreaks.some(b => b.type === 'failed_breakdown')) phaseScores.SELLING_EXHAUSTION += 10;
   // v10.0 Druckenmiller signals: deep value + inflection turning = his extraordinary entry zone
-  if (valuation > 70 && fundamental > 55) phaseScores.SELLING_EXHAUSTION += 10; // cheap + fundamentals intact
-  if (technical < 30 && accelTrend === 'accelerating') phaseScores.SELLING_EXHAUSTION += 8; // Druck bottom-fish signal
+  if (hasVal && hasFund && valuation > 70 && fundamental > 55) phaseScores.SELLING_EXHAUSTION += 10;
+  if (technical < 25 && accelTrend === 'accelerating') phaseScores.SELLING_EXHAUSTION += 8;  // v10.1: tightened from <30 to <25
 
   // --- INSTITUTIONAL ACCUMULATION ---
-  // Price flat/basing, quiet volume, fundamentals intact, narrative dead
+  // Price flat/basing, quiet volume — a "nothing happening" regime
   if (technical >= 40 && technical <= 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 15;
-  if (fundamental > 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 15;
-  if (narrative < 45) phaseScores.INSTITUTIONAL_ACCUMULATION += 10;
+  if (hasFund && fundamental > 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 15;
+  if (hasNarr && narrative < 45) phaseScores.INSTITUTIONAL_ACCUMULATION += 10;
   if (ta.volume?.volumeTrend === 'contracting') phaseScores.INSTITUTIONAL_ACCUMULATION += 15;
   if (ta.atrPct !== null && ta.atrPct < 2) phaseScores.INSTITUTIONAL_ACCUMULATION += 10; // low volatility
-  if (valuation > 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 15; // reasonable valuation
+  if (hasVal && valuation > 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 15; // reasonable valuation
   if (inflection >= 45 && inflection <= 55) phaseScores.INSTITUTIONAL_ACCUMULATION += 10; // neutral accel
+  // v10.1: When no fundamental data, this is the "sideways/range-bound" default for mid-range technicals
+  if (!hasRealFundamentals && ta.atrPct !== null && ta.atrPct < 2.5
+      && ta.rsi14 !== null && ta.rsi14 >= 40 && ta.rsi14 <= 60) {
+    phaseScores.INSTITUTIONAL_ACCUMULATION += 15;  // quiet range = accumulation
+  }
 
   // --- NARRATIVE REVERSAL ---
-  // New momentum starting, inflection positive, narrative shifting
+  // New momentum starting after a base — requires golden cross or strong inflection, not just a bounce
   if (inflection > 60) phaseScores.NARRATIVE_REVERSAL += 20;
   if (accelTrend === 'accelerating') phaseScores.NARRATIVE_REVERSAL += 20;
   if (technical > 45 && technical < 65) phaseScores.NARRATIVE_REVERSAL += 15;
-  if (narrative > 50 && narrative < 70) phaseScores.NARRATIVE_REVERSAL += 10;
-  if (ta.goldenCross) phaseScores.NARRATIVE_REVERSAL += 15;
+  if (hasNarr && narrative > 50 && narrative < 70) phaseScores.NARRATIVE_REVERSAL += 10;
+  if (ta.goldenCross) phaseScores.NARRATIVE_REVERSAL += 20;  // v10.1: boosted from 15 to 20 — golden cross is definitive
   if (ta.volume?.greenDayVolRatio !== undefined && ta.volume.greenDayVolRatio > 1.3) phaseScores.NARRATIVE_REVERSAL += 10;
   if (ta.failedBreaks.some(b => b.type === 'failed_breakdown')) phaseScores.NARRATIVE_REVERSAL += 10;
 
@@ -1360,6 +1386,20 @@ export function classifyPhase(
   let bestScore = 0;
   for (const [phase, score] of Object.entries(phaseScores)) {
     if (score > bestScore) { bestPhase = phase as InflectionPhase; bestScore = score; }
+  }
+
+  // v10.1: PHASE HYSTERESIS — prevent oscillation from minor score fluctuations
+  // A phase transition represents a regime change and should require decisive evidence.
+  // The current phase persists unless a new phase beats it by at least HYSTERESIS_MARGIN points.
+  const HYSTERESIS_MARGIN = 15;  // new phase must lead current by 15+ points to transition
+  if (currentPhase && currentPhase !== bestPhase) {
+    const currentScore = phaseScores[currentPhase];
+    const margin = bestScore - currentScore;
+    if (margin < HYSTERESIS_MARGIN) {
+      // Not enough conviction to switch — stay in current phase
+      bestPhase = currentPhase;
+      bestScore = currentScore;
+    }
   }
 
   // Confidence = how much the winning phase leads the second place
@@ -1625,6 +1665,7 @@ export function computeFullInflection(
   fundamentalData: { revenueGrowthYoY: number | null; epsGrowthYoY: number | null; operatingMargin: number | null; netMargin: number | null; roic: number | null; fcfYield: number | null; debtToEquity: number | null; piotroskiFScore: number | null; currentRatio: number | null },
   valuationData: { peForward: number | null; evToEbitda: number | null; pegRatio: number | null; fcfYield: number | null; pePctile: number | null; gfValueMargin: number | null },
   narrativeInput: { manualSentiment?: number; earningsBeatRate?: number | null; insiderNetPct?: number | null; analystRevisionsUp?: number; analystRevisionsDown?: number },
+  currentPhase?: InflectionPhase,  // v10.1: previous phase for hysteresis
 ): FullInflectionResult | null {
   // Phase 1+2: Extended TA
   const extTA = computeExtendedTA(ticker, name, bars, spyCloses);
@@ -1643,8 +1684,12 @@ export function computeFullInflection(
 
   const pillars = computePillarScores(techScore, fundScore, valScore, inflScore, narrScore);
 
-  // Phase 6: Classification
-  const phase = classifyPhase(pillars, extTA, accelData.trend);
+  // v10.1: Detect if we have real fundamental/valuation data or just null defaults
+  const hasRealFundamentals = Object.values(fundamentalData).some(v => v !== null)
+    || Object.values(valuationData).some(v => v !== null);
+
+  // Phase 6: Classification (with hysteresis from previous phase)
+  const phase = classifyPhase(pillars, extTA, accelData.trend, currentPhase, hasRealFundamentals);
 
   // Phase 7: Exhaustion
   const buyExh = scoreBuyingExhaustion(extTA, accelData, valuationData);

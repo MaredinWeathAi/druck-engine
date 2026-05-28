@@ -927,7 +927,7 @@ const PHASE_SHORT_MAP: Record<InflectionPhase, string> = {
   'NARRATIVE_COLLAPSE': 'Collapse',
 };
 
-function computePhaseForInstrument(bars: OHLCBar[], spyCloses: number[]): PhaseSnapshot | null {
+function computePhaseForInstrument(bars: OHLCBar[], spyCloses: number[], prevPhase?: InflectionPhase): PhaseSnapshot | null {
   // Convert OHLCBar (date: Date) to OHLCVBar (date: string) for inflection engine
   const ohlcvBars: OHLCVBar[] = bars.map(b => ({
     date: b.date.toISOString().split('T')[0],
@@ -948,6 +948,7 @@ function computePhaseForInstrument(bars: OHLCBar[], spyCloses: number[]): PhaseS
     const result = computeFullInflection(
       '', '', ohlcvBars, spyCloses,
       neutralAccel, nullFundamentals, nullValuation, neutralNarrative,
+      prevPhase,  // v10.1: pass previous phase for hysteresis
     );
     if (!result) return null;
 
@@ -1066,7 +1067,9 @@ async function refreshMorningLens(): Promise<void> {
     const changePct30d = +((latestClose - close30dAgo) / close30dAgo * 100).toFixed(2);
 
     // Compute Smart Money Cycle phase using inflection engine
-    const phaseData = bars.length >= 50 ? computePhaseForInstrument(bars, spyCloses) : null;
+    // v10.1: Pass previous phase for hysteresis — prevents spurious transitions from minor moves
+    const prevPhaseData = previousPhaseMap.get(inst.symbol);
+    const phaseData = bars.length >= 50 ? computePhaseForInstrument(bars, spyCloses, prevPhaseData?.phase) : null;
 
     newSnapshots.set(inst.symbol, {
       symbol: inst.symbol,
