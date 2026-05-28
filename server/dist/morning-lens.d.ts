@@ -1,0 +1,17 @@
+declare const router: import("express-serve-static-core").Router;
+interface Instrument {
+    symbol: string;
+    name: string;
+    bucket: 'equities' | 'commodities' | 'fx' | 'fixed_income';
+    group: string;
+    druckRationale: string;
+    isDeathNail?: boolean;
+    isLeadingGroup?: boolean;
+    isRatio?: boolean;
+    ratioComponents?: [string, string];
+}
+declare const INSTRUMENTS: Instrument[];
+declare function refreshMorningLens(): Promise<void>;
+export default router;
+export { INSTRUMENTS, refreshMorningLens };
+//# sourceMappingURL=morning-lens.d.ts.map
