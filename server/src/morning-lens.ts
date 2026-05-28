@@ -99,7 +99,7 @@ const INSTRUMENTS: Instrument[] = [
   { symbol: 'SKYY', name: 'Cloud Computing', bucket: 'equities', group: 'Tech Industries', druckRationale: 'Cloud infrastructure spend — secular digital transformation gauge' },
   { symbol: 'CIBR', name: 'Cybersecurity', bucket: 'equities', group: 'Tech Industries', druckRationale: 'Cybersecurity spend — non-discretionary IT budget, geopolitical risk driver' },
   { symbol: 'BOTZ', name: 'Robotics & AI', bucket: 'equities', group: 'Tech Industries', druckRationale: 'AI/automation capex — secular theme with industrial cycle overlay' },
-  { symbol: 'SOXX', name: 'Semiconductors (PHLX)', bucket: 'equities', group: 'Tech Industries', druckRationale: 'Broader semi coverage — PHLX index includes foundries and equipment' },
+  // SOXX removed — duplicate semiconductor coverage (SMH in Leading Groups)
 
   // -- Healthcare Sub-Sectors --
   { symbol: 'XBI', name: 'Biotech', bucket: 'equities', group: 'Healthcare Industries', druckRationale: 'Speculative biotech — risk appetite gauge, M&A activity proxy' },
@@ -133,8 +133,8 @@ const INSTRUMENTS: Instrument[] = [
   { symbol: 'ARKK', name: 'ARK Innovation', bucket: 'equities', group: 'Thematic', druckRationale: 'Speculative growth proxy — retail sentiment and liquidity gauge' },
   { symbol: 'ICLN', name: 'Clean Energy', bucket: 'equities', group: 'Thematic', druckRationale: 'Energy transition — policy-driven, subsidy-dependent growth' },
   { symbol: 'TAN', name: 'Solar', bucket: 'equities', group: 'Thematic', druckRationale: 'Solar industry — IRA subsidy beneficiary, rate-sensitive project economics' },
-  { symbol: 'KWEB', name: 'China Internet', bucket: 'equities', group: 'Thematic', druckRationale: 'Chinese tech — regulatory risk, US-China decoupling barometer' },
-  { symbol: 'HACK', name: 'Cybersecurity (ISE)', bucket: 'equities', group: 'Thematic', druckRationale: 'Cybersecurity broader coverage — ISE index, different weighting than CIBR' },
+  { symbol: 'KWEB', name: 'China Internet', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'Chinese tech — regulatory risk, US-China decoupling barometer' },
+  // HACK removed — duplicate cybersecurity coverage (CIBR in Tech Industries)
 
   // ═══════════════════════════════════════════════════════════════
   // INTERNATIONAL / REGIONAL ETFs

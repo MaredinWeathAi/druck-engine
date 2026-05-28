@@ -2430,7 +2430,13 @@ function switchBucket(bucket) {
 function renderInstrumentTable(bucket) {
   if (!lensData) return;
   var tbody = document.getElementById('instrument-tbody');
-  var filtered = bucket === 'all' ? lensData : lensData.filter(function(i) { return i.bucket === bucket; });
+  var intlGroups = ['International', 'Europe', 'Asia-Pacific', 'Latin America', 'Other EM'];
+  var filtered = bucket === 'all' ? lensData : lensData.filter(function(i) {
+    if (i.bucket !== bucket) return false;
+    // Equities tab: exclude international ETFs (they live in the International tab)
+    if (bucket === 'equities' && intlGroups.indexOf(i.group) !== -1) return false;
+    return true;
+  });
   if (filtered.length === 0) {
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--dim)">No instruments in this bucket</td></tr>';
     return;
