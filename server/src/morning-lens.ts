@@ -18,8 +18,10 @@ import {
 const router = Router();
 
 // Initialize yahoo-finance2 v3 (requires instantiation with config)
+// validation.logErrors: false suppresses console spam
+// validation.logOptions.enabled: false prevents thrown validation errors for edge-case symbols
 const yahooFinance = new (YahooFinance as any)({
-  validation: { logErrors: false },
+  validation: { logErrors: false, logOptions: { enabled: false } },
   suppressNotices: ['yahooSurvey', 'ripHistorical'],
 });
 
@@ -389,7 +391,7 @@ interface OHLCBar {
 }
 
 async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar[]> {
-  const maxRetries = 3;
+  const maxRetries = 4;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const endDate = new Date();
@@ -398,19 +400,21 @@ async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar
       else if (period === '5y') startDate.setFullYear(startDate.getFullYear() - 5);
       else startDate.setFullYear(startDate.getFullYear() - 1);
 
-      // Use chart() — the native v3 API (historical() is deprecated and maps to chart internally)
+      // Use chart() with validation: false to prevent schema validation errors
+      // (Yahoo sometimes returns valid data with missing meta fields like currency/regularMarketPrice)
       const result = await yahooFinance.chart(symbol, {
         period1: startDate,
         period2: endDate,
         interval: '1d' as any,
-      }) as any;
+      }, { validateResult: false }) as any;
 
       // chart() returns { quotes: [...], meta: {...} }
       const quotes = result?.quotes || result || [];
-      if (!quotes || quotes.length === 0) {
+      if (!quotes || !Array.isArray(quotes) || quotes.length === 0) {
         if (attempt < maxRetries) {
-          console.warn(`[YF] No data for ${symbol} (attempt ${attempt}/${maxRetries}), retrying in ${attempt * 3}s...`);
-          await new Promise(r => setTimeout(r, attempt * 3000));
+          const delayMs = attempt * 4000; // escalating: 4s, 8s, 12s
+          console.warn(`[YF] No data for ${symbol} (attempt ${attempt}/${maxRetries}), retrying in ${delayMs / 1000}s...`);
+          await new Promise(r => setTimeout(r, delayMs));
           continue;
         }
         console.warn(`[YF] No data for ${symbol} after ${maxRetries} attempts`);
@@ -428,12 +432,20 @@ async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar
           volume: q.volume || 0,
         }));
     } catch (err: any) {
+      const msg = err?.message || 'Unknown';
+      // Rate-limit or validation errors — wait longer before retry
+      const isRateLimit = msg.includes('Too Many') || msg.includes('429') || msg.includes('throttle');
+      const isValidation = msg.includes('validation') || msg.includes('schema') || msg.includes('Failed Yahoo');
+      const delayMs = isRateLimit ? attempt * 8000 : (isValidation ? attempt * 2000 : attempt * 4000);
+
       if (attempt < maxRetries) {
-        console.warn(`[YF] Error fetching ${symbol} (attempt ${attempt}/${maxRetries}): ${err?.message}, retrying...`);
-        await new Promise(r => setTimeout(r, attempt * 3000));
+        if (!isValidation) { // Don't spam logs for known validation issues
+          console.warn(`[YF] Error fetching ${symbol} (attempt ${attempt}/${maxRetries}): ${msg.slice(0, 80)}, retrying in ${delayMs / 1000}s...`);
+        }
+        await new Promise(r => setTimeout(r, delayMs));
         continue;
       }
-      console.error(`[YF] Error fetching ${symbol} after ${maxRetries} attempts:`, err?.message);
+      console.error(`[YF] Failed ${symbol} after ${maxRetries} attempts: ${msg.slice(0, 100)}`);
       return [];
     }
   }
@@ -952,10 +964,12 @@ async function refreshMorningLens(): Promise<void> {
   const errors: string[] = [];
   const startTime = Date.now();
 
-  // Fetch OHLC in small batches (3 concurrent) with delays to avoid Yahoo Finance rate limits
+  // Fetch OHLC in small batches with generous delays to avoid Yahoo Finance rate limits
+  // Railway shared IPs get throttled harder — conservative settings are critical
   const allBars: Map<string, OHLCBar[]> = new Map();
-  const BATCH_SIZE = 3;
-  const BATCH_DELAY_MS = 2000; // 2s between batches to respect rate limits
+  const BATCH_SIZE = 2;        // Only 2 concurrent (was 3 — less pressure on Yahoo)
+  const BATCH_DELAY_MS = 3000; // 3s between batches (was 2s)
+  const failedSymbols: string[] = [];
 
   for (let i = 0; i < INSTRUMENTS.length; i += BATCH_SIZE) {
     const batch = INSTRUMENTS.slice(i, i + BATCH_SIZE);
@@ -963,14 +977,15 @@ async function refreshMorningLens(): Promise<void> {
       batch.map(inst => fetchOHLC(inst.symbol, '1y').then(bars => ({ symbol: inst.symbol, bars })))
     );
 
-    for (const result of batchResults) {
+    for (let j = 0; j < batchResults.length; j++) {
+      const result = batchResults[j];
+      const symbol = batch[j]?.symbol || '?';
       if (result.status === 'fulfilled' && result.value.bars.length > 0) {
         allBars.set(result.value.symbol, result.value.bars);
       } else {
-        const symbol = result.status === 'fulfilled' ? result.value.symbol : batch[batchResults.indexOf(result)]?.symbol || '?';
-        const errMsg = result.status === 'rejected' ? result.reason?.message : 'No data';
+        const errMsg = result.status === 'rejected' ? (result.reason?.message || 'Rejected') : 'No data';
         errors.push(`${symbol}: ${errMsg}`);
-        console.warn(`[LENS] Failed to fetch ${symbol}: ${errMsg}`);
+        failedSymbols.push(symbol);
       }
     }
 
@@ -980,7 +995,31 @@ async function refreshMorningLens(): Promise<void> {
     }
   }
 
-  console.log(`[LENS] Fetched ${allBars.size}/${INSTRUMENTS.length} instruments in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+  // RETRY PASS: Re-attempt failed symbols individually with longer delays
+  // This catches rate-limit failures that resolve after a cooldown
+  if (failedSymbols.length > 0 && failedSymbols.length < INSTRUMENTS.length * 0.8) {
+    console.log(`[LENS] Retry pass: ${failedSymbols.length} failed symbols...`);
+    await new Promise(r => setTimeout(r, 10000)); // 10s cooldown before retries
+
+    for (const sym of failedSymbols) {
+      try {
+        const bars = await fetchOHLC(sym, '1y');
+        if (bars.length > 0) {
+          allBars.set(sym, bars);
+          // Remove from errors
+          const idx = errors.findIndex(e => e.startsWith(sym + ':'));
+          if (idx >= 0) errors.splice(idx, 1);
+          console.log(`[LENS] Retry succeeded: ${sym} (${bars.length} bars)`);
+        }
+      } catch (e: any) {
+        // Still failed — leave in errors
+      }
+      await new Promise(r => setTimeout(r, 4000)); // 4s between individual retries
+    }
+  }
+
+  const fetchDuration = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`[LENS] Fetched ${allBars.size}/${INSTRUMENTS.length} instruments in ${fetchDuration}s (${errors.length} errors)`);
 
   // Compute snapshots for each instrument
   const newSnapshots: Map<string, InstrumentSnapshot> = new Map();
@@ -1028,19 +1067,44 @@ async function refreshMorningLens(): Promise<void> {
     });
   }
 
+  // ── STALE DATA PRESERVATION ──
+  // If this refresh got significantly fewer instruments than we already have,
+  // it was likely a rate-limit failure — keep the previous good data instead of wiping it.
+  // Also merge: for any instruments that DID succeed, update them; keep stale data for the rest.
+  const previousSize = instrumentSnapshots.size;
+  const newSize = newSnapshots.size;
+  const MIN_SUCCESS_RATIO = 0.3; // At least 30% must succeed to accept refresh
+
+  if (newSize === 0 && previousSize > 0) {
+    console.warn(`[LENS] ⚠ Refresh returned 0 instruments but we have ${previousSize} cached — KEEPING STALE DATA`);
+    lensRefreshErrors = errors;
+    return; // Don't overwrite anything
+  }
+
   // Detect phase transitions BEFORE overwriting snapshots
   const newTransitions = computePhaseTransitions(newSnapshots, previousPhaseMap);
   if (newTransitions.length > 0) {
     phaseTransitions = newTransitions;
     console.log(`[LENS] ⚡ ${newTransitions.length} phase transition(s) detected: ${newTransitions.map(t => `${t.symbol} P${t.fromPhase}→P${t.toPhase}`).join(', ')}`);
   }
-  // Store current phases as previous for next refresh
-  previousPhaseMap = new Map();
-  for (const [symbol, snap] of newSnapshots) {
-    if (snap.phaseData) previousPhaseMap.set(symbol, snap.phaseData);
-  }
 
-  instrumentSnapshots = newSnapshots;
+  if (previousSize > 0 && newSize < previousSize * MIN_SUCCESS_RATIO) {
+    console.warn(`[LENS] ⚠ Refresh only got ${newSize}/${INSTRUMENTS.length} (had ${previousSize}) — KEEPING STALE + merging updates`);
+    // Merge: update what succeeded, keep stale for what didn't
+    for (const [symbol, snap] of newSnapshots) {
+      instrumentSnapshots.set(symbol, snap);
+    }
+    lensRefreshErrors = errors;
+  } else {
+    // Normal case: good refresh — replace all data
+    // Store current phases as previous for next refresh
+    previousPhaseMap = new Map();
+    for (const [symbol, snap] of newSnapshots) {
+      if (snap.phaseData) previousPhaseMap.set(symbol, snap.phaseData);
+    }
+
+    instrumentSnapshots = newSnapshots;
+  }
 
   // Compute signals
   previousSignals = currentSignals;
@@ -1132,25 +1196,31 @@ async function refreshMorningLens(): Promise<void> {
   console.log(`[LENS] ✓ Refresh complete — ${newSnapshots.size} instruments, Death Nails: ${currentSignals.deathNails.count}/3, Leading Groups: ${currentSignals.leadingGroups.healthyCount}H/${currentSignals.leadingGroups.brokenCount}B`);
 }
 
-// Auto-refresh on startup (delayed 5 seconds to let server start)
-// If initial refresh gets 0 instruments (Yahoo rate-limited), retry after 30s, then 60s
-setTimeout(async () => {
-  try {
-    await refreshMorningLens();
-    if (instrumentSnapshots.size === 0) {
-      console.warn('[LENS] Initial refresh got 0 instruments — retrying in 30s...');
-      setTimeout(async () => {
-        try {
-          await refreshMorningLens();
-          if (instrumentSnapshots.size === 0) {
-            console.warn('[LENS] 2nd attempt got 0 instruments — retrying in 60s...');
-            setTimeout(() => refreshMorningLens().catch(e => console.error('[LENS] 3rd attempt error:', e)), 60000);
-          }
-        } catch (e) { console.error('[LENS] 2nd attempt error:', e); }
-      }, 30000);
+// Auto-refresh on startup with resilient retry loop
+// Keeps retrying with escalating delays until we get data
+(async () => {
+  const STARTUP_RETRIES = 5;
+  const RETRY_DELAYS = [5000, 30000, 60000, 120000, 300000]; // 5s, 30s, 1m, 2m, 5m
+
+  for (let attempt = 0; attempt < STARTUP_RETRIES; attempt++) {
+    const delay = RETRY_DELAYS[attempt] || 300000;
+    if (attempt > 0) {
+      console.log(`[LENS] Startup retry ${attempt + 1}/${STARTUP_RETRIES} in ${delay / 1000}s...`);
     }
-  } catch (err) { console.error('[LENS] Initial refresh error:', err); }
-}, 5000);
+    await new Promise(r => setTimeout(r, delay));
+
+    try {
+      await refreshMorningLens();
+      if (instrumentSnapshots.size >= INSTRUMENTS.length * 0.5) {
+        console.log(`[LENS] ✓ Startup complete — ${instrumentSnapshots.size} instruments loaded`);
+        break;
+      }
+      console.warn(`[LENS] Startup attempt ${attempt + 1}: only ${instrumentSnapshots.size}/${INSTRUMENTS.length} instruments`);
+    } catch (err: any) {
+      console.error(`[LENS] Startup attempt ${attempt + 1} error: ${err?.message}`);
+    }
+  }
+})();
 
 // Auto-refresh every 2 hours for intraday recording
 // (was 4 hours — reduced to capture more intraday snapshots for historical tracking)
@@ -1367,12 +1437,28 @@ router.get('/lens/narrative', async (req: Request, res: Response) => {
 
 // Debug endpoint — shows refresh errors and fetch diagnostics
 router.get('/lens/debug', (req: Request, res: Response) => {
+  const successRate = INSTRUMENTS.length > 0
+    ? ((instrumentSnapshots.size / INSTRUMENTS.length) * 100).toFixed(1)
+    : '0';
+  const missingSymbols = INSTRUMENTS
+    .filter(i => !instrumentSnapshots.has(i.symbol))
+    .map(i => i.symbol);
+
   res.json({
     instrumentCount: instrumentSnapshots.size,
     totalInstruments: INSTRUMENTS.length,
+    successRate: `${successRate}%`,
+    missingSymbols,
+    missingCount: missingSymbols.length,
     lastRefresh: lensLastRefresh ? new Date(lensLastRefresh).toISOString() : null,
-    errors: lensRefreshErrors,
+    lastRefreshAgo: lensLastRefresh ? `${((Date.now() - lensLastRefresh) / 60000).toFixed(1)} min ago` : null,
+    errors: lensRefreshErrors.slice(0, 20),
     errorCount: lensRefreshErrors.length,
+    hasSignals: !!currentSignals,
+    dataHealth: instrumentSnapshots.size >= INSTRUMENTS.length * 0.9 ? 'HEALTHY'
+      : instrumentSnapshots.size >= INSTRUMENTS.length * 0.5 ? 'DEGRADED'
+      : instrumentSnapshots.size > 0 ? 'POOR'
+      : 'NO DATA',
   });
 });
 

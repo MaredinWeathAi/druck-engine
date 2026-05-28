@@ -938,6 +938,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     <!-- Chart Grid Page -->
     <div class="page" id="page-chartgrid">
       <button class="lens-refresh-btn" id="cg-refresh-btn" onclick="refreshLens()">⟳ Refresh Data</button>
+      <span id="cg-data-health" style="float:right;margin-right:12px;margin-top:2px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:4px"></span>
 
       <!-- Phase Transitions Alert (duplicated for Chart Grid page) -->
       <div class="phase-transitions-panel empty" id="cg-phase-transitions-panel">
@@ -2394,6 +2395,20 @@ function loadChartGrid() {
   }).catch(function(err) {
     console.error('Country valuations load error:', err);
   });
+
+  // Data health indicator
+  apiCall('/api/lens/debug').then(function(debug) {
+    var el = document.getElementById('cg-data-health');
+    if (!el || !debug) return;
+    var health = debug.dataHealth || 'UNKNOWN';
+    var colors = { HEALTHY: '#0ea5e9', DEGRADED: '#f59e0b', POOR: '#f97316', 'NO DATA': '#ef4444' };
+    var color = colors[health] || '#94a3b8';
+    el.style.background = color + '22';
+    el.style.color = color;
+    el.style.border = '1px solid ' + color + '55';
+    el.textContent = debug.instrumentCount + '/' + debug.totalInstruments + ' — ' + health;
+    if (debug.lastRefreshAgo) el.title = 'Last refresh: ' + debug.lastRefreshAgo + '. Missing: ' + (debug.missingSymbols || []).join(', ');
+  }).catch(function() {});
 }
 
 function switchBucket(bucket) {
