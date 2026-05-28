@@ -83,7 +83,7 @@ const INSTRUMENTS = [
     { symbol: 'SKYY', name: 'Cloud Computing', bucket: 'equities', group: 'Tech Industries', druckRationale: 'Cloud infrastructure spend — secular digital transformation gauge' },
     { symbol: 'CIBR', name: 'Cybersecurity', bucket: 'equities', group: 'Tech Industries', druckRationale: 'Cybersecurity spend — non-discretionary IT budget, geopolitical risk driver' },
     { symbol: 'BOTZ', name: 'Robotics & AI', bucket: 'equities', group: 'Tech Industries', druckRationale: 'AI/automation capex — secular theme with industrial cycle overlay' },
-    { symbol: 'SOXX', name: 'Semiconductors (PHLX)', bucket: 'equities', group: 'Tech Industries', druckRationale: 'Broader semi coverage — PHLX index includes foundries and equipment' },
+    // SOXX removed — duplicate semiconductor coverage (SMH in Leading Groups)
     // -- Healthcare Sub-Sectors --
     { symbol: 'XBI', name: 'Biotech', bucket: 'equities', group: 'Healthcare Industries', druckRationale: 'Speculative biotech — risk appetite gauge, M&A activity proxy' },
     { symbol: 'IHI', name: 'Medical Devices', bucket: 'equities', group: 'Healthcare Industries', druckRationale: 'Med-tech innovation — procedure volume and hospital capex cycle' },
@@ -110,8 +110,8 @@ const INSTRUMENTS = [
     { symbol: 'ARKK', name: 'ARK Innovation', bucket: 'equities', group: 'Thematic', druckRationale: 'Speculative growth proxy — retail sentiment and liquidity gauge' },
     { symbol: 'ICLN', name: 'Clean Energy', bucket: 'equities', group: 'Thematic', druckRationale: 'Energy transition — policy-driven, subsidy-dependent growth' },
     { symbol: 'TAN', name: 'Solar', bucket: 'equities', group: 'Thematic', druckRationale: 'Solar industry — IRA subsidy beneficiary, rate-sensitive project economics' },
-    { symbol: 'KWEB', name: 'China Internet', bucket: 'equities', group: 'Thematic', druckRationale: 'Chinese tech — regulatory risk, US-China decoupling barometer' },
-    { symbol: 'HACK', name: 'Cybersecurity (ISE)', bucket: 'equities', group: 'Thematic', druckRationale: 'Cybersecurity broader coverage — ISE index, different weighting than CIBR' },
+    { symbol: 'KWEB', name: 'China Internet', bucket: 'equities', group: 'Asia-Pacific', druckRationale: 'Chinese tech — regulatory risk, US-China decoupling barometer' },
+    // HACK removed — duplicate cybersecurity coverage (CIBR in Tech Industries)
     // ═══════════════════════════════════════════════════════════════
     // INTERNATIONAL / REGIONAL ETFs
     // ═══════════════════════════════════════════════════════════════
@@ -727,7 +727,7 @@ const PHASE_SHORT_MAP = {
     'SELLING_EXHAUSTION': 'Sell Exhaustion',
     'NARRATIVE_COLLAPSE': 'Collapse',
 };
-function computePhaseForInstrument(bars, spyCloses) {
+function computePhaseForInstrument(bars, spyCloses, prevPhase) {
     // Convert OHLCBar (date: Date) to OHLCVBar (date: string) for inflection engine
     const ohlcvBars = bars.map(b => ({
         date: b.date.toISOString().split('T')[0],
@@ -743,7 +743,7 @@ function computePhaseForInstrument(bars, spyCloses) {
     const nullValuation = { peForward: null, evToEbitda: null, pegRatio: null, fcfYield: null, pePctile: null, gfValueMargin: null };
     const neutralNarrative = {};
     try {
-        const result = (0, inflection_engine_1.computeFullInflection)('', '', ohlcvBars, spyCloses, neutralAccel, nullFundamentals, nullValuation, neutralNarrative);
+        const result = (0, inflection_engine_1.computeFullInflection)('', '', ohlcvBars, spyCloses, neutralAccel, nullFundamentals, nullValuation, neutralNarrative, prevPhase);
         if (!result)
             return null;
         const phase = result.phase.phase;
@@ -846,7 +846,9 @@ async function refreshMorningLens() {
         const changePct1d = +((latestClose - prevClose) / prevClose * 100).toFixed(2);
         const changePct30d = +((latestClose - close30dAgo) / close30dAgo * 100).toFixed(2);
         // Compute Smart Money Cycle phase using inflection engine
-        const phaseData = bars.length >= 50 ? computePhaseForInstrument(bars, spyCloses) : null;
+        // v10.1: Pass previous phase for hysteresis — prevents spurious transitions from minor moves
+        const prevPhaseData = previousPhaseMap.get(inst.symbol);
+        const phaseData = bars.length >= 50 ? computePhaseForInstrument(bars, spyCloses, prevPhaseData?.phase) : null;
         newSnapshots.set(inst.symbol, {
             symbol: inst.symbol,
             name: inst.name,

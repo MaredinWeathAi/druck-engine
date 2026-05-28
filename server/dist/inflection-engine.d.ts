@@ -115,8 +115,10 @@ export interface ExtendedTAResult {
     priceVsSma200: number | null;
     goldenCross: boolean;
     deathCross: boolean;
+    sma50Above200: boolean;
     rsi14: number | null;
     macd: MACDResult;
+    macdHistSlope: number | null;
     atr14: number | null;
     atrPct: number | null;
     highLow: HighLowData | null;
@@ -225,7 +227,7 @@ export interface GuruBehaviorPrediction {
  * - AI/Semis: aggressive rotator, entered early, trimmed fast
  */
 export declare function predictGuruBehavior(phase: InflectionPhase, pillars: PillarScores, ta: ExtendedTAResult, accelTrend: 'accelerating' | 'decelerating' | 'neutral'): GuruBehaviorPrediction;
-export declare function classifyPhase(pillars: PillarScores, ta: ExtendedTAResult, accelTrend: 'accelerating' | 'decelerating' | 'neutral'): PhaseClassification;
+export declare function classifyPhase(pillars: PillarScores, ta: ExtendedTAResult, accelTrend: 'accelerating' | 'decelerating' | 'neutral', currentPhase?: InflectionPhase, hasRealFundamentals?: boolean): PhaseClassification;
 export interface ExhaustionScore {
     type: 'BUYING_EXHAUSTION' | 'SELLING_EXHAUSTION';
     points: number;
@@ -295,6 +297,6 @@ export declare function computeFullInflection(ticker: string, name: string, bars
     insiderNetPct?: number | null;
     analystRevisionsUp?: number;
     analystRevisionsDown?: number;
-}): FullInflectionResult | null;
+}, currentPhase?: InflectionPhase): FullInflectionResult | null;
 export default router;
 //# sourceMappingURL=inflection-engine.d.ts.map
