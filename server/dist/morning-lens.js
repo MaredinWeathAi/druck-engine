@@ -18,12 +18,23 @@ const inflection_engine_1 = require("./inflection-engine");
 const history_store_1 = require("./history-store");
 const router = (0, express_1.Router)();
 // Initialize yahoo-finance2 v3 (requires instantiation with config)
-// validation.logErrors: false suppresses console spam
-// validation.logOptions.enabled: false prevents thrown validation errors for edge-case symbols
-const yahooFinance = new yahoo_finance2_1.default({
-    validation: { logErrors: false, logOptions: { enabled: false } },
-    suppressNotices: ['yahooSurvey', 'ripHistorical'],
-});
+// Use try/catch to handle constructor option changes across patch versions
+let yahooFinance;
+try {
+    yahooFinance = new yahoo_finance2_1.default({
+        validation: { logErrors: false, logOptions: { enabled: false } },
+        suppressNotices: ['yahooSurvey', 'ripHistorical'],
+    });
+}
+catch {
+    // Fallback: construct with no options if schema changed
+    try {
+        yahooFinance = new yahoo_finance2_1.default();
+    }
+    catch {
+        yahooFinance = new yahoo_finance2_1.default({});
+    }
+}
 const INSTRUMENTS = [
     // ═══════════════════════════════════════════════════════════════
     // DEATH NAIL TRIO

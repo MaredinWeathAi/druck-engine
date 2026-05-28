@@ -18,12 +18,21 @@ import {
 const router = Router();
 
 // Initialize yahoo-finance2 v3 (requires instantiation with config)
-// validation.logErrors: false suppresses console spam
-// validation.logOptions.enabled: false prevents thrown validation errors for edge-case symbols
-const yahooFinance = new (YahooFinance as any)({
-  validation: { logErrors: false, logOptions: { enabled: false } },
-  suppressNotices: ['yahooSurvey', 'ripHistorical'],
-});
+// Use try/catch to handle constructor option changes across patch versions
+let yahooFinance: any;
+try {
+  yahooFinance = new (YahooFinance as any)({
+    validation: { logErrors: false, logOptions: { enabled: false } },
+    suppressNotices: ['yahooSurvey', 'ripHistorical'],
+  });
+} catch {
+  // Fallback: construct with no options if schema changed
+  try {
+    yahooFinance = new (YahooFinance as any)();
+  } catch {
+    yahooFinance = new (YahooFinance as any)({});
+  }
+}
 
 // ─── INSTRUMENT REGISTRY (Phase 1: ~30 instruments) ───
 interface Instrument {

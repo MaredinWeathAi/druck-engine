@@ -11,7 +11,7 @@
     "better-sqlite3": "^12.10.0",
     "cors": "^2.8.5",
     "express": "^4.21.0",
-    "yahoo-finance2": "^3.14.0"
+    "yahoo-finance2": "3.14.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
