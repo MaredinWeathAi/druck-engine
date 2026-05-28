@@ -1435,7 +1435,7 @@ router.get('/lens/narrative', async (req: Request, res: Response) => {
   res.json({ narrative: text, timestamp: ariaTimestamp, cached: false });
 });
 
-// Debug endpoint — shows refresh errors and fetch diagnostics
+// Debug endpoint — shows refresh errors, fetch diagnostics, and data health
 router.get('/lens/debug', (req: Request, res: Response) => {
   const successRate = INSTRUMENTS.length > 0
     ? ((instrumentSnapshots.size / INSTRUMENTS.length) * 100).toFixed(1)
