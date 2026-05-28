@@ -1596,23 +1596,24 @@ function loadRotation() {
     var rot = data.sector_rotation;
     var rotHtml = '';
 
-    rotHtml += '<div class="rotation-group accumulate"><h4>▲ Accumulate</h4>';
-    (rot.accumulate || []).forEach(function(s) {
-      rotHtml += '<div class="rotation-item"><div class="ri-sector">' + s.sector + '</div><div class="ri-reason">' + s.reason + '</div><div class="ri-sweet">Sweet spot: ' + s.cycle_sweet_spot + '</div></div>';
-    });
-    rotHtml += '</div>';
+    // Map sector names to ETF symbols for phase lookup
+    var rotEtfMap = { 'Financials': 'XLF', 'Technology': 'XLK', 'Healthcare': 'XLV', 'Energy': 'XLE', 'Industrials': 'XLI', 'Materials': 'XLB', 'Consumer Staples': 'XLP', 'Consumer Discretionary': 'XLY', 'Utilities': 'XLU', 'Real Estate': 'XLRE', 'Communication Services': 'XLC', 'Semiconductors': 'SMH', 'Banks': 'KRE', 'Gold': 'GLD', 'Commodities': 'DBC' };
 
-    rotHtml += '<div class="rotation-group hold"><h4>● Hold</h4>';
-    (rot.hold || []).forEach(function(s) {
-      rotHtml += '<div class="rotation-item"><div class="ri-sector">' + s.sector + '</div><div class="ri-reason">' + s.reason + '</div><div class="ri-sweet">Sweet spot: ' + s.cycle_sweet_spot + '</div></div>';
-    });
-    rotHtml += '</div>';
+    function renderRotGroup(label, prefix, items) {
+      var h = '<div class="rotation-group ' + label.toLowerCase() + '"><h4>' + prefix + ' ' + label + '</h4>';
+      (items || []).forEach(function(s) {
+        var etfSym = rotEtfMap[s.sector] || '';
+        var phasePill = etfSym ? getPhasePillHtml(etfSym) : '';
+        h += '<div class="rotation-item" ' + (etfSym ? 'onclick="openEtfDetail(\'' + etfSym + '\')" style="cursor:pointer" title="Click for ' + etfSym + ' history"' : '') + '>';
+        h += '<div class="ri-sector">' + s.sector + phasePill + '</div><div class="ri-reason">' + s.reason + '</div><div class="ri-sweet">Sweet spot: ' + s.cycle_sweet_spot + '</div></div>';
+      });
+      h += '</div>';
+      return h;
+    }
 
-    rotHtml += '<div class="rotation-group reduce"><h4>▼ Reduce</h4>';
-    (rot.reduce || []).forEach(function(s) {
-      rotHtml += '<div class="rotation-item"><div class="ri-sector">' + s.sector + '</div><div class="ri-reason">' + s.reason + '</div><div class="ri-sweet">Sweet spot: ' + s.cycle_sweet_spot + '</div></div>';
-    });
-    rotHtml += '</div>';
+    rotHtml += renderRotGroup('Accumulate', '▲', rot.accumulate);
+    rotHtml += renderRotGroup('Hold', '●', rot.hold);
+    rotHtml += renderRotGroup('Reduce', '▼', rot.reduce);
 
     document.getElementById('rotation-sectors').innerHTML = rotHtml;
 
