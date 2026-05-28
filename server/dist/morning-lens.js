@@ -761,8 +761,15 @@ async function refreshMorningLens() {
     const BATCH_SIZE = 2; // Only 2 concurrent (was 3 — less pressure on Yahoo)
     const BATCH_DELAY_MS = 3000; // 3s between batches (was 2s)
     const failedSymbols = [];
-    for (let i = 0; i < INSTRUMENTS.length; i += BATCH_SIZE) {
-        const batch = INSTRUMENTS.slice(i, i + BATCH_SIZE);
+    // Shuffle instrument order so the same symbols don't always land at the tail
+    // where rate-limiting is worst. Fisher-Yates shuffle on a copy.
+    const shuffled = [...INSTRUMENTS];
+    for (let si = shuffled.length - 1; si > 0; si--) {
+        const sj = Math.floor(Math.random() * (si + 1));
+        [shuffled[si], shuffled[sj]] = [shuffled[sj], shuffled[si]];
+    }
+    for (let i = 0; i < shuffled.length; i += BATCH_SIZE) {
+        const batch = shuffled.slice(i, i + BATCH_SIZE);
         const batchResults = await Promise.allSettled(batch.map(inst => fetchOHLC(inst.symbol, '1y').then(bars => ({ symbol: inst.symbol, bars }))));
         for (let j = 0; j < batchResults.length; j++) {
             const result = batchResults[j];
@@ -777,7 +784,7 @@ async function refreshMorningLens() {
             }
         }
         // Delay between batches
-        if (i + BATCH_SIZE < INSTRUMENTS.length) {
+        if (i + BATCH_SIZE < shuffled.length) {
             await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
         }
     }
@@ -785,7 +792,7 @@ async function refreshMorningLens() {
     // This catches rate-limit failures that resolve after a cooldown
     if (failedSymbols.length > 0 && failedSymbols.length < INSTRUMENTS.length * 0.8) {
         console.log(`[LENS] Retry pass: ${failedSymbols.length} failed symbols...`);
-        await new Promise(r => setTimeout(r, 10000)); // 10s cooldown before retries
+        await new Promise(r => setTimeout(r, 15000)); // 15s cooldown before retries (was 10s)
         for (const sym of failedSymbols) {
             try {
                 const bars = await fetchOHLC(sym, '1y');
@@ -801,7 +808,7 @@ async function refreshMorningLens() {
             catch (e) {
                 // Still failed — leave in errors
             }
-            await new Promise(r => setTimeout(r, 4000)); // 4s between individual retries
+            await new Promise(r => setTimeout(r, 5000)); // 5s between individual retries
         }
     }
     const fetchDuration = ((Date.now() - startTime) / 1000).toFixed(1);
