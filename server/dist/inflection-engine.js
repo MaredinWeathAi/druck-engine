@@ -1133,22 +1133,39 @@ function classifyPhaseStructural(ta, currentPhase) {
     }
     else if (above200 && sma50Over200 && histPositive) {
         // Full uptrend: price > 200d, 50d > 200d, MACD histogram positive
-        // BUT — check extension to differentiate early trend from blow-off
-        if (isParabolic && (rsiOverbought || histContracting)) {
-            // Parabolic move (>30% above 200d) with overbought RSI or fading momentum
-            // This is Buying Exhaustion — the blow-off top zone
-            structuralPhase = 'BUYING_EXHAUSTION'; // P3 — parabolic blow-off
+        // BUT — check extension to differentiate early trend from blow-off.
+        // Druckenmiller cares about WHERE you are in the move, not just direction.
+        const isExtremeParabolic = extensionPct > 40; // >40% = blow-off regardless
+        if (isExtremeParabolic) {
+            // >40% above 200d — this is a blow-off top zone, period.
+            // No additional conditions needed. Even with positive momentum,
+            // you don't initiate at +40% over the 200d — that's where you sell.
+            structuralPhase = 'BUYING_EXHAUSTION'; // P3 — extreme blow-off
+        }
+        else if (isParabolic && (rsiOverbought || histContracting)) {
+            // 30-40% above 200d with overbought RSI or fading momentum
+            structuralPhase = 'BUYING_EXHAUSTION'; // P3 — parabolic with warning signs
+        }
+        else if (isParabolic) {
+            // 30-40% above 200d but momentum still strong — late expansion,
+            // technically still riding it but smart money is watching the exits
+            structuralPhase = 'INSTITUTIONAL_ACCUMULATION'; // P2 — smart money alert zone
         }
         else if (isExtended && rsiOverextended) {
-            // Extended (>18%) with RSI >80 — approaching exhaustion
+            // 18-30% with RSI >80 — approaching exhaustion
             structuralPhase = 'BUYING_EXHAUSTION'; // P3 — overextended
         }
         else if (isExtended && histContracting) {
-            // Extended with momentum fading — distribution starting
-            structuralPhase = 'INSTITUTIONAL_ACCUMULATION'; // P2 — smart money taking profits
+            // 18-30% with momentum fading — distribution starting
+            structuralPhase = 'INSTITUTIONAL_ACCUMULATION'; // P2 — smart money distributing
+        }
+        else if (isExtended) {
+            // 18-30% with strong momentum — still in expansion but late-stage
+            // Lower confidence to flag the risk
+            structuralPhase = 'NARRATIVE_EXPANSION'; // P1 — but late, watch closely
         }
         else {
-            // Fresh to mid-trend with healthy momentum — true expansion
+            // Fresh to mid-trend (<18% above 200d) with healthy momentum — true expansion
             structuralPhase = 'NARRATIVE_EXPANSION'; // P1
         }
     }
