@@ -1327,46 +1327,120 @@ function classifyPhaseStructural(
   const histExpanding = ta.macdHistSlope !== null && ta.macdHistSlope > 0.05;   // momentum improving
   const histContracting = ta.macdHistSlope !== null && ta.macdHistSlope < -0.05; // momentum fading
 
+  // ── EXTENSION METRICS ──
+  // How far price is from the 200d MA — the single most important "where in the move" signal.
+  // Druckenmiller doesn't buy at the same point in a trend regardless of extension.
+  const extensionPct = ta.priceVsSma200 !== null ? ta.priceVsSma200 : 0;
+  const absExtension = Math.abs(extensionPct);
+
+  // Extension zones (percentage above/below 200d MA):
+  //   0-8%   = Fresh trend / early move
+  //   8-18%  = Mid-trend / healthy extension
+  //   18-30% = Extended / late-cycle move
+  //   30%+   = Parabolic / blow-off territory
+  const isParabolic = extensionPct > 30;
+  const isExtended = extensionPct > 18;
+  const isMidTrend = extensionPct > 8 && extensionPct <= 18;
+  // Oversold mirrors for downtrends
+  const isDeepOversold = extensionPct < -30;
+  const isOversold = extensionPct < -18;
+
+  // RSI extremes
+  const rsiOverbought = ta.rsi14 !== null && ta.rsi14 > 75;
+  const rsiOverextended = ta.rsi14 !== null && ta.rsi14 > 80;
+  const rsiOversold = ta.rsi14 !== null && ta.rsi14 < 30;
+  const rsiDeepOversold = ta.rsi14 !== null && ta.rsi14 < 25;
+
+  // ── HARD OVERRIDES ──
+  // Rule 1: Price below 200d MA ALWAYS overrides golden cross for uptrend phases.
+  // If price broke below the 200d, you're not in expansion or accumulation, period.
+  // The golden cross is a lagging indicator — price leads.
+  const priceBelow200 = ta.priceVsSma200 !== null && ta.priceVsSma200 < 0;
+
   // ── DECISION TREE: determine the "natural" regime from structure ──
   let structuralPhase: InflectionPhase;
 
-  if (above200 && sma50Over200 && histPositive) {
+  if (priceBelow200 && !sma50Over200 && !histPositive && !histContracting) {
+    // Below 200d, bearish MA alignment, steady negative momentum
+    structuralPhase = 'NARRATIVE_REVERSAL';  // P4 — confirmed downtrend
+  } else if (priceBelow200 && !sma50Over200 && (histContracting || histPositive)) {
+    // Below 200d but momentum inflecting (histogram contracting or turning positive)
+    structuralPhase = 'SELLING_EXHAUSTION';  // P5 — momentum inflection in downtrend
+  } else if (priceBelow200 && sma50Over200) {
+    // Price below 200d but 50d still above — structural divergence
+    // Could be early breakdown or recovery forming depending on direction
+    if (histPositive || histExpanding) {
+      structuralPhase = 'SELLING_EXHAUSTION';  // P5 — momentum turning up, recovery building
+    } else {
+      structuralPhase = 'BUYING_EXHAUSTION';  // P3 — golden cross is lagging, price already broke
+    }
+  } else if (above200 && sma50Over200 && histPositive) {
     // Full uptrend: price > 200d, 50d > 200d, MACD histogram positive
-    structuralPhase = 'NARRATIVE_EXPANSION';  // P1
+    // BUT — check extension to differentiate early trend from blow-off
+    if (isParabolic && (rsiOverbought || histContracting)) {
+      // Parabolic move (>30% above 200d) with overbought RSI or fading momentum
+      // This is Buying Exhaustion — the blow-off top zone
+      structuralPhase = 'BUYING_EXHAUSTION';  // P3 — parabolic blow-off
+    } else if (isExtended && rsiOverextended) {
+      // Extended (>18%) with RSI >80 — approaching exhaustion
+      structuralPhase = 'BUYING_EXHAUSTION';  // P3 — overextended
+    } else if (isExtended && histContracting) {
+      // Extended with momentum fading — distribution starting
+      structuralPhase = 'INSTITUTIONAL_ACCUMULATION';  // P2 — smart money taking profits
+    } else {
+      // Fresh to mid-trend with healthy momentum — true expansion
+      structuralPhase = 'NARRATIVE_EXPANSION';  // P1
+    }
   } else if (above200 && sma50Over200 && !histPositive) {
     // Uptrend but momentum fading: histogram turned negative while still above MAs
-    structuralPhase = 'INSTITUTIONAL_ACCUMULATION';  // P2 — distribution zone
+    if (isExtended) {
+      // Extended AND losing momentum — closer to exhaustion than accumulation
+      structuralPhase = 'BUYING_EXHAUSTION';  // P3 — momentum dying on extended move
+    } else {
+      structuralPhase = 'INSTITUTIONAL_ACCUMULATION';  // P2 — distribution zone
+    }
   } else if (above200 && !sma50Over200) {
     // Price above 200d but 50d crossed below — death cross territory
     structuralPhase = 'BUYING_EXHAUSTION';  // P3 — trend structure breaking
-  } else if (!above200 && !sma50Over200 && !histPositive && !histContracting) {
-    // Below 200d, bearish MA alignment, steady negative momentum
-    structuralPhase = 'NARRATIVE_REVERSAL';  // P4 — confirmed downtrend
-  } else if (!above200 && !sma50Over200 && (histContracting || histPositive)) {
-    // Below 200d but momentum inflecting (histogram contracting toward zero or turning positive)
-    // This is the "rate of change of rate of change" — decline decelerating
-    structuralPhase = 'SELLING_EXHAUSTION';  // P5 — momentum inflection in downtrend
-  } else if (!above200 && sma50Over200) {
-    // Price below 200d but 50d is crossing back above — golden cross forming
-    structuralPhase = 'NARRATIVE_COLLAPSE';  // P6 — recovery forming
   } else {
-    // Edge case fallback — use the most neutral phase
+    // Edge case fallback
     structuralPhase = 'INSTITUTIONAL_ACCUMULATION';
   }
 
   // ── TRANSITION RULES: structural events required to leave current phase ──
-  // If we have a previous phase, check whether a structural event justifies the transition.
-  // Without a definitive event, the current phase persists (natural anti-noise).
   if (currentPhase && currentPhase !== structuralPhase) {
     const shouldTransition = checkStructuralTransition(currentPhase, structuralPhase, ta);
     if (!shouldTransition) {
-      structuralPhase = currentPhase;  // stay in current phase
+      structuralPhase = currentPhase;
     }
   }
 
   // ── CONFIDENCE from confirmation signals ──
-  let confidence = 50;  // base confidence
+  let confidence = 50;
   const transitions: string[] = [];
+
+  // Extension commentary — always note where we are in the move
+  if (above200) {
+    if (isParabolic) {
+      transitions.push(`Parabolic: ${extensionPct.toFixed(0)}% above 200d — blow-off risk elevated`);
+      confidence -= 10;
+    } else if (isExtended) {
+      transitions.push(`Extended: ${extensionPct.toFixed(0)}% above 200d — late-cycle move`);
+      confidence -= 5;
+    } else if (isMidTrend) {
+      transitions.push(`Mid-trend: ${extensionPct.toFixed(0)}% above 200d — healthy extension`);
+    } else {
+      transitions.push(`Fresh move: ${extensionPct.toFixed(0)}% above 200d — early trend`);
+      confidence += 5;
+    }
+  } else if (priceBelow200) {
+    if (isDeepOversold) {
+      transitions.push(`Deep oversold: ${extensionPct.toFixed(0)}% below 200d — capitulation zone`);
+      confidence += 5;
+    } else if (isOversold) {
+      transitions.push(`Oversold: ${extensionPct.toFixed(0)}% below 200d — mean reversion setup`);
+    }
+  }
 
   // Volume confirmation
   if (ta.volume) {
@@ -1374,28 +1448,35 @@ function classifyPhaseStructural(
       if (ta.volume.greenDayVolRatio > 1.2) { confidence += 10; transitions.push('Volume confirms: green days leading'); }
       if (ta.volume.volumeExhaustion === 'buying') { confidence -= 15; transitions.push('Warning: buying volume exhaustion detected'); }
     }
-    if (structuralPhase === 'NARRATIVE_REVERSAL' || structuralPhase === 'NARRATIVE_COLLAPSE') {
+    if (structuralPhase === 'NARRATIVE_REVERSAL' || structuralPhase === 'SELLING_EXHAUSTION') {
       if (ta.volume.volumeExhaustion === 'selling') { confidence += 10; transitions.push('Selling exhaustion forming in volume'); }
       if (ta.volume.volumeTrend === 'contracting') { confidence += 5; transitions.push('Volume contracting — selling pressure drying up'); }
     }
     if (structuralPhase === 'INSTITUTIONAL_ACCUMULATION') {
       if (ta.volume.volumeTrend === 'contracting') { confidence += 10; transitions.push('Quiet volume confirms distribution/basing'); }
     }
+    if (structuralPhase === 'BUYING_EXHAUSTION') {
+      if (ta.volume.volumeExhaustion === 'buying') { confidence += 10; transitions.push('Buying volume exhaustion — climax top risk'); }
+      if (ta.volume.climaxVolume) { confidence += 5; transitions.push('Volume climax detected — distribution'); }
+    }
   }
 
   // RSI confirmation
   if (ta.rsi14 !== null) {
-    if (structuralPhase === 'NARRATIVE_EXPANSION' && ta.rsi14 >= 50 && ta.rsi14 <= 70) confidence += 10;  // healthy momentum
-    if (structuralPhase === 'NARRATIVE_EXPANSION' && ta.rsi14 > 75) { confidence -= 10; transitions.push('RSI overextended — watch for pullback'); }
-    if (structuralPhase === 'SELLING_EXHAUSTION' && ta.rsi14 < 30) { confidence += 15; transitions.push('RSI deeply oversold — high probability inflection zone'); }
-    if (structuralPhase === 'NARRATIVE_REVERSAL' && ta.rsi14 < 25) { confidence += 10; transitions.push('Extreme RSI oversold — momentum inflection likely'); }
+    if (structuralPhase === 'NARRATIVE_EXPANSION' && ta.rsi14 >= 50 && ta.rsi14 <= 70) confidence += 10;
+    if (structuralPhase === 'NARRATIVE_EXPANSION' && ta.rsi14 > 70) { confidence -= 5; transitions.push(`RSI ${ta.rsi14.toFixed(0)} — momentum elevated`); }
+    if (structuralPhase === 'BUYING_EXHAUSTION' && rsiOverbought) { confidence += 10; transitions.push(`RSI ${ta.rsi14.toFixed(0)} — overbought confirms exhaustion`); }
+    if (structuralPhase === 'BUYING_EXHAUSTION' && rsiOverextended) { confidence += 5; transitions.push(`RSI ${ta.rsi14.toFixed(0)} — extreme overbought`); }
+    if (structuralPhase === 'SELLING_EXHAUSTION' && rsiOversold) { confidence += 15; transitions.push(`RSI ${ta.rsi14.toFixed(0)} — deeply oversold inflection zone`); }
+    if (structuralPhase === 'NARRATIVE_REVERSAL' && rsiDeepOversold) { confidence += 10; transitions.push(`RSI ${ta.rsi14.toFixed(0)} — extreme oversold, inflection likely`); }
   }
 
   // 52-week position
   if (ta.highLow) {
-    if (structuralPhase === 'NARRATIVE_EXPANSION' && ta.highLow.pctFromHigh > -5) confidence += 5;  // near highs = healthy
-    if (structuralPhase === 'NARRATIVE_REVERSAL' && ta.highLow.pctFromHigh < -25) confidence += 5;  // deep drawdown confirms
-    if (structuralPhase === 'NARRATIVE_COLLAPSE' && ta.highLow.pctFromHigh < -30) { confidence += 10; transitions.push('Deep capitulation — maximum fear zone'); }
+    if (structuralPhase === 'NARRATIVE_EXPANSION' && ta.highLow.pctFromHigh > -5) confidence += 5;
+    if (structuralPhase === 'NARRATIVE_EXPANSION' && ta.highLow.pctFromHigh < -15) { confidence -= 10; transitions.push('Well off highs — trend quality questionable'); }
+    if (structuralPhase === 'NARRATIVE_REVERSAL' && ta.highLow.pctFromHigh < -25) confidence += 5;
+    if (structuralPhase === 'SELLING_EXHAUSTION' && ta.highLow.pctFromHigh < -30) { confidence += 10; transitions.push('Deep capitulation — maximum fear zone'); }
   }
 
   // Failed breaks
@@ -1403,23 +1484,18 @@ function classifyPhaseStructural(
     const recentFailed = ta.failedBreaks.filter(b => b.day >= ta.failedBreaks[0].day - 10);
     if (recentFailed.some(b => b.type === 'failed_breakout')) {
       if (structuralPhase === 'NARRATIVE_EXPANSION') { confidence -= 10; transitions.push('Failed breakout — potential bull trap'); }
+      if (structuralPhase === 'BUYING_EXHAUSTION') { confidence += 10; transitions.push('Failed breakout confirms exhaustion'); }
     }
     if (recentFailed.some(b => b.type === 'failed_breakdown')) {
-      if (structuralPhase === 'SELLING_EXHAUSTION' || structuralPhase === 'NARRATIVE_COLLAPSE') {
-        confidence += 10; transitions.push('Failed breakdown — bears losing control');
-      }
+      if (structuralPhase === 'SELLING_EXHAUSTION') { confidence += 10; transitions.push('Failed breakdown — bears losing control'); }
     }
   }
 
   // Relative strength vs SPY
   if (ta.rsVsSpy20d !== null) {
     if (Math.abs(ta.rsVsSpy20d) > 5) {
-      if (ta.rsVsSpy20d > 5 && (structuralPhase === 'NARRATIVE_EXPANSION' || structuralPhase === 'SELLING_EXHAUSTION')) {
-        confidence += 5;
-      }
-      if (ta.rsVsSpy20d < -5 && (structuralPhase === 'NARRATIVE_REVERSAL' || structuralPhase === 'BUYING_EXHAUSTION')) {
-        confidence += 5;
-      }
+      if (ta.rsVsSpy20d > 5 && (structuralPhase === 'NARRATIVE_EXPANSION' || structuralPhase === 'SELLING_EXHAUSTION')) confidence += 5;
+      if (ta.rsVsSpy20d < -5 && (structuralPhase === 'NARRATIVE_REVERSAL' || structuralPhase === 'BUYING_EXHAUSTION')) confidence += 5;
     }
   }
 
@@ -1442,17 +1518,17 @@ function classifyPhaseStructural(
   // Phase metadata
   const phaseMetadata: Record<InflectionPhase, Omit<PhaseClassification, 'phase' | 'confidence' | 'transitionSignals'>> = {
     NARRATIVE_EXPANSION: {
-      description: 'FULL UPTREND — Price above 200d, 50d above 200d, positive momentum. Ride the trend.',
+      description: 'EARLY/MID UPTREND — Price above 200d with healthy extension, 50d above 200d, positive momentum. Ride the trend.',
       actionBias: 'BUY', riskLevel: 'LOW',
       nextPhase: 'INSTITUTIONAL_ACCUMULATION',
     },
     INSTITUTIONAL_ACCUMULATION: {
-      description: 'MOMENTUM FADING — Still above MAs but MACD rolling over. Smart money distributes into strength.',
+      description: 'MOMENTUM FADING — Still above MAs but MACD rolling over or trend extended. Smart money distributes into strength.',
       actionBias: 'REDUCE', riskLevel: 'MODERATE',
       nextPhase: 'BUYING_EXHAUSTION',
     },
     BUYING_EXHAUSTION: {
-      description: 'TREND BREAKING — Death cross forming, 50d crossing below 200d. Exit zone.',
+      description: 'TREND EXHAUSTION — Parabolic extension, death cross forming, or structural breakdown. Exit/hedge zone.',
       actionBias: 'SHORT', riskLevel: 'HIGH',
       nextPhase: 'NARRATIVE_REVERSAL',
     },
@@ -1473,7 +1549,7 @@ function classifyPhaseStructural(
     },
   };
 
-  // Sub-phase detection for Distribution
+  // Sub-phase detection
   let accumulationSubPhase: AccumulationSubPhase | undefined;
   if (structuralPhase === 'INSTITUTIONAL_ACCUMULATION') {
     const isLate = ta.deathCross || (ta.priceVsSma50 !== null && ta.priceVsSma50 < 1)
