@@ -3571,7 +3571,7 @@ function computeDerived() {
 // via computeDerived() inside computeNarrativeShift()
 // These are NOT used directly — they exist only as fallback for unmapped symbols
 var MACRO_SENSITIVITY = {};  // empty — all logic now in computeNarrativeShift with symbol overrides
-var DEFAULT_SENSITIVITY = { rates: -0.2, inflation: 0.1, dollar: -0.3, growth: 0.4, credit: 0.1, oil: 0.2 };
+var DEFAULT_SENSITIVITY = { rates: -0.15, inflation: -0.10, dollar: -0.30, growth: 0.4, credit: 0.20, oil: -0.10, sentiment: 0.3 };
 
 // Symbol-level overrides — for instruments within mixed groups that have distinct sensitivities
 // These take priority over the group-level sensitivity
@@ -3592,42 +3592,53 @@ var DEFAULT_SENSITIVITY = { rates: -0.2, inflation: 0.1, dollar: -0.3, growth: 0
 // Format: { rates, inflation(≈gold), dollar, growth, credit, oil, sentiment }
 // ═══════════════════════════════════════════════════════════════════════════
 var SYMBOL_SENSITIVITY = {
-  // ── Homebuilders — oil:+0.34, rates:-0.15(60d), dollar:-0.40(0d), credit:-0.14(60d) ──
-  'XHB':  { rates: -0.15, inflation:  0.12, dollar: -0.40, growth:  0.5, credit: -0.14, oil:  0.34, sentiment:  0.3 },
-  'ITB':  { rates: -0.15, inflation:  0.12, dollar: -0.40, growth:  0.5, credit: -0.14, oil:  0.34, sentiment:  0.3 },
-  // ── Tech / Growth — rates:-0.27(20d), dollar:-0.30(40d), credit:-0.18(60d) ──
-  'SMH':  { rates: -0.21, inflation:  0.30, dollar: -0.36, growth:  0.5, credit: -0.14, oil:  0.34, sentiment:  0.6 },
-  'IGV':  { rates: -0.27, inflation:  0.18, dollar: -0.30, growth:  0.5, credit: -0.18, oil:  0.23, sentiment:  0.6 },
-  'SKYY': { rates: -0.27, inflation:  0.18, dollar: -0.30, growth:  0.5, credit: -0.18, oil:  0.23, sentiment:  0.6 },
-  'CIBR': { rates: -0.27, inflation:  0.18, dollar: -0.30, growth:  0.5, credit: -0.18, oil:  0.23, sentiment:  0.5 },
-  'BOTZ': { rates: -0.21, inflation:  0.20, dollar: -0.33, growth:  0.5, credit: -0.14, oil:  0.28, sentiment:  0.6 },
-  'ARKK': { rates: -0.30, inflation:  0.20, dollar: -0.35, growth:  0.4, credit: -0.20, oil:  0.20, sentiment:  0.8 },
-  'XLK':  { rates: -0.27, inflation:  0.18, dollar: -0.30, growth:  0.5, credit: -0.18, oil:  0.23, sentiment:  0.6 },
-  'QQQ':  { rates: -0.16, inflation:  0.14, dollar: -0.33, growth:  0.5, credit:  0.18, oil:  0.21, sentiment:  0.5 },
-  // ── Transports / Industrials — IYT: rates:-0.21(90d), dollar:-0.28(0d), credit:+0.30(0d) ──
-  'IYT':  { rates: -0.21, inflation:  0.13, dollar: -0.28, growth:  0.6, credit:  0.30, oil:  0.33, sentiment:  0.3 },
-  'JETS': { rates: -0.21, inflation:  0.13, dollar: -0.28, growth:  0.6, credit:  0.30, oil:  0.33, sentiment:  0.4 },
-  'PAVE': { rates: -0.13, inflation:  0.12, dollar: -0.40, growth:  0.6, credit:  0.33, oil:  0.29, sentiment:  0.3 },
-  'ITA':  { rates: -0.13, inflation:  0.12, dollar: -0.30, growth:  0.5, credit:  0.25, oil:  0.25, sentiment:  0.3 },
-  'XLI':  { rates: -0.13, inflation:  0.12, dollar: -0.40, growth:  0.6, credit:  0.33, oil:  0.29, sentiment:  0.3 },
+  // ── Homebuilders ──
+  // Empirical correlation with oil was +0.34 (risk-on/risk-off co-movement)
+  // But CAUSALLY: oil falling → lower inflation → Fed can cut → mortgages cheaper = TAILWIND
+  // So oil weight is NEGATIVE (oil falling = good for homebuilders)
+  // Credit easing = more mortgage availability = TAILWIND, so credit is POSITIVE
+  'XHB':  { rates: -0.15, inflation: -0.20, dollar: -0.40, growth:  0.5, credit:  0.40, oil: -0.30, sentiment:  0.3 },
+  'ITB':  { rates: -0.15, inflation: -0.20, dollar: -0.40, growth:  0.5, credit:  0.40, oil: -0.30, sentiment:  0.3 },
+  // ── Tech / Growth ──
+  // Oil is input cost (data centers, supply chains), not revenue. Oil falling = tailwind.
+  // Credit easing helps growth via lower discount rates. Inflation falling = lower rates ahead.
+  'SMH':  { rates: -0.21, inflation: -0.20, dollar: -0.36, growth:  0.5, credit:  0.20, oil: -0.15, sentiment:  0.6 },
+  'IGV':  { rates: -0.27, inflation: -0.15, dollar: -0.30, growth:  0.5, credit:  0.20, oil: -0.10, sentiment:  0.6 },
+  'SKYY': { rates: -0.27, inflation: -0.15, dollar: -0.30, growth:  0.5, credit:  0.20, oil: -0.10, sentiment:  0.6 },
+  'CIBR': { rates: -0.27, inflation: -0.15, dollar: -0.30, growth:  0.5, credit:  0.20, oil: -0.10, sentiment:  0.5 },
+  'BOTZ': { rates: -0.21, inflation: -0.15, dollar: -0.33, growth:  0.5, credit:  0.20, oil: -0.10, sentiment:  0.6 },
+  'ARKK': { rates: -0.30, inflation: -0.15, dollar: -0.35, growth:  0.4, credit:  0.25, oil: -0.10, sentiment:  0.8 },
+  'XLK':  { rates: -0.27, inflation: -0.15, dollar: -0.30, growth:  0.5, credit:  0.20, oil: -0.10, sentiment:  0.6 },
+  'QQQ':  { rates: -0.16, inflation: -0.15, dollar: -0.33, growth:  0.5, credit:  0.20, oil: -0.10, sentiment:  0.5 },
+  // ── Transports / Industrials ──
+  // Oil is MAJOR input cost for transports (fuel). Oil falling = massive tailwind.
+  // JETS especially — fuel is 25-35% of airline operating costs.
+  'IYT':  { rates: -0.21, inflation: -0.15, dollar: -0.28, growth:  0.6, credit:  0.30, oil: -0.50, sentiment:  0.3 },
+  'JETS': { rates: -0.21, inflation: -0.15, dollar: -0.28, growth:  0.6, credit:  0.30, oil: -0.70, sentiment:  0.4 },
+  'PAVE': { rates: -0.13, inflation: -0.10, dollar: -0.40, growth:  0.6, credit:  0.33, oil: -0.20, sentiment:  0.3 },
+  'ITA':  { rates: -0.13, inflation: -0.10, dollar: -0.30, growth:  0.5, credit:  0.25, oil: -0.15, sentiment:  0.3 },
+  'XLI':  { rates: -0.13, inflation: -0.10, dollar: -0.40, growth:  0.6, credit:  0.33, oil: -0.20, sentiment:  0.3 },
   // ── Financials — KRE: rates:+0.36(0d), credit:+0.39(0d), oil:+0.43 ──
   'KRE':  { rates:  0.36, inflation: -0.24, dollar: -0.13, growth:  0.4, credit:  0.39, oil:  0.43, sentiment:  0.4 },
   'KBE':  { rates:  0.36, inflation: -0.24, dollar: -0.13, growth:  0.4, credit:  0.39, oil:  0.43, sentiment:  0.4 },
   'XLF':  { rates:  0.28, inflation: -0.24, dollar: -0.25, growth:  0.4, credit:  0.41, oil:  0.27, sentiment:  0.4 },
   'IAI':  { rates:  0.28, inflation: -0.20, dollar: -0.20, growth:  0.4, credit:  0.35, oil:  0.25, sentiment:  0.5 },
   'KIE':  { rates:  0.20, inflation: -0.15, dollar: -0.15, growth:  0.3, credit:  0.25, oil:  0.20, sentiment:  0.3 },
-  'MORT': { rates: -0.15, inflation:  0.12, dollar: -0.35, growth:  0.3, credit: -0.14, oil:  0.30, sentiment:  0.3 },
-  // ── Consumer — XRT: rates:+0.11(0d), dollar:-0.30(0d), credit:+0.23(0d), oil:+0.44 ──
-  'XRT':  { rates:  0.11, inflation: -0.07, dollar: -0.30, growth:  0.5, credit:  0.23, oil:  0.44, sentiment:  0.4 },
-  'XLY':  { rates: -0.26, inflation:  0.14, dollar: -0.23, growth:  0.5, credit: -0.23, oil:  0.21, sentiment:  0.5 },
-  'XLP':  { rates: -0.15, inflation:  0.29, dollar: -0.37, growth:  0.2, credit: -0.14, oil:  0.09, sentiment:  0.1 },
-  'IBUY': { rates: -0.26, inflation:  0.14, dollar: -0.25, growth:  0.5, credit: -0.20, oil:  0.25, sentiment:  0.5 },
-  'PBJ':  { rates: -0.15, inflation:  0.29, dollar: -0.37, growth:  0.2, credit: -0.14, oil:  0.09, sentiment:  0.1 },
-  // ── Healthcare — XLV: rates:-0.11(0d), dollar:-0.33(0d), oil:+0.07 ──
-  'XLV':  { rates: -0.11, inflation: -0.20, dollar: -0.33, growth:  0.2, credit: -0.11, oil:  0.07, sentiment:  0.2 },
-  'XBI':  { rates: -0.28, inflation:  0.26, dollar: -0.33, growth:  0.3, credit: -0.23, oil:  0.18, sentiment:  0.6 },
-  'IHI':  { rates: -0.11, inflation: -0.20, dollar: -0.33, growth:  0.3, credit: -0.11, oil:  0.07, sentiment:  0.3 },
-  'XPH':  { rates: -0.11, inflation: -0.20, dollar: -0.33, growth:  0.2, credit: -0.11, oil:  0.07, sentiment:  0.2 },
+  'MORT': { rates: -0.15, inflation: -0.15, dollar: -0.35, growth:  0.3, credit:  0.40, oil: -0.20, sentiment:  0.3 },
+  // ── Consumer ──
+  // Oil is input cost (transport, packaging). Oil falling = margin expansion = tailwind.
+  // Credit easing = consumer spending power. Lower inflation = real wage growth.
+  'XRT':  { rates: -0.15, inflation: -0.20, dollar: -0.30, growth:  0.5, credit:  0.30, oil: -0.30, sentiment:  0.4 },
+  'XLY':  { rates: -0.26, inflation: -0.20, dollar: -0.23, growth:  0.5, credit:  0.25, oil: -0.20, sentiment:  0.5 },
+  'XLP':  { rates: -0.10, inflation: -0.15, dollar: -0.37, growth:  0.2, credit:  0.10, oil: -0.10, sentiment:  0.1 },
+  'IBUY': { rates: -0.26, inflation: -0.20, dollar: -0.25, growth:  0.5, credit:  0.25, oil: -0.15, sentiment:  0.5 },
+  'PBJ':  { rates: -0.10, inflation: -0.15, dollar: -0.37, growth:  0.2, credit:  0.10, oil: -0.10, sentiment:  0.1 },
+  // ── Healthcare ──
+  // Relatively macro-insensitive. Oil is minor input cost.
+  'XLV':  { rates: -0.11, inflation: -0.10, dollar: -0.33, growth:  0.2, credit:  0.10, oil: -0.05, sentiment:  0.2 },
+  'XBI':  { rates: -0.28, inflation: -0.10, dollar: -0.33, growth:  0.3, credit:  0.20, oil: -0.05, sentiment:  0.6 },
+  'IHI':  { rates: -0.11, inflation: -0.10, dollar: -0.33, growth:  0.3, credit:  0.10, oil: -0.05, sentiment:  0.3 },
+  'XPH':  { rates: -0.11, inflation: -0.10, dollar: -0.33, growth:  0.2, credit:  0.10, oil: -0.05, sentiment:  0.2 },
   // ── Energy — XLE: rates:+0.49(0d), credit:+0.43(0d), dollar:+0.18, oil:+0.74 ──
   'XLE':  { rates:  0.49, inflation: -0.20, dollar:  0.18, growth:  0.4, credit:  0.43, oil:  0.74, sentiment:  0.3 },
   'XOP':  { rates:  0.49, inflation: -0.20, dollar:  0.18, growth:  0.4, credit:  0.43, oil:  0.80, sentiment:  0.3 },
@@ -3652,9 +3663,9 @@ var SYMBOL_SENSITIVITY = {
   'SI=F': { rates: -0.35, inflation:  0.80, dollar: -0.50, growth:  0.1, credit: -0.20, oil:  0.00, sentiment: -0.2 },
   'GDX':  { rates: -0.40, inflation:  0.90, dollar: -0.47, growth: -0.1, credit: -0.25, oil: -0.05, sentiment: -0.2 },
   'GDXJ': { rates: -0.40, inflation:  0.90, dollar: -0.47, growth: -0.1, credit: -0.25, oil: -0.05, sentiment: -0.2 },
-  // ── Real Estate — similar to homebuilders pattern ──
-  'VNQ':  { rates: -0.15, inflation:  0.12, dollar: -0.35, growth:  0.3, credit: -0.10, oil:  0.25, sentiment:  0.3 },
-  'XLRE': { rates: -0.15, inflation:  0.12, dollar: -0.35, growth:  0.3, credit: -0.10, oil:  0.25, sentiment:  0.3 },
+  // ── Real Estate — rate and credit sensitive, oil is input cost ──
+  'VNQ':  { rates: -0.15, inflation: -0.15, dollar: -0.35, growth:  0.3, credit:  0.35, oil: -0.15, sentiment:  0.3 },
+  'XLRE': { rates: -0.15, inflation: -0.15, dollar: -0.35, growth:  0.3, credit:  0.35, oil: -0.15, sentiment:  0.3 },
   // ── Fixed Income — TLT: rates:-0.82(0d), dollar:-0.40(0d), credit:-0.77(0d), oil:-0.19 ──
   'TLT':  { rates: -0.82, inflation:  0.39, dollar: -0.40, growth: -0.4, credit: -0.77, oil: -0.19, sentiment: -0.4 },
   'TLH':  { rates: -0.75, inflation:  0.35, dollar: -0.38, growth: -0.3, credit: -0.70, oil: -0.18, sentiment: -0.3 },
@@ -3669,12 +3680,12 @@ var SYMBOL_SENSITIVITY = {
   'TIP':  { rates: -0.20, inflation:  0.80, dollar: -0.20, growth:  0.1, credit: -0.10, oil:  0.10, sentiment:  0.0 },
   'STIP': { rates: -0.15, inflation:  0.60, dollar: -0.15, growth:  0.1, credit: -0.08, oil:  0.08, sentiment:  0.0 },
   'EMB':  { rates: -0.25, inflation:  0.15, dollar: -0.50, growth:  0.3, credit:  0.40, oil:  0.15, sentiment:  0.4 },
-  // ── Broad Indices — SPY: rates:-0.16(60d), dollar:-0.33(0d), credit:+0.18(0d), oil:+0.21 ──
-  'SPY':  { rates: -0.16, inflation:  0.14, dollar: -0.33, growth:  0.5, credit:  0.18, oil:  0.21, sentiment:  0.4 },
-  'DIA':  { rates: -0.10, inflation:  0.12, dollar: -0.30, growth:  0.5, credit:  0.20, oil:  0.20, sentiment:  0.3 },
-  'IWM':  { rates: -0.16, inflation:  0.14, dollar: -0.35, growth:  0.6, credit:  0.25, oil:  0.25, sentiment:  0.5 },
-  'MDY':  { rates: -0.16, inflation:  0.14, dollar: -0.35, growth:  0.6, credit:  0.22, oil:  0.23, sentiment:  0.4 },
-  'RSP':  { rates: -0.16, inflation:  0.14, dollar: -0.35, growth:  0.5, credit:  0.20, oil:  0.22, sentiment:  0.4 },
+  // ── Broad Indices — oil falling is net positive (lower costs across economy) ──
+  'SPY':  { rates: -0.16, inflation: -0.15, dollar: -0.33, growth:  0.5, credit:  0.20, oil: -0.10, sentiment:  0.4 },
+  'DIA':  { rates: -0.10, inflation: -0.12, dollar: -0.30, growth:  0.5, credit:  0.20, oil: -0.10, sentiment:  0.3 },
+  'IWM':  { rates: -0.16, inflation: -0.15, dollar: -0.35, growth:  0.6, credit:  0.25, oil: -0.10, sentiment:  0.5 },
+  'MDY':  { rates: -0.16, inflation: -0.15, dollar: -0.35, growth:  0.6, credit:  0.22, oil: -0.10, sentiment:  0.4 },
+  'RSP':  { rates: -0.16, inflation: -0.15, dollar: -0.35, growth:  0.5, credit:  0.20, oil: -0.10, sentiment:  0.4 },
   'XLC':  { rates: -0.23, inflation:  0.19, dollar: -0.47, growth:  0.4, credit: -0.12, oil:  0.21, sentiment:  0.5 },
   'XLU':  { rates: -0.11, inflation:  0.25, dollar: -0.14, growth: -0.1, credit:  0.09, oil:  0.08, sentiment: -0.2 },
   // ── Digital / Crypto ──
