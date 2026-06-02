@@ -1498,6 +1498,120 @@ router.get('/lens/regime', (req: Request, res: Response) => {
   });
 });
 
+// ── Industry Valuations — GuruFocus ETF-level P/E, P/S, forward estimates ──
+// Cached daily — fetches from GuruFocus /stock/{ETF}/summary endpoint
+const VALUATION_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+let valuationCache: Map<string, any> = new Map();
+let valuationLastFetch: number = 0;
+
+// ETFs to fetch valuations for (sector/industry ETFs only — not FX, commodities, bonds)
+const VALUATION_ETFS = [
+  'XHB','SMH','XLE','XLF','XLK','XLI','XLP','XLU','XLV','XLY','XBI','KRE',
+  'IYT','XRT','XLC','XLB','ITA','PAVE','XOP','OIH','IGV','SKYY','CIBR',
+  'BOTZ','ARKK','JETS','IAI','KBE','KIE','MORT','VNQ','XLRE','XPH','IHI',
+  'IBUY','PBJ','AMLP','GDX','GDXJ','GLD','TLT','SPY','QQQ','IWM','DIA',
+  'EEM','EFA','EWY','EWT','EWZ','FXI',
+];
+
+// Valuation type for cyclical vs growth (determines if valuation amplifies or dampens narrative)
+// Based on 20yr empirical study: cyclicals benefit from buying cheap, growth doesn't penalize expensive
+const VALUATION_TYPE: Record<string, 'cyclical' | 'growth' | 'neutral'> = {
+  XHB: 'cyclical', ITB: 'cyclical', XLE: 'cyclical', XOP: 'cyclical', OIH: 'cyclical',
+  XLF: 'cyclical', KRE: 'cyclical', KBE: 'cyclical', KIE: 'cyclical', MORT: 'cyclical',
+  IYT: 'cyclical', JETS: 'cyclical', XRT: 'cyclical', IBUY: 'cyclical',
+  XLI: 'cyclical', PAVE: 'cyclical', XLB: 'cyclical', ITA: 'cyclical',
+  XLY: 'cyclical', XLC: 'cyclical',
+  // Growth: expensive keeps working — valuation amplifier dampened
+  SMH: 'growth', XLK: 'growth', IGV: 'growth', SKYY: 'growth', CIBR: 'growth',
+  BOTZ: 'growth', ARKK: 'growth', QQQ: 'growth',
+  // Neutral
+  XLV: 'neutral', XBI: 'neutral', XPH: 'neutral', IHI: 'neutral',
+  XLP: 'neutral', PBJ: 'neutral', XLU: 'neutral',
+  SPY: 'neutral', DIA: 'neutral', IWM: 'neutral',
+};
+
+const GURUFOCUS_API_KEY = process.env.GURUFOCUS_API_KEY || '026d8ee9d10c778c6656d672b5ff1e71:544e1fff1953fece457d6152f3239e74';
+
+async function fetchValuations() {
+  if (Date.now() - valuationLastFetch < VALUATION_CACHE_DURATION && valuationCache.size > 0) {
+    return; // still fresh
+  }
+  console.log('[VALUATIONS] Fetching industry valuations from GuruFocus...');
+  for (const sym of VALUATION_ETFS) {
+    try {
+      const url = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${sym}/summary`;
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      const data: any = await response.json();
+      const ratios = data?.summary?.ratio || {};
+
+      const peData = ratios['P/E(ttm)'] || {};
+      const fpeData = ratios['Forward P/E'] || {};
+      const psData = ratios['P/S'] || {};
+      const epsGrowth = ratios['EPS Growth (%)'] || {};
+      const revGrowth = ratios['Revenue Growth (%)'] || {};
+      const fwdEps = ratios['Future 3-5Y EPS without NRI Growth Rate Estimate'] || {};
+
+      const peVal = parseFloat(peData.value) || null;
+      const peLow = parseFloat(peData.his?.low) || null;
+      const peHigh = parseFloat(peData.his?.high) || null;
+      const peMed = parseFloat(peData.his?.med) || null;
+
+      // Compute percentile within historical range
+      let pePercentile: number | null = null;
+      if (peVal !== null && peLow !== null && peHigh !== null && peHigh > peLow) {
+        pePercentile = Math.round(((peVal - peLow) / (peHigh - peLow)) * 100);
+        pePercentile = Math.max(0, Math.min(100, pePercentile));
+      }
+
+      const psVal = parseFloat(psData.value) || null;
+      const psLow = parseFloat(psData.his?.low) || null;
+      const psHigh = parseFloat(psData.his?.high) || null;
+      let psPercentile: number | null = null;
+      if (psVal !== null && psLow !== null && psHigh !== null && psHigh > psLow) {
+        psPercentile = Math.round(((psVal - psLow) / (psHigh - psLow)) * 100);
+      }
+
+      valuationCache.set(sym, {
+        pe: peVal,
+        fwdPe: parseFloat(fpeData.value) || null,
+        ps: psVal,
+        peLow, peHigh, peMed, pePercentile,
+        psLow, psHigh, psPercentile,
+        epsGrowth: parseFloat(epsGrowth.value) || null,
+        revGrowth: parseFloat(revGrowth.value) || null,
+        fwdEpsGrowth: parseFloat(fwdEps.value) || null,
+        valType: VALUATION_TYPE[sym] || 'neutral',
+        lastUpdated: new Date().toISOString(),
+      });
+
+      // Rate limit — 1 request per second
+      await new Promise(r => setTimeout(r, 1000));
+    } catch (err: any) {
+      // Skip silently
+    }
+  }
+  valuationLastFetch = Date.now();
+  console.log(`[VALUATIONS] Cached ${valuationCache.size} ETF valuations`);
+}
+
+// Fetch on startup (delayed to not block lens refresh)
+setTimeout(() => fetchValuations(), 60000);
+
+// Endpoint
+router.get('/lens/valuations', async (req: Request, res: Response) => {
+  if (valuationCache.size === 0) {
+    await fetchValuations();
+  }
+  const result: Record<string, any> = {};
+  valuationCache.forEach((val, sym) => { result[sym] = val; });
+  res.json({
+    count: valuationCache.size,
+    lastFetch: valuationLastFetch ? new Date(valuationLastFetch).toISOString() : null,
+    valuations: result,
+  });
+});
+
 // All instrument snapshots
 router.get('/lens/instruments', (req: Request, res: Response) => {
   const bucket = req.query.bucket as string | undefined;
