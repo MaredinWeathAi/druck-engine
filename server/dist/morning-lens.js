@@ -1141,6 +1141,108 @@ router.get('/lens/transitions', (req, res) => {
         lastRefresh: lensLastRefresh ? new Date(lensLastRefresh).toISOString() : null,
     });
 });
+// ── Market Regime — phase breadth across all instruments ──
+// Purely informational — tells the user "what is the market as a whole doing?"
+// Does NOT modify individual phase classifications.
+router.get('/lens/regime', (req, res) => {
+    const allSnaps = Array.from(instrumentSnapshots.values());
+    const withPhase = allSnaps.filter(s => s.phaseData);
+    const total = withPhase.length;
+    if (total === 0) {
+        return res.json({ status: 'loading', message: 'Phase data not yet computed' });
+    }
+    // Phase counts — overall and by bucket
+    const phaseCounts = {};
+    const bucketPhases = {};
+    const phaseNames = ['NARRATIVE_EXPANSION', 'INSTITUTIONAL_ACCUMULATION', 'BUYING_EXHAUSTION', 'NARRATIVE_REVERSAL', 'SELLING_EXHAUSTION', 'NARRATIVE_COLLAPSE'];
+    for (const phase of phaseNames) {
+        phaseCounts[phase] = 0;
+    }
+    for (const snap of withPhase) {
+        const phase = snap.phaseData.phase;
+        phaseCounts[phase] = (phaseCounts[phase] || 0) + 1;
+        if (!bucketPhases[snap.bucket]) {
+            bucketPhases[snap.bucket] = {};
+            for (const p of phaseNames)
+                bucketPhases[snap.bucket][p] = 0;
+        }
+        bucketPhases[snap.bucket][phase] = (bucketPhases[snap.bucket][phase] || 0) + 1;
+    }
+    // Compute breadth percentages
+    const expansionPct = Math.round(((phaseCounts.NARRATIVE_EXPANSION || 0) / total) * 100);
+    const distributionPct = Math.round(((phaseCounts.INSTITUTIONAL_ACCUMULATION || 0) / total) * 100);
+    const exhaustionPct = Math.round(((phaseCounts.BUYING_EXHAUSTION || 0) / total) * 100);
+    const reversalPct = Math.round(((phaseCounts.NARRATIVE_REVERSAL || 0) / total) * 100);
+    const sellExhPct = Math.round(((phaseCounts.SELLING_EXHAUSTION || 0) / total) * 100);
+    const collapsePct = Math.round(((phaseCounts.NARRATIVE_COLLAPSE || 0) / total) * 100);
+    // Uptrend breadth = P1 + P2 (instruments still above 200d with golden cross)
+    const uptrendBreadth = expansionPct + distributionPct;
+    // Downtrend breadth = P4 + P5 (confirmed below 200d)
+    const downtrendBreadth = reversalPct + sellExhPct;
+    // Stress = P3 + P4 (exhaustion + reversal — things breaking)
+    const stressBreadth = exhaustionPct + reversalPct;
+    // Regime classification
+    let regime;
+    let regimeDescription;
+    if (uptrendBreadth >= 70) {
+        regime = 'BROAD_EXPANSION';
+        regimeDescription = 'Broad expansion — most instruments in uptrends. Late-cycle risk: crowded positioning, complacency.';
+    }
+    else if (uptrendBreadth >= 50 && stressBreadth < 25) {
+        regime = 'HEALTHY_TREND';
+        regimeDescription = 'Healthy trend — majority in uptrends with manageable stress. Selective leadership opportunities.';
+    }
+    else if (uptrendBreadth >= 40 && stressBreadth >= 25) {
+        regime = 'DIVERGENT';
+        regimeDescription = 'Divergent market — split between uptrends and stress. Sector selection critical. Be surgical.';
+    }
+    else if (downtrendBreadth >= 40) {
+        regime = 'BROAD_STRESS';
+        regimeDescription = 'Broad stress — defensive positioning. Majority below 200d. Focus on capital preservation.';
+    }
+    else if (sellExhPct + collapsePct >= 30) {
+        regime = 'CAPITULATION';
+        regimeDescription = 'Capitulation zone — widespread selling exhaustion. Contrarian opportunities forming.';
+    }
+    else {
+        regime = 'TRANSITIONAL';
+        regimeDescription = 'Transitional — no dominant regime. Mixed signals. Wait for clarity.';
+    }
+    // Average confidence across all instruments
+    const avgConf = Math.round(withPhase.reduce((sum, s) => sum + (s.phaseData?.confidence || 50), 0) / total);
+    // Per-bucket breakdown
+    const bucketSummaries = {};
+    for (const [bucket, phases] of Object.entries(bucketPhases)) {
+        const bucketTotal = Object.values(phases).reduce((a, b) => a + b, 0);
+        const bucketUptrend = ((phases.NARRATIVE_EXPANSION || 0) + (phases.INSTITUTIONAL_ACCUMULATION || 0));
+        bucketSummaries[bucket] = {
+            total: bucketTotal,
+            phases,
+            uptrendPct: Math.round((bucketUptrend / bucketTotal) * 100),
+            dominantPhase: Object.entries(phases).sort((a, b) => b[1] - a[1])[0]?.[0] || 'UNKNOWN',
+        };
+    }
+    res.json({
+        regime,
+        regimeDescription,
+        total,
+        phaseCounts,
+        breadth: {
+            uptrendPct: uptrendBreadth,
+            downtrendPct: downtrendBreadth,
+            stressPct: stressBreadth,
+            expansionPct,
+            distributionPct,
+            exhaustionPct,
+            reversalPct,
+            sellingExhaustionPct: sellExhPct,
+            collapsePct,
+        },
+        averageConfidence: avgConf,
+        byBucket: bucketSummaries,
+        lastRefresh: lensLastRefresh ? new Date(lensLastRefresh).toISOString() : null,
+    });
+});
 // All instrument snapshots
 router.get('/lens/instruments', (req, res) => {
     const bucket = req.query.bucket;
