@@ -119,6 +119,8 @@ export interface ExtendedTAResult {
     rsi14: number | null;
     macd: MACDResult;
     macdHistSlope: number | null;
+    daysSinceCross200d: number | null;
+    extensionVelocity: number | null;
     atr14: number | null;
     atrPct: number | null;
     highLow: HighLowData | null;

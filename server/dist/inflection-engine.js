@@ -504,6 +504,34 @@ function computeExtendedTA(ticker, name, bars, spyCloses) {
             macdHistSlope = den !== 0 ? Math.round((num / den) * 1000) / 1000 : 0;
         }
     }
+    // v11.0: Time dimension — how long since the 200d cross, and velocity of extension
+    let daysSinceCross200d = null;
+    let extensionVelocity = null;
+    if (sma200.length > 1) {
+        // Walk backwards to find the most recent cross of price through the 200d MA
+        for (let i = closes.length - 1; i > 0; i--) {
+            const smaIdx200 = i - (closes.length - sma200.length);
+            const smaIdx200Prev = smaIdx200 - 1;
+            if (smaIdx200 < 1 || smaIdx200Prev < 0)
+                break;
+            const sma200Val = sma200[smaIdx200];
+            const sma200Prev = sma200[smaIdx200Prev];
+            if (sma200Val === null || sma200Prev === null)
+                continue;
+            const priceAboveNow = closes[i] > sma200Val;
+            const priceAbovePrev = closes[i - 1] > sma200Prev;
+            if (priceAboveNow !== priceAbovePrev) {
+                // Found the crossover point
+                daysSinceCross200d = closes.length - 1 - i;
+                // Velocity: current extension% divided by days since cross
+                if (daysSinceCross200d > 0 && lastSma200 !== null) {
+                    const currentExtension = ((current - lastSma200) / lastSma200) * 100;
+                    extensionVelocity = Math.round((currentExtension / daysSinceCross200d) * 1000) / 1000;
+                }
+                break;
+            }
+        }
+    }
     // ATR
     const atr = calcATR(normalized);
     const lastAtr = atr[atr.length - 1];
@@ -532,6 +560,8 @@ function computeExtendedTA(ticker, name, bars, spyCloses) {
         rsi14: lastRsi,
         macd: lastMacd,
         macdHistSlope,
+        daysSinceCross200d,
+        extensionVelocity,
         atr14: lastAtr,
         atrPct: lastAtr !== null ? Math.round((lastAtr / current) * 10000) / 100 : null,
         highLow,
@@ -1106,6 +1136,18 @@ function classifyPhaseStructural(ta, currentPhase) {
     const rsiOverextended = ta.rsi14 !== null && ta.rsi14 > 80;
     const rsiOversold = ta.rsi14 !== null && ta.rsi14 < 30;
     const rsiDeepOversold = ta.rsi14 !== null && ta.rsi14 < 25;
+    // ── TIME DIMENSION — velocity of the move ──
+    // How fast did we get here? A slow grind to +25% over 90 days is healthy.
+    // A rip to +25% in 15 days is euphoric and fragile.
+    // Velocity > 1.0%/day = aggressive move (25% in 25 days)
+    // Velocity > 1.5%/day = euphoric move (30% in 20 days)
+    // Velocity < 0.3%/day = slow grind (healthy trend)
+    const velocity = ta.extensionVelocity !== null ? ta.extensionVelocity : 0;
+    const absVelocity = Math.abs(velocity);
+    const daysSinceCross = ta.daysSinceCross200d;
+    const isEuphoricVelocity = absVelocity > 1.5; // moving too fast
+    const isAggressiveVelocity = absVelocity > 1.0; // moving fast
+    const isSteadyGrind = absVelocity < 0.3 && daysSinceCross !== null && daysSinceCross > 60; // slow and sustained
     // ── HARD OVERRIDES ──
     // Rule 1: Price below 200d MA ALWAYS overrides golden cross for uptrend phases.
     // If price broke below the 200d, you're not in expansion or accumulation, period.
@@ -1137,19 +1179,21 @@ function classifyPhaseStructural(ta, currentPhase) {
         // Druckenmiller cares about WHERE you are in the move, not just direction.
         const isExtremeParabolic = extensionPct > 40; // >40% = blow-off regardless
         if (isExtremeParabolic) {
-            // >40% above 200d — this is a blow-off top zone, period.
-            // No additional conditions needed. Even with positive momentum,
-            // you don't initiate at +40% over the 200d — that's where you sell.
+            // >40% above 200d — blow-off zone regardless of momentum or velocity
             structuralPhase = 'BUYING_EXHAUSTION'; // P3 — extreme blow-off
         }
-        else if (isParabolic && (rsiOverbought || histContracting)) {
-            // 30-40% above 200d with overbought RSI or fading momentum
+        else if (isParabolic && (rsiOverbought || histContracting || isEuphoricVelocity)) {
+            // 30-40% above 200d with overbought RSI, fading momentum, OR arrived too fast
             structuralPhase = 'BUYING_EXHAUSTION'; // P3 — parabolic with warning signs
         }
         else if (isParabolic) {
-            // 30-40% above 200d but momentum still strong — late expansion,
-            // technically still riding it but smart money is watching the exits
+            // 30-40% above 200d, momentum strong, arrived at reasonable pace
             structuralPhase = 'INSTITUTIONAL_ACCUMULATION'; // P2 — smart money alert zone
+        }
+        else if (isExtended && isEuphoricVelocity) {
+            // 18-30% but got here at euphoric speed (>1.5%/day) — this is a rip, not a trend
+            // Druckenmiller is suspicious of moves that happen too fast
+            structuralPhase = 'BUYING_EXHAUSTION'; // P3 — velocity-driven exhaustion
         }
         else if (isExtended && rsiOverextended) {
             // 18-30% with RSI >80 — approaching exhaustion
@@ -1159,13 +1203,21 @@ function classifyPhaseStructural(ta, currentPhase) {
             // 18-30% with momentum fading — distribution starting
             structuralPhase = 'INSTITUTIONAL_ACCUMULATION'; // P2 — smart money distributing
         }
+        else if (isExtended && isAggressiveVelocity) {
+            // 18-30% moving fast (>1%/day) but not euphoric yet — distribution alert
+            structuralPhase = 'INSTITUTIONAL_ACCUMULATION'; // P2 — fast move, watch closely
+        }
         else if (isExtended) {
-            // 18-30% with strong momentum — still in expansion but late-stage
-            // Lower confidence to flag the risk
-            structuralPhase = 'NARRATIVE_EXPANSION'; // P1 — but late, watch closely
+            // 18-30% at steady pace with strong momentum — late expansion
+            structuralPhase = 'NARRATIVE_EXPANSION'; // P1 — late stage, watch closely
+        }
+        else if (isMidTrend && isSteadyGrind) {
+            // 8-18% reached via slow steady grind over 60+ days — highest quality P1
+            // This is Druckenmiller's favorite: "I like things that have been quietly going up"
+            structuralPhase = 'NARRATIVE_EXPANSION'; // P1 — ideal trend
         }
         else {
-            // Fresh to mid-trend (<18% above 200d) with healthy momentum — true expansion
+            // Fresh to mid-trend with healthy momentum — true expansion
             structuralPhase = 'NARRATIVE_EXPANSION'; // P1
         }
     }
@@ -1197,6 +1249,33 @@ function classifyPhaseStructural(ta, currentPhase) {
     // ── CONFIDENCE from confirmation signals ──
     let confidence = 50;
     const transitions = [];
+    // Velocity commentary
+    if (daysSinceCross !== null && above200) {
+        if (isEuphoricVelocity) {
+            transitions.push(`Euphoric velocity: ${extensionPct.toFixed(0)}% in ${daysSinceCross}d (${absVelocity.toFixed(1)}%/day) — fragile move`);
+            confidence -= 10;
+        }
+        else if (isAggressiveVelocity) {
+            transitions.push(`Fast move: ${extensionPct.toFixed(0)}% in ${daysSinceCross}d (${absVelocity.toFixed(1)}%/day) — watch for pullback`);
+            confidence -= 5;
+        }
+        else if (isSteadyGrind) {
+            transitions.push(`Steady grind: ${extensionPct.toFixed(0)}% over ${daysSinceCross}d (${absVelocity.toFixed(2)}%/day) — high quality trend`);
+            confidence += 10;
+        }
+        else if (daysSinceCross > 0) {
+            transitions.push(`Trend age: ${daysSinceCross}d since 200d cross (${absVelocity.toFixed(2)}%/day)`);
+        }
+    }
+    else if (daysSinceCross !== null && priceBelow200) {
+        if (isEuphoricVelocity) {
+            transitions.push(`Rapid decline: ${extensionPct.toFixed(0)}% in ${daysSinceCross}d — capitulation risk`);
+            confidence += 5; // faster decline = more likely to bounce
+        }
+        else if (daysSinceCross > 0) {
+            transitions.push(`Below 200d for ${daysSinceCross}d (${absVelocity.toFixed(2)}%/day decline rate)`);
+        }
+    }
     // Extension commentary — always note where we are in the move
     if (above200) {
         if (isParabolic) {
