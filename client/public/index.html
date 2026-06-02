@@ -951,10 +951,15 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <!-- Macro Input Panel -->
       <div class="card" id="fs-macro-panel" style="margin-bottom:16px;padding:20px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <h3 style="margin:0;font-size:14px;color:var(--text)">Macro Inputs</h3>
+          <h3 style="margin:0;font-size:14px;color:var(--text)">Causal Inputs</h3>
           <span id="fs-modified-badge" style="display:none;padding:2px 10px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(249,115,22,0.2);color:var(--amber);border:1px solid rgba(249,115,22,0.4)">MODIFIED</span>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px" id="fs-sliders"></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px" id="fs-sliders"></div>
+        <!-- Derived variables -->
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:600;color:var(--dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Derived Effects</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px" id="fs-derived"></div>
+        </div>
       </div>
 
       <!-- Bucket tabs -->
@@ -3516,72 +3521,57 @@ var fsData = null;  // lens instruments data (snapshot, never modified)
 var fsBucket = 'equities';
 var fsModified = false;
 
-// Core macro factors — what Druckenmiller watches
+// ═══════════════════════════════════════════════════════════════════════════
+// THREE CAUSAL INPUTS — everything else is derived
+// ═══════════════════════════════════════════════════════════════════════════
+// Fed Policy → rates → dollar (capital flows) → gold (real rates) → credit (borrowing costs)
+// Oil → inflation → feeds back into Fed expectations
+// Growth → earnings → cyclical demand → independent of Fed/Oil
 var MACRO_FACTORS = [
-  { id: 'rates', label: 'Interest Rates', min: -3, max: 3, step: 1, default: 0,
+  { id: 'fed', label: 'Fed Policy', min: -3, max: 3, step: 1, default: 0,
     labels: { '-3': 'Cutting fast', '-2': 'Cutting', '-1': 'Easing bias', '0': 'Neutral', '1': 'Tightening bias', '2': 'Hiking', '3': 'Hiking fast' } },
-  { id: 'inflation', label: 'Inflation', min: -3, max: 3, step: 1, default: 0,
-    labels: { '-3': 'Deflation', '-2': 'Falling fast', '-1': 'Cooling', '0': 'Stable', '1': 'Warming', '2': 'Hot', '3': 'Runaway' } },
-  { id: 'dollar', label: 'US Dollar', min: -3, max: 3, step: 1, default: 0,
-    labels: { '-3': 'Crashing', '-2': 'Weakening fast', '-1': 'Softening', '0': 'Stable', '1': 'Firming', '2': 'Strengthening', '3': 'Surging' } },
-  { id: 'growth', label: 'GDP Growth', min: -3, max: 3, step: 1, default: 0,
-    labels: { '-3': 'Recession', '-2': 'Contracting', '-1': 'Slowing', '0': 'Trend', '1': 'Accelerating', '2': 'Boom', '3': 'Overheating' } },
-  { id: 'credit', label: 'Credit Conditions', min: -3, max: 3, step: 1, default: 0,
-    labels: { '-3': 'Crisis', '-2': 'Tightening fast', '-1': 'Tightening', '0': 'Neutral', '1': 'Easing', '2': 'Loose', '3': 'Euphoric' } },
   { id: 'oil', label: 'Oil Prices', min: -3, max: 3, step: 1, default: 0,
     labels: { '-3': 'Collapsing', '-2': 'Falling', '-1': 'Softening', '0': 'Stable', '1': 'Rising', '2': 'Spiking', '3': 'Supply shock' } },
-  { id: 'sentiment', label: 'Risk Appetite', min: -3, max: 3, step: 1, default: 0,
-    labels: { '-3': 'Panic', '-2': 'Fear', '-1': 'Cautious', '0': 'Neutral', '1': 'Optimistic', '2': 'Greedy', '3': 'Euphoria' } },
+  { id: 'growth', label: 'Growth', min: -3, max: 3, step: 1, default: 0,
+    labels: { '-3': 'Recession', '-2': 'Contracting', '-1': 'Slowing', '0': 'Trend', '1': 'Accelerating', '2': 'Boom', '3': 'Overheating' } },
 ];
 
 var fsInputs = {};  // current slider values
 var fsDefaults = {}; // "latest data" defaults (reset target)
 
-// Macro sensitivity per group — how much each macro factor shifts the phase
-// Positive = macro tailwind (shifts phase toward expansion), Negative = headwind (shifts toward reversal)
-var MACRO_SENSITIVITY = {
-  // Format: { rates: weight, inflation: weight, dollar: weight, growth: weight, credit: weight, oil: weight, sentiment: weight }
-  // Weights from -1 to 1: how sensitive is this group to each factor?
-  // Negative weight means INVERSE relationship (e.g., rate hikes hurt homebuilders)
-  'Leading Groups':       { rates: -0.8, inflation: -0.3, dollar:  0.0, growth:  0.7, credit:  0.6, oil: -0.2, sentiment:  0.5 },
-  'Sectors':              { rates: -0.4, inflation: -0.2, dollar:  0.1, growth:  0.6, credit:  0.4, oil: -0.1, sentiment:  0.5 },
-  'Tech Industries':      { rates: -0.7, inflation: -0.2, dollar:  0.2, growth:  0.5, credit:  0.5, oil:  0.0, sentiment:  0.7 },
-  'Industrial Sub-Sectors':{ rates: -0.3, inflation: -0.2, dollar: -0.2, growth:  0.8, credit:  0.4, oil: -0.3, sentiment:  0.4 },
-  'Healthcare Industries': { rates: -0.3, inflation:  0.1, dollar:  0.1, growth:  0.2, credit:  0.2, oil:  0.0, sentiment:  0.3 },
-  'Financial Industries':  { rates:  0.5, inflation:  0.0, dollar:  0.2, growth:  0.5, credit:  0.7, oil:  0.0, sentiment:  0.5 },
-  'Consumer Industries':   { rates: -0.5, inflation: -0.5, dollar:  0.0, growth:  0.6, credit:  0.5, oil: -0.3, sentiment:  0.4 },
-  'Energy Industries':     { rates:  0.1, inflation:  0.3, dollar: -0.3, growth:  0.4, credit:  0.2, oil:  0.9, sentiment:  0.3 },
-  'Real Estate Industries':{ rates: -0.9, inflation: -0.2, dollar:  0.0, growth:  0.3, credit:  0.7, oil:  0.0, sentiment:  0.3 },
-  'Thematic':              { rates: -0.6, inflation: -0.1, dollar:  0.1, growth:  0.4, credit:  0.5, oil:  0.0, sentiment:  0.8 },
-  // Commodities
-  'Precious Metals':       { rates: -0.6, inflation:  0.8, dollar: -0.8, growth: -0.2, credit: -0.3, oil:  0.2, sentiment: -0.4 },
-  'Industrial Metals':     { rates: -0.2, inflation:  0.3, dollar: -0.5, growth:  0.8, credit:  0.3, oil:  0.3, sentiment:  0.4 },
-  'Energy':                { rates:  0.1, inflation:  0.4, dollar: -0.4, growth:  0.5, credit:  0.2, oil:  0.9, sentiment:  0.3 },
-  'Agriculture':           { rates: -0.1, inflation:  0.5, dollar: -0.4, growth:  0.2, credit:  0.1, oil:  0.3, sentiment:  0.1 },
-  'Broad':                 { rates:  0.0, inflation:  0.3, dollar: -0.3, growth:  0.5, credit:  0.2, oil:  0.5, sentiment:  0.3 },
-  // Fixed Income
-  'Duration':              { rates: -0.9, inflation: -0.7, dollar:  0.2, growth: -0.4, credit:  0.2, oil: -0.2, sentiment: -0.3 },
-  'Credit':                { rates: -0.4, inflation: -0.3, dollar:  0.1, growth:  0.4, credit:  0.8, oil: -0.1, sentiment:  0.5 },
-  'US Treasuries':         { rates:  0.6, inflation: -0.3, dollar:  0.3, growth:  0.2, credit:  0.0, oil:  0.0, sentiment:  0.0 },
-  'Inflation':             { rates: -0.3, inflation:  0.7, dollar: -0.2, growth:  0.1, credit:  0.1, oil:  0.2, sentiment:  0.0 },
-  'Mortgage':              { rates: -0.8, inflation: -0.3, dollar:  0.0, growth:  0.2, credit:  0.5, oil:  0.0, sentiment:  0.2 },
-  'International Bonds':   { rates: -0.3, inflation: -0.2, dollar: -0.5, growth:  0.2, credit:  0.3, oil: -0.1, sentiment:  0.2 },
-  // FX
-  'Dollar':                { rates:  0.7, inflation: -0.3, dollar:  0.9, growth:  0.3, credit:  0.2, oil:  0.1, sentiment: -0.2 },
-  'Major Crosses':         { rates: -0.5, inflation:  0.2, dollar: -0.8, growth: -0.1, credit: -0.1, oil:  0.0, sentiment:  0.2 },
-  'EM FX':                 { rates: -0.4, inflation: -0.2, dollar: -0.7, growth:  0.5, credit:  0.4, oil:  0.1, sentiment:  0.5 },
-  'Digital':               { rates: -0.5, inflation:  0.2, dollar: -0.3, growth:  0.2, credit:  0.4, oil:  0.0, sentiment:  0.9 },
-  // International equities
-  'Europe':                { rates: -0.4, inflation: -0.3, dollar: -0.4, growth:  0.6, credit:  0.4, oil: -0.2, sentiment:  0.5 },
-  'Asia-Pacific':          { rates: -0.3, inflation: -0.2, dollar: -0.5, growth:  0.7, credit:  0.3, oil: -0.1, sentiment:  0.5 },
-  'Latin America':         { rates: -0.3, inflation: -0.3, dollar: -0.6, growth:  0.5, credit:  0.4, oil:  0.3, sentiment:  0.5 },
-  'Other EM':              { rates: -0.3, inflation: -0.2, dollar: -0.6, growth:  0.5, credit:  0.4, oil:  0.2, sentiment:  0.5 },
-  'International':         { rates: -0.3, inflation: -0.2, dollar: -0.5, growth:  0.5, credit:  0.3, oil:  0.0, sentiment:  0.4 },
-  'Indices':               { rates: -0.4, inflation: -0.2, dollar:  0.1, growth:  0.6, credit:  0.5, oil: -0.1, sentiment:  0.6 },
-};
+// ═══════════════════════════════════════════════════════════════════════════
+// DERIVED VARIABLES — computed from the 3 inputs, shown to user
+// ═══════════════════════════════════════════════════════════════════════════
+// Fed cutting → dollar weakens, credit eases, gold rises
+// Oil falling → inflation cools, reinforces Fed room to cut
+// Growth rising → supports risk assets, but can push inflation/rates up
+function computeDerived() {
+  var fed = fsInputs.fed || 0;
+  var oil = fsInputs.oil || 0;
+  var growth = fsInputs.growth || 0;
 
-// Default sensitivity for groups not in the map
-var DEFAULT_SENSITIVITY = { rates: -0.3, inflation: -0.1, dollar: 0.0, growth: 0.4, credit: 0.3, oil: 0.0, sentiment: 0.4 };
+  // Dollar: driven primarily by rates (Fed), with growth support
+  // Fed cutting → dollar weakens; growth strong → dollar support (capital inflows from strong economy)
+  var dollar = Math.max(-3, Math.min(3, Math.round(fed * 0.8 + growth * 0.3)));
+
+  // Inflation: oil is ~40% of inflation; growth adds demand-pull; Fed doesn't directly control inflation
+  var inflation = Math.max(-3, Math.min(3, Math.round(oil * 0.5 + growth * 0.3)));
+
+  // Credit: Fed cutting → easier credit; growth helps credit quality; oil crash can signal stress
+  var credit = Math.max(-3, Math.min(3, Math.round(-fed * 0.6 + growth * 0.3 + oil * 0.1)));
+
+  // Gold: inverse real rates = inverse (fed - inflation); also safe haven in stress
+  var gold = Math.max(-3, Math.min(3, Math.round(-fed * 0.5 - dollar * 0.3 + inflation * 0.2)));
+
+  return { dollar: dollar, inflation: inflation, credit: credit, gold: gold };
+}
+
+// Group-level fallback sensitivities (for instruments without symbol overrides)
+// Now uses the 3 causal inputs (fed, oil, growth) which get expanded to 7 factors
+// via computeDerived() inside computeNarrativeShift()
+// These are NOT used directly — they exist only as fallback for unmapped symbols
+var MACRO_SENSITIVITY = {};  // empty — all logic now in computeNarrativeShift with symbol overrides
+var DEFAULT_SENSITIVITY = { rates: -0.2, inflation: 0.1, dollar: -0.3, growth: 0.4, credit: 0.1, oil: 0.2 };
 
 // Symbol-level overrides — for instruments within mixed groups that have distinct sensitivities
 // These take priority over the group-level sensitivity
@@ -3716,6 +3706,7 @@ function loadForeshadow() {
     if (!data || !data.instruments) return;
     fsData = data.instruments;
     buildMacroSliders();
+    renderDerivedPanel();
     renderForeshadowTable();
   });
 }
@@ -3755,11 +3746,37 @@ function updateMacroInput(id, value) {
     lbl.style.color = v > 0 ? '#0ea5e9' : v < 0 ? '#f97316' : 'var(--dim)';
     lbl.style.background = v > 0 ? 'rgba(14,165,233,0.15)' : v < 0 ? 'rgba(249,115,22,0.15)' : 'var(--card)';
   }
-  // Check if modified from defaults
   fsModified = MACRO_FACTORS.some(function(f) { return fsInputs[f.id] !== fsDefaults[f.id]; });
   var badge = document.getElementById('fs-modified-badge');
   if (badge) badge.style.display = fsModified ? 'inline-block' : 'none';
+  renderDerivedPanel();
   renderForeshadowTable();
+}
+
+function renderDerivedPanel() {
+  var d = computeDerived();
+  var container = document.getElementById('fs-derived');
+  if (!container) return;
+
+  var items = [
+    { label: 'Dollar', value: d.dollar, labels: { '-3':'Crashing','-2':'Weak','-1':'Soft','0':'Stable','1':'Firm','2':'Strong','3':'Surging' } },
+    { label: 'Inflation', value: d.inflation, labels: { '-3':'Deflation','-2':'Falling','-1':'Cooling','0':'Stable','1':'Warming','2':'Hot','3':'Runaway' } },
+    { label: 'Credit', value: d.credit, labels: { '-3':'Crisis','-2':'Tight','-1':'Snug','0':'Neutral','1':'Easy','2':'Loose','3':'Euphoric' } },
+    { label: 'Gold', value: d.gold, labels: { '-3':'Crashing','-2':'Falling','-1':'Soft','0':'Flat','1':'Rising','2':'Rally','3':'Surging' } },
+  ];
+
+  var html = '';
+  items.forEach(function(item) {
+    var v = item.value;
+    var color = v > 0 ? '#0ea5e9' : v < 0 ? '#f97316' : 'var(--dim)';
+    var bg = v > 0 ? 'rgba(14,165,233,0.1)' : v < 0 ? 'rgba(249,115,22,0.1)' : 'var(--card)';
+    var labelText = item.labels[String(v)] || 'Neutral';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:6px;background:' + bg + ';border:1px solid ' + color + '33">';
+    html += '<span style="font-size:11px;color:var(--text)">' + item.label + '</span>';
+    html += '<span style="font-size:10px;font-weight:700;color:' + color + '">' + labelText + ' (' + (v > 0 ? '+' : '') + v + ')</span>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
 }
 
 function resetForeshadow() {
@@ -3772,24 +3789,38 @@ function resetForeshadow() {
   var badge = document.getElementById('fs-modified-badge');
   if (badge) badge.style.display = 'none';
   buildMacroSliders();
+  renderDerivedPanel();
   renderForeshadowTable();
 }
 
 function computeNarrativeShift(group, symbol) {
-  // Use symbol-level override if available, else fall back to group
-  var sens = (symbol && SYMBOL_SENSITIVITY[symbol]) ? SYMBOL_SENSITIVITY[symbol] : (MACRO_SENSITIVITY[group] || DEFAULT_SENSITIVITY);
+  // 3 causal inputs → derive 4 downstream variables → apply all 7 to instrument weights
+  var sens = (symbol && SYMBOL_SENSITIVITY[symbol]) ? SYMBOL_SENSITIVITY[symbol] : DEFAULT_SENSITIVITY;
+  var fed = fsInputs.fed || 0;
+  var oil = fsInputs.oil || 0;
+  var growth = fsInputs.growth || 0;
+
+  // Derive downstream variables from the 3 inputs
+  var derived = computeDerived();
+
+  // Build the full 7-factor input vector from 3 causes + 4 derived
+  var factors = {
+    rates: fed,              // Fed policy IS the rate direction
+    oil: oil,                // direct input
+    growth: growth,          // direct input
+    dollar: derived.dollar,  // derived: fed + growth → dollar
+    inflation: derived.inflation,  // derived: oil + growth → inflation
+    credit: derived.credit,  // derived: fed + growth + oil → credit
+    gold: derived.gold,      // derived: inverse real rates
+  };
+
+  // Apply each factor * its empirical weight for this instrument
   var totalShift = 0;
-  MACRO_FACTORS.forEach(function(f) {
-    var weight = sens[f.id] || 0;
-    var input = fsInputs[f.id] || 0;
-    // Scale: each unit of input * weight = 0.55 phase shift
-    // At max conviction (-3 input * -1.0 weight), single factor = 1.65 phases
-    // Two aligned factors at max = ~3 phases (e.g., P5 → P2)
-    // This means a single dominant catalyst can move an instrument 1-2 phases,
-    // and multiple aligned catalysts can swing the full cycle — which matches
-    // how Druckenmiller sizes: one big insight = meaningful bet, not a nudge
+  for (var key in factors) {
+    var weight = sens[key] || 0;
+    var input = factors[key];
     totalShift += input * weight * 0.55;
-  });
+  }
   return totalShift;
 }
 
