@@ -969,15 +969,15 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         <table class="instrument-table" id="fs-table">
           <thead>
             <tr>
-              <th>Symbol</th>
-              <th>Name</th>
-              <th>Group</th>
-              <th>Technical Phase</th>
-              <th>Narrative Phase</th>
-              <th>Shift</th>
+              <th data-fs-sort="symbol" style="cursor:pointer">Symbol <span class="sort-arrow"></span></th>
+              <th data-fs-sort="name" style="cursor:pointer">Name <span class="sort-arrow"></span></th>
+              <th data-fs-sort="group" style="cursor:pointer">Group <span class="sort-arrow"></span></th>
+              <th data-fs-sort="techPhase" style="cursor:pointer">Technical Phase <span class="sort-arrow"></span></th>
+              <th data-fs-sort="narrPhase" style="cursor:pointer">Narrative Phase <span class="sort-arrow"></span></th>
+              <th data-fs-sort="shift" style="cursor:pointer">Shift <span class="sort-arrow"></span></th>
               <th>Phase Momentum</th>
-              <th>Ext %</th>
-              <th>30D %</th>
+              <th data-fs-sort="ext" style="cursor:pointer">Ext % <span class="sort-arrow"></span></th>
+              <th data-fs-sort="chg30d" style="cursor:pointer">30D % <span class="sort-arrow"></span></th>
             </tr>
           </thead>
           <tbody id="fs-tbody"></tbody>
@@ -3586,37 +3586,113 @@ var DEFAULT_SENSITIVITY = { rates: -0.3, inflation: -0.1, dollar: 0.0, growth: 0
 // Symbol-level overrides — for instruments within mixed groups that have distinct sensitivities
 // These take priority over the group-level sensitivity
 var SYMBOL_SENSITIVITY = {
-  // Homebuilders — THE most rate-sensitive equity sector
+  // ── Homebuilders — THE most rate-sensitive equity sector ──
   'XHB':  { rates: -1.0, inflation: -0.4, dollar:  0.0, growth:  0.6, credit:  0.8, oil: -0.1, sentiment:  0.4 },
   'ITB':  { rates: -1.0, inflation: -0.4, dollar:  0.0, growth:  0.6, credit:  0.8, oil: -0.1, sentiment:  0.4 },
-  // Semis — rate-sensitive on valuations but driven more by capex/AI cycle than rates
+  // ── Tech / Growth ──
   'SMH':  { rates: -0.4, inflation: -0.1, dollar:  0.2, growth:  0.7, credit:  0.3, oil:  0.0, sentiment:  0.8 },
-  // Transports — GDP growth proxy, oil cost input
-  'IYT':  { rates: -0.3, inflation: -0.3, dollar: -0.1, growth:  0.9, credit:  0.4, oil: -0.6, sentiment:  0.4 },
-  // Regional banks — benefit from higher rates (NIM), hurt by credit tightening
-  'KRE':  { rates:  0.6, inflation:  0.0, dollar:  0.1, growth:  0.5, credit:  0.8, oil:  0.0, sentiment:  0.5 },
-  // Retailers — consumer spending, rate-sensitive on credit
-  'XRT':  { rates: -0.6, inflation: -0.6, dollar:  0.0, growth:  0.7, credit:  0.6, oil: -0.3, sentiment:  0.5 },
-  // Airlines — oil is the dominant factor
-  'JETS': { rates: -0.2, inflation: -0.2, dollar: -0.1, growth:  0.7, credit:  0.3, oil: -0.9, sentiment:  0.5 },
-  // Software — rate-sensitive (duration asset), growth-dependent
   'IGV':  { rates: -0.8, inflation: -0.2, dollar:  0.2, growth:  0.6, credit:  0.4, oil:  0.0, sentiment:  0.7 },
-  // ARK — hyper rate-sensitive, speculative
+  'SKYY': { rates: -0.7, inflation: -0.1, dollar:  0.1, growth:  0.5, credit:  0.4, oil:  0.0, sentiment:  0.7 },
+  'CIBR': { rates: -0.5, inflation: -0.1, dollar:  0.2, growth:  0.5, credit:  0.3, oil:  0.0, sentiment:  0.6 },
+  'BOTZ': { rates: -0.5, inflation: -0.1, dollar:  0.1, growth:  0.7, credit:  0.3, oil:  0.0, sentiment:  0.7 },
   'ARKK': { rates: -0.9, inflation: -0.2, dollar:  0.1, growth:  0.5, credit:  0.5, oil:  0.0, sentiment:  0.9 },
-  // REITs — rate-sensitive, credit-dependent
-  'VNQ':  { rates: -0.9, inflation: -0.2, dollar:  0.0, growth:  0.3, credit:  0.7, oil:  0.0, sentiment:  0.3 },
-  'XLRE': { rates: -0.9, inflation: -0.2, dollar:  0.0, growth:  0.3, credit:  0.7, oil:  0.0, sentiment:  0.3 },
-  // Gold — inflation hedge, inverse dollar, inverse rates
+  'XLK':  { rates: -0.6, inflation: -0.1, dollar:  0.2, growth:  0.6, credit:  0.3, oil:  0.0, sentiment:  0.7 },
+  'QQQ':  { rates: -0.5, inflation: -0.2, dollar:  0.1, growth:  0.6, credit:  0.4, oil:  0.0, sentiment:  0.7 },
+  // ── Transports / Industrials ──
+  'IYT':  { rates: -0.3, inflation: -0.3, dollar: -0.1, growth:  0.9, credit:  0.4, oil: -0.6, sentiment:  0.4 },
+  'JETS': { rates: -0.2, inflation: -0.2, dollar: -0.1, growth:  0.7, credit:  0.3, oil: -0.9, sentiment:  0.5 },
+  'PAVE': { rates: -0.3, inflation: -0.1, dollar: -0.1, growth:  0.8, credit:  0.5, oil: -0.2, sentiment:  0.4 },
+  'ITA':  { rates: -0.2, inflation: -0.1, dollar:  0.2, growth:  0.6, credit:  0.3, oil: -0.2, sentiment:  0.4 },
+  'XLI':  { rates: -0.3, inflation: -0.2, dollar: -0.2, growth:  0.8, credit:  0.4, oil: -0.3, sentiment:  0.4 },
+  // ── Financials — rates HELP banks ──
+  'KRE':  { rates:  0.6, inflation:  0.0, dollar:  0.1, growth:  0.5, credit:  0.8, oil:  0.0, sentiment:  0.5 },
+  'KBE':  { rates:  0.5, inflation:  0.0, dollar:  0.1, growth:  0.5, credit:  0.8, oil:  0.0, sentiment:  0.5 },
+  'XLF':  { rates:  0.4, inflation:  0.0, dollar:  0.2, growth:  0.5, credit:  0.7, oil:  0.0, sentiment:  0.5 },
+  'IAI':  { rates:  0.3, inflation:  0.0, dollar:  0.1, growth:  0.5, credit:  0.6, oil:  0.0, sentiment:  0.6 },
+  'KIE':  { rates:  0.3, inflation: -0.2, dollar:  0.1, growth:  0.3, credit:  0.4, oil:  0.0, sentiment:  0.3 },
+  'MORT': { rates: -0.8, inflation: -0.3, dollar:  0.0, growth:  0.3, credit:  0.7, oil:  0.0, sentiment:  0.3 },
+  // ── Consumer ──
+  'XRT':  { rates: -0.6, inflation: -0.6, dollar:  0.0, growth:  0.7, credit:  0.6, oil: -0.3, sentiment:  0.5 },
+  'XLY':  { rates: -0.5, inflation: -0.5, dollar:  0.0, growth:  0.7, credit:  0.5, oil: -0.2, sentiment:  0.5 },
+  'XLP':  { rates: -0.2, inflation: -0.3, dollar:  0.3, growth:  0.2, credit:  0.1, oil: -0.1, sentiment:  0.1 },
+  'IBUY': { rates: -0.6, inflation: -0.4, dollar:  0.0, growth:  0.6, credit:  0.5, oil:  0.0, sentiment:  0.6 },
+  'PBJ':  { rates: -0.2, inflation: -0.4, dollar:  0.2, growth:  0.2, credit:  0.1, oil: -0.2, sentiment:  0.1 },
+  // ── Healthcare ──
+  'XLV':  { rates: -0.3, inflation:  0.1, dollar:  0.2, growth:  0.2, credit:  0.2, oil:  0.0, sentiment:  0.2 },
+  'XBI':  { rates: -0.6, inflation:  0.0, dollar:  0.1, growth:  0.3, credit:  0.4, oil:  0.0, sentiment:  0.7 },
+  'IHI':  { rates: -0.4, inflation:  0.0, dollar:  0.2, growth:  0.3, credit:  0.2, oil:  0.0, sentiment:  0.3 },
+  'XPH':  { rates: -0.2, inflation:  0.1, dollar:  0.2, growth:  0.2, credit:  0.2, oil:  0.0, sentiment:  0.2 },
+  // ── Energy — oil dominates ──
+  'XLE':  { rates:  0.1, inflation:  0.3, dollar: -0.3, growth:  0.4, credit:  0.2, oil:  0.8, sentiment:  0.3 },
+  'XOP':  { rates:  0.1, inflation:  0.3, dollar: -0.3, growth:  0.4, credit:  0.2, oil:  0.9, sentiment:  0.3 },
+  'OIH':  { rates:  0.0, inflation:  0.2, dollar: -0.3, growth:  0.4, credit:  0.2, oil:  0.9, sentiment:  0.3 },
+  'CL=F': { rates:  0.0, inflation:  0.3, dollar: -0.4, growth:  0.5, credit:  0.1, oil:  1.0, sentiment:  0.2 },
+  'BZ=F': { rates:  0.0, inflation:  0.3, dollar: -0.4, growth:  0.5, credit:  0.1, oil:  1.0, sentiment:  0.2 },
+  'USO':  { rates:  0.0, inflation:  0.3, dollar: -0.4, growth:  0.5, credit:  0.1, oil:  1.0, sentiment:  0.2 },
+  'AMLP': { rates:  0.2, inflation:  0.2, dollar: -0.1, growth:  0.3, credit:  0.3, oil:  0.6, sentiment:  0.2 },
+  'NG=F': { rates:  0.0, inflation:  0.2, dollar: -0.2, growth:  0.4, credit:  0.1, oil:  0.4, sentiment:  0.2 },
+  'UNG':  { rates:  0.0, inflation:  0.2, dollar: -0.2, growth:  0.4, credit:  0.1, oil:  0.4, sentiment:  0.2 },
+  'URA':  { rates: -0.2, inflation:  0.2, dollar: -0.2, growth:  0.5, credit:  0.2, oil:  0.1, sentiment:  0.5 },
+  // ── Materials / Metals ──
+  'XLB':  { rates: -0.2, inflation:  0.3, dollar: -0.4, growth:  0.7, credit:  0.3, oil:  0.1, sentiment:  0.4 },
+  'SLX':  { rates: -0.2, inflation:  0.3, dollar: -0.5, growth:  0.9, credit:  0.3, oil:  0.2, sentiment:  0.4 },
+  'COPX': { rates: -0.2, inflation:  0.3, dollar: -0.6, growth:  0.9, credit:  0.3, oil:  0.2, sentiment:  0.4 },
+  'HG=F': { rates: -0.2, inflation:  0.3, dollar: -0.6, growth:  0.9, credit:  0.3, oil:  0.2, sentiment:  0.3 },
+  'LIT':  { rates: -0.3, inflation:  0.2, dollar: -0.4, growth:  0.7, credit:  0.3, oil:  0.1, sentiment:  0.5 },
+  // ── Precious Metals — inflation hedge, inverse dollar ──
   'GLD':  { rates: -0.7, inflation:  0.9, dollar: -0.9, growth: -0.2, credit: -0.3, oil:  0.2, sentiment: -0.5 },
   'GC=F': { rates: -0.7, inflation:  0.9, dollar: -0.9, growth: -0.2, credit: -0.3, oil:  0.2, sentiment: -0.5 },
-  // Oil — oil price is everything
-  'CL=F': { rates:  0.0, inflation:  0.3, dollar: -0.4, growth:  0.5, credit:  0.1, oil:  1.0, sentiment:  0.2 },
-  'USO':  { rates:  0.0, inflation:  0.3, dollar: -0.4, growth:  0.5, credit:  0.1, oil:  1.0, sentiment:  0.2 },
-  // Treasuries — direct rate play
+  'SLV':  { rates: -0.5, inflation:  0.8, dollar: -0.8, growth:  0.1, credit: -0.2, oil:  0.1, sentiment: -0.3 },
+  'SI=F': { rates: -0.5, inflation:  0.8, dollar: -0.8, growth:  0.1, credit: -0.2, oil:  0.1, sentiment: -0.3 },
+  'GDX':  { rates: -0.6, inflation:  0.8, dollar: -0.8, growth: -0.1, credit: -0.2, oil:  0.1, sentiment: -0.3 },
+  'GDXJ': { rates: -0.6, inflation:  0.8, dollar: -0.8, growth: -0.1, credit: -0.2, oil:  0.1, sentiment: -0.3 },
+  // ── Real Estate — rate and credit sensitive ──
+  'VNQ':  { rates: -0.9, inflation: -0.2, dollar:  0.0, growth:  0.3, credit:  0.7, oil:  0.0, sentiment:  0.3 },
+  'XLRE': { rates: -0.9, inflation: -0.2, dollar:  0.0, growth:  0.3, credit:  0.7, oil:  0.0, sentiment:  0.3 },
+  // ── Fixed Income ──
   'TLT':  { rates: -1.0, inflation: -0.8, dollar:  0.2, growth: -0.5, credit:  0.2, oil: -0.2, sentiment: -0.4 },
+  'TLH':  { rates: -0.9, inflation: -0.7, dollar:  0.2, growth: -0.4, credit:  0.2, oil: -0.2, sentiment: -0.3 },
   'IEF':  { rates: -0.8, inflation: -0.6, dollar:  0.2, growth: -0.3, credit:  0.2, oil: -0.1, sentiment: -0.3 },
-  // Bitcoin — liquidity/sentiment driven
+  'IEI':  { rates: -0.6, inflation: -0.4, dollar:  0.1, growth: -0.2, credit:  0.1, oil:  0.0, sentiment: -0.2 },
+  'SHY':  { rates: -0.3, inflation: -0.2, dollar:  0.1, growth: -0.1, credit:  0.1, oil:  0.0, sentiment: -0.1 },
+  'HYG':  { rates: -0.3, inflation: -0.2, dollar:  0.0, growth:  0.5, credit:  0.9, oil: -0.1, sentiment:  0.5 },
+  'JNK':  { rates: -0.3, inflation: -0.2, dollar:  0.0, growth:  0.5, credit:  0.9, oil: -0.1, sentiment:  0.5 },
+  'LQD':  { rates: -0.5, inflation: -0.3, dollar:  0.1, growth:  0.3, credit:  0.7, oil:  0.0, sentiment:  0.3 },
+  'BKLN': { rates:  0.3, inflation: -0.1, dollar:  0.0, growth:  0.4, credit:  0.8, oil:  0.0, sentiment:  0.4 },
+  'MBB':  { rates: -0.8, inflation: -0.3, dollar:  0.0, growth:  0.1, credit:  0.5, oil:  0.0, sentiment:  0.1 },
+  'TIP':  { rates: -0.3, inflation:  0.8, dollar: -0.2, growth:  0.1, credit:  0.1, oil:  0.2, sentiment:  0.0 },
+  'STIP': { rates: -0.2, inflation:  0.6, dollar: -0.1, growth:  0.1, credit:  0.1, oil:  0.1, sentiment:  0.0 },
+  'EMB':  { rates: -0.4, inflation: -0.2, dollar: -0.5, growth:  0.4, credit:  0.6, oil:  0.0, sentiment:  0.4 },
+  // ── Sectors (broad) ──
+  'SPY':  { rates: -0.4, inflation: -0.2, dollar:  0.1, growth:  0.6, credit:  0.5, oil: -0.1, sentiment:  0.5 },
+  'DIA':  { rates: -0.3, inflation: -0.2, dollar:  0.0, growth:  0.6, credit:  0.4, oil: -0.1, sentiment:  0.4 },
+  'IWM':  { rates: -0.5, inflation: -0.2, dollar:  0.0, growth:  0.7, credit:  0.6, oil: -0.1, sentiment:  0.6 },
+  'MDY':  { rates: -0.4, inflation: -0.2, dollar:  0.0, growth:  0.7, credit:  0.5, oil: -0.1, sentiment:  0.5 },
+  'RSP':  { rates: -0.4, inflation: -0.2, dollar:  0.0, growth:  0.6, credit:  0.5, oil: -0.1, sentiment:  0.5 },
+  'XLC':  { rates: -0.4, inflation: -0.1, dollar:  0.2, growth:  0.4, credit:  0.3, oil:  0.0, sentiment:  0.6 },
+  'XLU':  { rates: -0.7, inflation: -0.2, dollar:  0.1, growth: -0.1, credit:  0.3, oil: -0.1, sentiment: -0.2 },
+  // ── Digital / Crypto ──
   'BTC-USD': { rates: -0.6, inflation:  0.3, dollar: -0.4, growth:  0.2, credit:  0.5, oil:  0.0, sentiment:  1.0 },
+  'ETH-USD': { rates: -0.6, inflation:  0.2, dollar: -0.4, growth:  0.3, credit:  0.5, oil:  0.0, sentiment:  0.9 },
+  // ── Clean Energy / Thematic ──
+  'ICLN': { rates: -0.6, inflation: -0.1, dollar: -0.2, growth:  0.5, credit:  0.4, oil: -0.3, sentiment:  0.7 },
+  'TAN':  { rates: -0.6, inflation: -0.1, dollar: -0.2, growth:  0.5, credit:  0.4, oil: -0.4, sentiment:  0.7 },
+  // ── FX ──
+  'DX-Y.NYB': { rates:  0.7, inflation: -0.3, dollar:  1.0, growth:  0.3, credit:  0.2, oil:  0.1, sentiment: -0.2 },
+  'EURUSD=X': { rates: -0.5, inflation:  0.2, dollar: -0.9, growth: -0.1, credit: -0.1, oil:  0.0, sentiment:  0.2 },
+  'GBP=X':    { rates: -0.4, inflation:  0.1, dollar: -0.8, growth:  0.0, credit:  0.0, oil:  0.0, sentiment:  0.1 },
+  'JPY=X':    { rates:  0.6, inflation: -0.2, dollar:  0.7, growth:  0.2, credit:  0.1, oil:  0.0, sentiment: -0.1 },
+  'CNY=X':    { rates: -0.3, inflation: -0.1, dollar: -0.6, growth:  0.5, credit:  0.3, oil:  0.0, sentiment:  0.3 },
+  'MXN=X':    { rates: -0.3, inflation: -0.2, dollar: -0.6, growth:  0.5, credit:  0.4, oil:  0.3, sentiment:  0.4 },
+  // ── International equities ──
+  'EEM':  { rates: -0.3, inflation: -0.2, dollar: -0.7, growth:  0.6, credit:  0.4, oil:  0.1, sentiment:  0.5 },
+  'EFA':  { rates: -0.3, inflation: -0.2, dollar: -0.5, growth:  0.5, credit:  0.3, oil: -0.1, sentiment:  0.4 },
+  'FXI':  { rates: -0.2, inflation: -0.1, dollar: -0.5, growth:  0.8, credit:  0.4, oil:  0.0, sentiment:  0.5 },
+  'KWEB': { rates: -0.3, inflation: -0.1, dollar: -0.4, growth:  0.7, credit:  0.3, oil:  0.0, sentiment:  0.6 },
+  'INDA': { rates: -0.3, inflation: -0.3, dollar: -0.5, growth:  0.7, credit:  0.4, oil: -0.3, sentiment:  0.4 },
+  'EWY':  { rates: -0.3, inflation: -0.1, dollar: -0.4, growth:  0.7, credit:  0.3, oil:  0.0, sentiment:  0.6 },
+  'EWT':  { rates: -0.3, inflation: -0.1, dollar: -0.3, growth:  0.7, credit:  0.3, oil:  0.0, sentiment:  0.6 },
+  'EWZ':  { rates: -0.3, inflation: -0.3, dollar: -0.6, growth:  0.5, credit:  0.4, oil:  0.4, sentiment:  0.4 },
 };
 
 function loadForeshadow() {
@@ -3758,6 +3834,40 @@ function getPhaseMomentum(inst) {
   return '';
 }
 
+var fsSortKey = null;
+var fsSortAsc = true;
+var fsComputedRows = [];  // cached computed data for sorting
+
+function sortForeshadow(key) {
+  if (fsSortKey === key) {
+    fsSortAsc = !fsSortAsc;  // toggle direction
+  } else {
+    fsSortKey = key;
+    // Default sort direction: descending for numbers, ascending for text
+    fsSortAsc = (key === 'symbol' || key === 'name' || key === 'group');
+  }
+  // Update arrow indicators
+  document.querySelectorAll('#fs-table th[data-fs-sort]').forEach(function(th) {
+    var arrow = th.querySelector('.sort-arrow');
+    if (arrow) {
+      if (th.getAttribute('data-fs-sort') === key) {
+        arrow.textContent = fsSortAsc ? ' ▲' : ' ▼';
+      } else {
+        arrow.textContent = '';
+      }
+    }
+  });
+  renderFsSortedRows();
+}
+
+// Click handler for Foreshadow table headers
+document.addEventListener('click', function(e) {
+  var th = e.target.closest('th[data-fs-sort]');
+  if (th && th.closest('#fs-table')) {
+    sortForeshadow(th.getAttribute('data-fs-sort'));
+  }
+});
+
 function switchFsBucket(bucket) {
   fsBucket = bucket;
   document.querySelectorAll('#fs-bucket-tabs .bucket-tab').forEach(function(t) {
@@ -3768,7 +3878,6 @@ function switchFsBucket(bucket) {
 
 function renderForeshadowTable() {
   if (!fsData) return;
-  var tbody = document.getElementById('fs-tbody');
   var intlGroups = ['International', 'Europe', 'Asia-Pacific', 'Latin America', 'Other EM'];
   var filtered = fsData.filter(function(i) {
     if (fsBucket === 'international') return intlGroups.indexOf(i.group) !== -1;
@@ -3777,9 +3886,7 @@ function renderForeshadowTable() {
     return true;
   });
 
-  var phaseColors = { 1: '#0ea5e9', 2: '#f97316', 3: '#e879f9', 4: '#f97316', 5: '#0ea5e9', 6: '#a78bfa' };
-
-  var html = '';
+  fsComputedRows = [];
   filtered.forEach(function(inst) {
     var pd = inst.phaseData;
     if (!pd) return;
@@ -3787,45 +3894,72 @@ function renderForeshadowTable() {
     var techPhase = pd.phaseNum;
     var ext = d.ma200 ? ((d.price/d.ma200)-1)*100 : 0;
     var chg30d = inst.changePct30d || 0;
-
-    // Compute narrative overlay — symbol override takes priority over group
     var shift = computeNarrativeShift(inst.group, inst.symbol);
     var narrativePhase = shiftPhase(techPhase, shift);
-    var phaseChanged = narrativePhase !== techPhase;
-    var shiftDir = narrativePhase < techPhase ? 'up' : narrativePhase > techPhase ? 'down' : 'same';
+    var shiftSteps = techPhase - narrativePhase;
 
-    // Phase pills
-    var techColor = phaseColors[techPhase] || 'var(--dim)';
-    var techPill = '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + techColor + '22;color:' + techColor + ';border:1px solid ' + techColor + '55">' + PHASE_NAMES[techPhase] + '</span>';
+    fsComputedRows.push({
+      inst: inst, symbol: inst.symbol, name: inst.name || '', group: inst.group || '',
+      techPhase: techPhase, narrPhase: narrativePhase, shift: shiftSteps,
+      ext: ext, chg30d: chg30d, momentum: getPhaseMomentum(inst),
+    });
+  });
 
-    var narrColor = phaseColors[narrativePhase] || 'var(--dim)';
+  renderFsSortedRows();
+}
+
+function renderFsSortedRows() {
+  if (fsSortKey && fsComputedRows.length > 0) {
+    fsComputedRows.sort(function(a, b) {
+      var av, bv;
+      if (fsSortKey === 'symbol') { av = a.symbol; bv = b.symbol; }
+      else if (fsSortKey === 'name') { av = a.name; bv = b.name; }
+      else if (fsSortKey === 'group') { av = a.group; bv = b.group; }
+      else if (fsSortKey === 'techPhase') { av = a.techPhase; bv = b.techPhase; }
+      else if (fsSortKey === 'narrPhase') { av = a.narrPhase; bv = b.narrPhase; }
+      else if (fsSortKey === 'shift') { av = a.shift; bv = b.shift; }
+      else if (fsSortKey === 'ext') { av = a.ext; bv = b.ext; }
+      else if (fsSortKey === 'chg30d') { av = a.chg30d; bv = b.chg30d; }
+      else return 0;
+      if (typeof av === 'string') return fsSortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+      return fsSortAsc ? av - bv : bv - av;
+    });
+  }
+
+  var phaseColors = { 1: '#0ea5e9', 2: '#f97316', 3: '#e879f9', 4: '#f97316', 5: '#0ea5e9', 6: '#a78bfa' };
+  var tbody = document.getElementById('fs-tbody');
+  var html = '';
+
+  fsComputedRows.forEach(function(row) {
+    var phaseChanged = row.narrPhase !== row.techPhase;
+    var shiftDir = row.shift > 0 ? 'up' : row.shift < 0 ? 'down' : 'same';
+
+    var techColor = phaseColors[row.techPhase] || 'var(--dim)';
+    var techPill = '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + techColor + '22;color:' + techColor + ';border:1px solid ' + techColor + '55">' + PHASE_NAMES[row.techPhase] + '</span>';
+
+    var narrColor = phaseColors[row.narrPhase] || 'var(--dim)';
     var narrBorder = phaseChanged ? ';box-shadow:0 0 8px ' + narrColor + '44' : '';
-    var narrPill = '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + narrColor + '22;color:' + narrColor + ';border:1px solid ' + narrColor + '55' + narrBorder + '">' + PHASE_NAMES[narrativePhase] + '</span>';
+    var narrPill = '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + narrColor + '22;color:' + narrColor + ';border:1px solid ' + narrColor + '55' + narrBorder + '">' + PHASE_NAMES[row.narrPhase] + '</span>';
 
-    // Shift indicator
     var shiftHtml = '';
     if (phaseChanged) {
       var arrow = shiftDir === 'up' ? '▲' : '▼';
       var shiftColor = shiftDir === 'up' ? '#0ea5e9' : '#f97316';
-      var steps = Math.abs(narrativePhase - techPhase);
-      shiftHtml = '<span style="font-weight:700;font-size:12px;color:' + shiftColor + '">' + arrow + steps + '</span>';
+      shiftHtml = '<span style="font-weight:700;font-size:12px;color:' + shiftColor + '">' + arrow + Math.abs(row.shift) + '</span>';
     } else {
       shiftHtml = '<span style="color:var(--dim);font-size:10px">—</span>';
     }
 
-    // Phase momentum
-    var momentum = getPhaseMomentum(inst);
-
     html += '<tr' + (phaseChanged ? ' style="background:rgba(249,115,22,0.05)"' : '') + '>';
-    html += '<td style="font-weight:700;color:var(--accent)">' + inst.symbol + '</td>';
-    html += '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (inst.name || '') + '</td>';
-    html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--dim)">' + (inst.group || '') + '</td>';
+    html += '<td style="font-weight:700;color:var(--accent)">' + row.symbol + '</td>';
+    html += '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + row.name + '</td>';
+    html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--dim)">' + row.group + '</td>';
     html += '<td>' + techPill + '</td>';
     html += '<td>' + narrPill + '</td>';
     html += '<td style="text-align:center">' + shiftHtml + '</td>';
-    html += '<td style="font-size:11px;color:var(--dim);max-width:200px">' + momentum + '</td>';
-    html += '<td class="pct-change ' + (ext >= 0 ? 'positive' : 'negative') + '" style="font-size:11px">' + (ext >= 0 ? '+' : '') + ext.toFixed(1) + '%</td>';
-    html += '<td class="pct-change ' + (chg30d >= 0 ? 'positive' : 'negative') + '" style="font-size:11px">' + (chg30d >= 0 ? '+' : '') + chg30d.toFixed(1) + '%</td>';
+    html += '<td style="font-size:11px;color:var(--dim);max-width:200px">' + row.momentum + '</td>';
+    html += '<td class="pct-change ' + (row.ext >= 0 ? 'positive' : 'negative') + '" style="font-size:11px">' + (row.ext >= 0 ? '+' : '') + row.ext.toFixed(1) + '%</td>';
+    html += '<td class="pct-change ' + (row.chg30d >= 0 ? 'positive' : 'negative') + '" style="font-size:11px">' + (row.chg30d >= 0 ? '+' : '') + row.chg30d.toFixed(1) + '%</td>';
     html += '</tr>';
   });
 
