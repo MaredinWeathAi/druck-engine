@@ -3583,6 +3583,42 @@ var MACRO_SENSITIVITY = {
 // Default sensitivity for groups not in the map
 var DEFAULT_SENSITIVITY = { rates: -0.3, inflation: -0.1, dollar: 0.0, growth: 0.4, credit: 0.3, oil: 0.0, sentiment: 0.4 };
 
+// Symbol-level overrides — for instruments within mixed groups that have distinct sensitivities
+// These take priority over the group-level sensitivity
+var SYMBOL_SENSITIVITY = {
+  // Homebuilders — THE most rate-sensitive equity sector
+  'XHB':  { rates: -1.0, inflation: -0.4, dollar:  0.0, growth:  0.6, credit:  0.8, oil: -0.1, sentiment:  0.4 },
+  'ITB':  { rates: -1.0, inflation: -0.4, dollar:  0.0, growth:  0.6, credit:  0.8, oil: -0.1, sentiment:  0.4 },
+  // Semis — rate-sensitive on valuations but driven more by capex/AI cycle than rates
+  'SMH':  { rates: -0.4, inflation: -0.1, dollar:  0.2, growth:  0.7, credit:  0.3, oil:  0.0, sentiment:  0.8 },
+  // Transports — GDP growth proxy, oil cost input
+  'IYT':  { rates: -0.3, inflation: -0.3, dollar: -0.1, growth:  0.9, credit:  0.4, oil: -0.6, sentiment:  0.4 },
+  // Regional banks — benefit from higher rates (NIM), hurt by credit tightening
+  'KRE':  { rates:  0.6, inflation:  0.0, dollar:  0.1, growth:  0.5, credit:  0.8, oil:  0.0, sentiment:  0.5 },
+  // Retailers — consumer spending, rate-sensitive on credit
+  'XRT':  { rates: -0.6, inflation: -0.6, dollar:  0.0, growth:  0.7, credit:  0.6, oil: -0.3, sentiment:  0.5 },
+  // Airlines — oil is the dominant factor
+  'JETS': { rates: -0.2, inflation: -0.2, dollar: -0.1, growth:  0.7, credit:  0.3, oil: -0.9, sentiment:  0.5 },
+  // Software — rate-sensitive (duration asset), growth-dependent
+  'IGV':  { rates: -0.8, inflation: -0.2, dollar:  0.2, growth:  0.6, credit:  0.4, oil:  0.0, sentiment:  0.7 },
+  // ARK — hyper rate-sensitive, speculative
+  'ARKK': { rates: -0.9, inflation: -0.2, dollar:  0.1, growth:  0.5, credit:  0.5, oil:  0.0, sentiment:  0.9 },
+  // REITs — rate-sensitive, credit-dependent
+  'VNQ':  { rates: -0.9, inflation: -0.2, dollar:  0.0, growth:  0.3, credit:  0.7, oil:  0.0, sentiment:  0.3 },
+  'XLRE': { rates: -0.9, inflation: -0.2, dollar:  0.0, growth:  0.3, credit:  0.7, oil:  0.0, sentiment:  0.3 },
+  // Gold — inflation hedge, inverse dollar, inverse rates
+  'GLD':  { rates: -0.7, inflation:  0.9, dollar: -0.9, growth: -0.2, credit: -0.3, oil:  0.2, sentiment: -0.5 },
+  'GC=F': { rates: -0.7, inflation:  0.9, dollar: -0.9, growth: -0.2, credit: -0.3, oil:  0.2, sentiment: -0.5 },
+  // Oil — oil price is everything
+  'CL=F': { rates:  0.0, inflation:  0.3, dollar: -0.4, growth:  0.5, credit:  0.1, oil:  1.0, sentiment:  0.2 },
+  'USO':  { rates:  0.0, inflation:  0.3, dollar: -0.4, growth:  0.5, credit:  0.1, oil:  1.0, sentiment:  0.2 },
+  // Treasuries — direct rate play
+  'TLT':  { rates: -1.0, inflation: -0.8, dollar:  0.2, growth: -0.5, credit:  0.2, oil: -0.2, sentiment: -0.4 },
+  'IEF':  { rates: -0.8, inflation: -0.6, dollar:  0.2, growth: -0.3, credit:  0.2, oil: -0.1, sentiment: -0.3 },
+  // Bitcoin — liquidity/sentiment driven
+  'BTC-USD': { rates: -0.6, inflation:  0.3, dollar: -0.4, growth:  0.2, credit:  0.5, oil:  0.0, sentiment:  1.0 },
+};
+
 function loadForeshadow() {
   apiCall('/api/lens/instruments').then(function(data) {
     if (!data || !data.instruments) return;
@@ -3647,16 +3683,20 @@ function resetForeshadow() {
   renderForeshadowTable();
 }
 
-function computeNarrativeShift(group) {
-  // Compute the aggregate macro impact on this group
-  var sens = MACRO_SENSITIVITY[group] || DEFAULT_SENSITIVITY;
+function computeNarrativeShift(group, symbol) {
+  // Use symbol-level override if available, else fall back to group
+  var sens = (symbol && SYMBOL_SENSITIVITY[symbol]) ? SYMBOL_SENSITIVITY[symbol] : (MACRO_SENSITIVITY[group] || DEFAULT_SENSITIVITY);
   var totalShift = 0;
   MACRO_FACTORS.forEach(function(f) {
     var weight = sens[f.id] || 0;
     var input = fsInputs[f.id] || 0;
-    // Each input unit * weight contributes to phase shift
-    // Scale: each full unit of input * weight = ~0.3 phase shift
-    totalShift += input * weight * 0.3;
+    // Scale: each unit of input * weight = 0.55 phase shift
+    // At max conviction (-3 input * -1.0 weight), single factor = 1.65 phases
+    // Two aligned factors at max = ~3 phases (e.g., P5 → P2)
+    // This means a single dominant catalyst can move an instrument 1-2 phases,
+    // and multiple aligned catalysts can swing the full cycle — which matches
+    // how Druckenmiller sizes: one big insight = meaningful bet, not a nudge
+    totalShift += input * weight * 0.55;
   });
   return totalShift;
 }
@@ -3748,8 +3788,8 @@ function renderForeshadowTable() {
     var ext = d.ma200 ? ((d.price/d.ma200)-1)*100 : 0;
     var chg30d = inst.changePct30d || 0;
 
-    // Compute narrative overlay
-    var shift = computeNarrativeShift(inst.group);
+    // Compute narrative overlay — symbol override takes priority over group
+    var shift = computeNarrativeShift(inst.group, inst.symbol);
     var narrativePhase = shiftPhase(techPhase, shift);
     var phaseChanged = narrativePhase !== techPhase;
     var shiftDir = narrativePhase < techPhase ? 'up' : narrativePhase > techPhase ? 'down' : 'same';
