@@ -1222,8 +1222,10 @@ function classifyPhaseStructural(ta, currentPhase) {
             structuralPhase = 'INSTITUTIONAL_ACCUMULATION'; // P2 — fast move, watch closely
         }
         else if (isExtended) {
-            // 18-30% at steady pace with strong momentum — late expansion
-            structuralPhase = 'NARRATIVE_EXPANSION'; // P1 — late stage, watch closely
+            // Past the extended threshold with strong momentum but no overbought/velocity flags.
+            // This is NOT P1 — you're past the average peak extension for this instrument.
+            // At best this is late-stage distribution. P1 is reserved for below extended threshold.
+            structuralPhase = 'INSTITUTIONAL_ACCUMULATION'; // P2 — extended, smart money distributing
         }
         else if (isMidTrend && isSteadyGrind) {
             // 8-18% reached via slow steady grind over 60+ days — highest quality P1
