@@ -552,6 +552,10 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
     <!-- Macro Events -->
     <div class="nav-section">Macro Events</div>
+    <div class="nav-item" data-page="paradigm">
+      <div class="icon">💡</div>
+      <div>Paradigm Watch</div>
+    </div>
     <div class="nav-item" data-page="geoevents">
       <div class="icon">🌍</div>
       <div>Geo Events</div>
@@ -1156,6 +1160,24 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     </div>
 
     <!-- Geo Events Page -->
+    <!-- ══════════ PARADIGM WATCH PAGE ══════════ -->
+    <div class="page" id="page-paradigm">
+      <div style="font-size:12px;color:var(--dim);margin-bottom:16px">
+        Track potential paradigm shifts. The system flags when multiple indicators align with the pattern of historical gamechangers (Internet '92-98, Smartphones '07-12, AI '22+). <b>Anti-dismissal tool</b> — designed to make it harder to ignore what might be real.
+      </div>
+
+      <!-- Add Theme -->
+      <div class="card" style="margin-bottom:16px;padding:16px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="pw-theme-input" placeholder="Add a theme to watch (e.g., Quantum Computing, Robotics, Nuclear Fusion)" style="flex:1;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
+          <button onclick="addParadigmTheme()" style="padding:8px 16px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap">Add Theme</button>
+        </div>
+      </div>
+
+      <!-- Theme Cards -->
+      <div id="pw-themes"></div>
+    </div>
+
     <div class="page" id="page-geoevents">
       <div class="regime-section-intro">Real-time geopolitical and macroeconomic event detection with 1st/2nd/3rd order effect chain mapping. Events are analyzed by Claude and mapped to your portfolio exposure.</div>
       <div style="display:flex;gap:12px;margin-bottom:20px;">
@@ -1277,6 +1299,7 @@ function showPage(page) {
     rotation: 'Rotation Radar',
     intelfeed: 'Headline Feed',
     guruwatch: 'Guru Watch',
+    paradigm: 'Paradigm Watch',
     geoevents: 'Geopolitical Events',
     earningscal: 'Earnings Calendar',
     settings: 'Settings'
@@ -1300,6 +1323,7 @@ function loadPageData(page) {
   else if (page === 'rotation') loadRotation();
   else if (page === 'intelfeed') loadIntelFeed();
   else if (page === 'guruwatch') loadGuruWatch();
+  else if (page === 'paradigm') loadParadigmWatch();
   else if (page === 'geoevents') loadGeoEvents();
   else if (page === 'earningscal') loadEarningsCal();
   else if (page === 'settings') loadSettings();
@@ -4150,6 +4174,221 @@ function renderFsSortedRows() {
   });
 
   tbody.innerHTML = html || '<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--dim)">No instruments</td></tr>';
+}
+
+// ═══════════════════════════════════════════════
+// PARADIGM WATCH — Anti-Dismissal Tool
+// ═══════════════════════════════════════════════
+
+// Default themes with pre-seeded data
+var PW_DEFAULT_THEMES = [
+  {
+    id: 'ai',
+    name: 'Artificial Intelligence',
+    dateAdded: '2024-01-01',
+    conviction: 'HIGH',
+    notes: 'Foundation models scaling. Enterprise adoption accelerating. Capex from MSFT/GOOG/META/AMZN exceeding $200B/yr.',
+    indicators: {
+      capexCrossIndustry: { score: 5, detail: 'Pharma (drug discovery), Legal (contract review), Manufacturing (quality), Finance (trading) — 8+ non-tech industries deploying' },
+      adoptionVelocity: { score: 5, detail: 'ChatGPT: 100M users in 2 months. Enterprise API adoption doubling quarterly. Tracking faster than Internet 1995.' },
+      capitalMagnitude: { score: 5, detail: 'VC + corporate capex >$300B/yr. Exceeds dotcom peak (inflation-adjusted). NVDA revenue 5x in 2 years.' },
+      talentMigration: { score: 4, detail: 'Top researchers leaving academia. Every major company hiring ML teams. CS PhD salaries at record.' },
+      regulatoryResponse: { score: 4, detail: 'EU AI Act passed. US executive orders. Congressional hearings. China regulations. Global scramble.' },
+    },
+    historicalComparison: 'Internet 1996 equivalent — infrastructure buildout phase, adoption exponential but monetization unclear for most.'
+  },
+  {
+    id: 'energy-transition',
+    name: 'Energy Transition / Electrification',
+    dateAdded: '2023-01-01',
+    conviction: 'MODERATE',
+    notes: 'EV adoption S-curve. Grid modernization. Nuclear renaissance discussion.',
+    indicators: {
+      capexCrossIndustry: { score: 4, detail: 'Auto (EV), Utilities (grid), Mining (lithium/copper), Construction (charging). Cross-industry but concentrated.' },
+      adoptionVelocity: { score: 3, detail: 'EV share ~20% global new sales. Growing but slower than expected. Hybrid gaining share.' },
+      capitalMagnitude: { score: 4, detail: 'IRA subsidies $370B. Global clean energy investment $1.7T/yr. Significant but government-driven.' },
+      talentMigration: { score: 3, detail: 'Battery engineers in high demand. Nuclear engineers being recruited. Moderate talent shift.' },
+      regulatoryResponse: { score: 5, detail: 'IRA, EU Green Deal, China NEV mandates. Most aggressive regulatory push of any current theme.' },
+    },
+    historicalComparison: 'More like Railroads 1870s — massive infrastructure spend, government-supported, multi-decade buildout, cyclical not exponential.'
+  },
+  {
+    id: 'biotech-genomics',
+    name: 'Biotech / Genomics / GLP-1',
+    dateAdded: '2023-06-01',
+    conviction: 'MODERATE',
+    notes: 'GLP-1 drugs (Ozempic/Mounjaro) reshaping healthcare. Gene therapy advancing. AI + bio convergence.',
+    indicators: {
+      capexCrossIndustry: { score: 3, detail: 'Pharma (obvious), Food companies (reformulating), Insurance (coverage), Fitness (behavior change). Early cross-industry.' },
+      adoptionVelocity: { score: 4, detail: 'GLP-1 revenue doubling annually. 6% of US adults on GLP-1s. Demand exceeding supply.' },
+      capitalMagnitude: { score: 3, detail: 'LLY + NVO market cap gain >$500B. Significant but concentrated in 2-3 companies.' },
+      talentMigration: { score: 2, detail: 'Some AI researchers moving to bio. CRISPR talent in demand. Not yet a mass migration.' },
+      regulatoryResponse: { score: 3, detail: 'FDA fast-tracking approvals. Medicare coverage debates. Early but present.' },
+    },
+    historicalComparison: 'Could be like Antibiotics 1940s — genuinely transformative for health but the investment implications are concentrated, not broad-based.'
+  },
+];
+
+// Paradigm shift scoring — compare to historical gamechangers
+function getParadigmScore(theme) {
+  var ind = theme.indicators || {};
+  var total = 0;
+  var count = 0;
+  for (var key in ind) {
+    total += ind[key].score || 0;
+    count++;
+  }
+  return count > 0 ? Math.round(total / count * 20) : 0; // 0-100 scale
+}
+
+function getParadigmLevel(score) {
+  if (score >= 85) return { level: 'PARADIGM SHIFT', color: '#E24B4A', desc: 'All indicators firing. Historical pattern match is strong. DO NOT DISMISS.' };
+  if (score >= 70) return { level: 'HIGH PROBABILITY', color: '#f97316', desc: 'Most indicators align. This looks real. Investigate deeply.' };
+  if (score >= 50) return { level: 'WORTH WATCHING', color: '#BA7517', desc: 'Some signals present. Too early to tell. Keep monitoring.' };
+  if (score >= 30) return { level: 'EARLY / SPECULATIVE', color: '#378ADD', desc: 'Limited signals. Could go either way. Low allocation if any.' };
+  return { level: 'NOISE', color: 'var(--dim)', desc: 'Few paradigm indicators. Likely incremental, not transformational.' };
+}
+
+function getParadigmThemes() {
+  try {
+    var stored = JSON.parse(localStorage.getItem('pw_themes') || 'null');
+    if (stored && stored.length > 0) return stored;
+  } catch(e) {}
+  return PW_DEFAULT_THEMES;
+}
+
+function saveParadigmThemes(themes) {
+  try { localStorage.setItem('pw_themes', JSON.stringify(themes)); } catch(e) {}
+}
+
+function addParadigmTheme() {
+  var input = document.getElementById('pw-theme-input');
+  var name = (input.value || '').trim();
+  if (!name) return;
+  var themes = getParadigmThemes();
+  themes.push({
+    id: 'custom-' + Date.now(),
+    name: name,
+    dateAdded: new Date().toISOString().split('T')[0],
+    conviction: 'UNKNOWN',
+    notes: '',
+    indicators: {
+      capexCrossIndustry: { score: 0, detail: 'Not assessed yet' },
+      adoptionVelocity: { score: 0, detail: 'Not assessed yet' },
+      capitalMagnitude: { score: 0, detail: 'Not assessed yet' },
+      talentMigration: { score: 0, detail: 'Not assessed yet' },
+      regulatoryResponse: { score: 0, detail: 'Not assessed yet' },
+    },
+    historicalComparison: 'Not assessed yet — update indicators to generate comparison.'
+  });
+  saveParadigmThemes(themes);
+  input.value = '';
+  renderParadigmThemes();
+}
+
+function updateIndicatorScore(themeId, indicator, newScore) {
+  var themes = getParadigmThemes();
+  var theme = themes.find(function(t) { return t.id === themeId; });
+  if (!theme || !theme.indicators[indicator]) return;
+  theme.indicators[indicator].score = parseInt(newScore);
+  saveParadigmThemes(themes);
+  renderParadigmThemes();
+}
+
+function updateThemeNotes(themeId, notes) {
+  var themes = getParadigmThemes();
+  var theme = themes.find(function(t) { return t.id === themeId; });
+  if (!theme) return;
+  theme.notes = notes;
+  saveParadigmThemes(themes);
+}
+
+function removeParadigmTheme(themeId) {
+  var themes = getParadigmThemes().filter(function(t) { return t.id !== themeId; });
+  saveParadigmThemes(themes);
+  renderParadigmThemes();
+}
+
+function loadParadigmWatch() {
+  renderParadigmThemes();
+}
+
+function renderParadigmThemes() {
+  var themes = getParadigmThemes();
+  var container = document.getElementById('pw-themes');
+  if (!container) return;
+
+  var indicatorLabels = {
+    capexCrossIndustry: 'Cross-industry capex',
+    adoptionVelocity: 'Adoption velocity',
+    capitalMagnitude: 'Capital magnitude',
+    talentMigration: 'Talent migration',
+    regulatoryResponse: 'Regulatory response',
+  };
+
+  var html = '';
+  themes.sort(function(a, b) { return getParadigmScore(b) - getParadigmScore(a); });
+
+  themes.forEach(function(theme) {
+    var score = getParadigmScore(theme);
+    var level = getParadigmLevel(score);
+
+    html += '<div class="card" style="margin-bottom:16px;padding:20px">';
+
+    // Header
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">';
+    html += '<div>';
+    html += '<div style="font-size:16px;font-weight:500;color:var(--text)">' + theme.name + '</div>';
+    html += '<div style="font-size:10px;color:var(--dim);margin-top:2px">Tracking since ' + theme.dateAdded + '</div>';
+    html += '</div>';
+    html += '<div style="display:flex;align-items:center;gap:8px">';
+    html += '<span style="font-size:24px;font-weight:500;color:' + level.color + '">' + score + '</span>';
+    html += '<button onclick="removeParadigmTheme(\'' + theme.id + '\')" style="padding:2px 6px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--dim);font-size:10px;cursor:pointer" title="Remove theme">X</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // Anti-dismissal banner
+    html += '<div style="padding:8px 12px;border-radius:6px;margin-bottom:12px;background:' + level.color + '12;border:1px solid ' + level.color + '33">';
+    html += '<span style="font-size:12px;font-weight:500;color:' + level.color + '">' + level.level + '</span>';
+    html += '<span style="font-size:11px;color:var(--dim);margin-left:8px">' + level.desc + '</span>';
+    html += '</div>';
+
+    // Historical comparison
+    if (theme.historicalComparison) {
+      html += '<div style="padding:8px 12px;border-radius:6px;margin-bottom:12px;background:var(--card);border-left:3px solid ' + level.color + ';font-size:11px;color:var(--dim)">';
+      html += '<b style="color:var(--text)">Historical analog:</b> ' + theme.historicalComparison;
+      html += '</div>';
+    }
+
+    // Indicator scores with sliders
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
+    for (var key in indicatorLabels) {
+      var ind = (theme.indicators || {})[key] || { score: 0, detail: '' };
+      var barColor = ind.score >= 4 ? '#1D9E75' : ind.score >= 3 ? '#BA7517' : ind.score >= 1 ? '#378ADD' : 'var(--dim)';
+      html += '<div style="padding:8px 10px;border-radius:6px;background:var(--card)">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
+      html += '<span style="font-size:10px;font-weight:500;color:var(--text)">' + indicatorLabels[key] + '</span>';
+      html += '<span style="font-size:11px;font-weight:500;color:' + barColor + '">' + ind.score + '/5</span>';
+      html += '</div>';
+      html += '<input type="range" min="0" max="5" value="' + ind.score + '" onchange="updateIndicatorScore(\'' + theme.id + '\',\'' + key + '\',this.value)" style="width:100%;accent-color:' + barColor + '">';
+      html += '<div style="font-size:9px;color:var(--dim);margin-top:2px;line-height:1.3">' + (ind.detail || '') + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // Notes
+    html += '<div>';
+    html += '<textarea onblur="updateThemeNotes(\'' + theme.id + '\',this.value)" style="width:100%;min-height:50px;padding:8px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:11px;resize:vertical;font-family:inherit" placeholder="Your notes and thesis...">' + (theme.notes || '') + '</textarea>';
+    html += '</div>';
+
+    html += '</div>';
+  });
+
+  if (themes.length === 0) {
+    html = '<div class="card" style="padding:40px;text-align:center;color:var(--dim)">No themes being tracked. Add one above to start watching.</div>';
+  }
+
+  container.innerHTML = html;
 }
 
 </script>
