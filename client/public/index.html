@@ -575,8 +575,9 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
 <!-- Main Content -->
 <div class="main">
-  <div class="header">
+  <div class="header" style="display:flex;justify-content:space-between;align-items:center">
     <h2 id="page-title">Command Center</h2>
+    <span id="data-freshness-badge" style="font-size:10px;padding:3px 10px;border-radius:4px;font-weight:600;display:none"></span>
   </div>
   <div class="pages">
 
@@ -2005,6 +2006,36 @@ function toggleTransitionsPanel(prefix) {
 // COMMAND CENTER — unified landing page
 // ═══════════════════════════════════════════════
 function loadCommandCenter() {
+  // Data freshness check — always visible
+  apiCall('/api/data-status').then(function(ds) {
+    var badge = document.getElementById('data-freshness-badge');
+    if (!badge || !ds) return;
+    var f = ds.freshness || {};
+    if (f.status === 'NO_API_KEY') {
+      badge.style.display = 'inline-block';
+      badge.style.background = 'rgba(226,75,74,0.15)';
+      badge.style.color = '#E24B4A';
+      badge.textContent = 'FRED API KEY MISSING — Data is simulated';
+    } else if (f.status === 'STALE_DATA') {
+      badge.style.display = 'inline-block';
+      badge.style.background = 'rgba(249,115,22,0.15)';
+      badge.style.color = '#f97316';
+      badge.textContent = 'STALE DATA — ' + f.staleCount + ' series outdated';
+      badge.title = (ds.errors && ds.errors.fred) ? ds.errors.fred.join('\n') : '';
+    } else if (f.status === 'WARNINGS') {
+      badge.style.display = 'inline-block';
+      badge.style.background = 'rgba(186,117,23,0.15)';
+      badge.style.color = '#BA7517';
+      badge.textContent = 'DATA WARNINGS';
+      badge.title = (ds.errors && ds.errors.fred) ? ds.errors.fred.join('\n') : '';
+    } else {
+      badge.style.display = 'inline-block';
+      badge.style.background = 'rgba(29,158,117,0.1)';
+      badge.style.color = '#1D9E75';
+      badge.textContent = 'Data fresh — ' + new Date(ds.last_refresh).toLocaleTimeString();
+    }
+  }).catch(function(){});
+
   // Parallel fetch: Morning Lens data + Trifecta + Headlines + Macro + Transitions + Leading
   Promise.all([
     apiCall('/api/lens/signals'),

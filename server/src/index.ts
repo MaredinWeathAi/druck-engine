@@ -243,6 +243,7 @@ async function fetchGuruTrades(ticker: string): Promise<{ buy: number; sell: num
 // ─── DATA GENERATION ───
 const N = 1040; // ~20 years of weekly data points
 const FRED_CACHE_DURATION = 4 * 60 * 60 * 1000; // 4 hours
+let fredDataFreshness: Record<string, { lastDate: string; daysSince: number; stale: boolean }> = {};
 let dataSource: 'live' | 'simulated' = 'simulated';
 let lastFredRefresh = 0;
 
@@ -694,6 +695,49 @@ async function refreshLiveData() {
     dataSource = 'live';
     lastDataRefresh = Date.now();
     fredRefreshErrors = errors;
+
+    // ── DATA FRESHNESS VALIDATION ──
+    // Check that each series has data within expected recency windows
+    const now = new Date();
+    const stalenessChecks: string[] = [];
+
+    // Weekly series (WALCL, WTREGEN) should have data within 14 days
+    if (fredData.raw?.WALCL?.dates) {
+      const lastDate = new Date(fredData.raw.WALCL.dates[fredData.raw.WALCL.dates.length - 1]);
+      const daysSince = Math.floor((now.getTime() - lastDate.getTime()) / (1000*60*60*24));
+      if (daysSince > 14) stalenessChecks.push(`WALCL (Fed BS): ${daysSince}d old — STALE`);
+      fredDataFreshness.walcl = { lastDate: lastDate.toISOString().split('T')[0], daysSince, stale: daysSince > 14 };
+    }
+
+    // Daily series (yields) should have data within 5 days
+    if (fredData.raw?.DGS10?.dates) {
+      const lastDate = new Date(fredData.raw.DGS10.dates[fredData.raw.DGS10.dates.length - 1]);
+      const daysSince = Math.floor((now.getTime() - lastDate.getTime()) / (1000*60*60*24));
+      if (daysSince > 5) stalenessChecks.push(`DGS10 (10Y): ${daysSince}d old — STALE`);
+      fredDataFreshness.dgs10 = { lastDate: lastDate.toISOString().split('T')[0], daysSince, stale: daysSince > 5 };
+    }
+
+    // Monthly series (CPI, PCE, ISM) can be 45 days old legitimately
+    for (const [key, label] of [['CPIAUCSL', 'CPI'], ['PCEPILFE', 'PCE'], ['NAPM', 'ISM']] as const) {
+      if (fredData.raw?.[key]?.dates) {
+        const lastDate = new Date(fredData.raw[key].dates[fredData.raw[key].dates.length - 1]);
+        const daysSince = Math.floor((now.getTime() - lastDate.getTime()) / (1000*60*60*24));
+        if (daysSince > 60) stalenessChecks.push(`${key} (${label}): ${daysSince}d old — STALE`);
+        fredDataFreshness[key.toLowerCase()] = { lastDate: lastDate.toISOString().split('T')[0], daysSince, stale: daysSince > 60 };
+      }
+    }
+
+    // Sanity checks — flag obviously wrong values
+    if (pce < -5 || pce > 20) stalenessChecks.push(`PCE value ${pce}% looks wrong — outside -5% to 20% range`);
+    if (gdp < -15 || gdp > 20) stalenessChecks.push(`GDP value ${gdp}% looks wrong — outside -15% to 20% range`);
+    if (unemployment < 1 || unemployment > 25) stalenessChecks.push(`Unemployment ${unemployment}% looks wrong`);
+
+    if (stalenessChecks.length > 0) {
+      console.warn('[FRED] ⚠️ DATA FRESHNESS WARNINGS:');
+      stalenessChecks.forEach(w => console.warn(`  ⚠️ ${w}`));
+      fredRefreshErrors = [...errors, ...stalenessChecks];
+    }
+
     console.log(`[FRED] ✓ Live data refresh complete — Trifecta: ${trifecta}, NL: ${nl[nl.length-1]?.toFixed(3)}T, PCE: ${pce}%, GDP: ${gdp}%`);
   } catch (err: any) {
     fredRefreshErrors = [err?.message || 'Unknown error'];
@@ -733,11 +777,18 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.get('/api/data-status', (_req, res) => {
+  const hasStaleData = Object.values(fredDataFreshness).some(f => f.stale);
+  const staleCount = Object.values(fredDataFreshness).filter(f => f.stale).length;
   res.json({
     data_source: dataSource,
     last_refresh: new Date(lastDataRefresh).toISOString(),
     fred_configured: !!FRED_API_KEY,
     guru_configured: !!GURUFOCUS_API_KEY,
+    freshness: {
+      status: !FRED_API_KEY ? 'NO_API_KEY' : hasStaleData ? 'STALE_DATA' : fredRefreshErrors.length > 0 ? 'WARNINGS' : 'FRESH',
+      staleCount,
+      details: fredDataFreshness,
+    },
     errors: {
       fred: fredRefreshErrors.length > 0 ? fredRefreshErrors : null,
       gurufocus: gurofocusRefreshErrors.length > 0 ? gurofocusRefreshErrors : null,
