@@ -1128,15 +1128,14 @@ function classifyPhaseStructural(ta, currentPhase) {
     // Typical values: SPY ~0.7%, XLP ~0.6%, SMH ~1.5%, XBI ~1.5%, XLE ~1.3%
     // Scale extension bands by atrPct relative to SPY baseline (0.75%)
     const atrPct = ta.atrPct !== null ? ta.atrPct : 0.75;
-    const volScale = Math.max(0.5, Math.min(3.0, atrPct / 0.75)); // clamp 0.5x-3x
+    // Cap volScale at 2.0x to prevent absurdly wide thresholds for high-vol instruments.
+    // At 3.0x cap, a 2% ATR instrument gets parabolic at 51% — too generous.
+    // At 2.0x cap, same instrument gets parabolic at 34% — still generous but reasonable.
+    const volScale = Math.max(0.5, Math.min(2.0, atrPct / 0.75));
     // Adaptive thresholds (calibrated from 10yr empirical percentile study):
-    //   "Extended" ≈ p85-p90 of historical extension distribution ≈ 1.5σ
-    //   "Parabolic" ≈ p95+ ≈ 2.5σ
-    //   "Extreme" ≈ p99 ≈ 3.5σ
-    // Base thresholds (for SPY-like vol ~0.75% daily ATR):
-    const extendedThreshold = 10 * volScale; // SPY: 10%, SMH: ~20%, XLP: ~8%
-    const parabolicThreshold = 17 * volScale; // SPY: 17%, SMH: ~34%, XLP: ~13%
-    const extremeThreshold = 24 * volScale; // SPY: 24%, SMH: ~48%, XLP: ~19%
+    const extendedThreshold = 10 * volScale; // SPY: 10%, high-vol: ~20% max
+    const parabolicThreshold = 17 * volScale; // SPY: 17%, high-vol: ~34% max
+    const extremeThreshold = 24 * volScale; // SPY: 24%, high-vol: ~48% max
     const isParabolic = extensionPct > parabolicThreshold;
     const isExtended = extensionPct > extendedThreshold;
     const isMidTrend = extensionPct > (extendedThreshold * 0.5) && extensionPct <= extendedThreshold;
@@ -1178,13 +1177,20 @@ function classifyPhaseStructural(ta, currentPhase) {
         structuralPhase = 'SELLING_EXHAUSTION'; // P5 — momentum inflection in downtrend
     }
     else if (priceBelow200 && sma50Over200) {
-        // Price below 200d but 50d still above — structural divergence
-        // Could be early breakdown or recovery forming depending on direction
-        if (histPositive || histExpanding) {
-            structuralPhase = 'SELLING_EXHAUSTION'; // P5 — momentum turning up, recovery building
+        // Price below 200d but 50d still above — golden cross intact, price dipped below
+        // This is typically a shallow pullback in an uptrend, not exhaustion.
+        // If close to the 200d (within 5%), this is likely a normal retest.
+        // If far below (>5%), the golden cross is stale and lagging.
+        const nearThe200d = absExtension < 5;
+        if (nearThe200d) {
+            // Shallow pullback — golden cross intact, price near 200d
+            structuralPhase = 'SELLING_EXHAUSTION'; // P5 — basing near support, recovery likely
+        }
+        else if (histPositive || histExpanding) {
+            structuralPhase = 'SELLING_EXHAUSTION'; // P5 — momentum turning up despite being below
         }
         else {
-            structuralPhase = 'BUYING_EXHAUSTION'; // P3 — golden cross is lagging, price already broke
+            structuralPhase = 'BUYING_EXHAUSTION'; // P3 — deep below 200d, golden cross is stale
         }
     }
     else if (above200 && sma50Over200 && histPositive) {
