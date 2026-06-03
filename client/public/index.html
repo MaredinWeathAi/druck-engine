@@ -502,7 +502,11 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div>Foreshadow</div>
     </div>
 
-    <!-- Morning Lens -->
+    <!-- Analysis -->
+    <div class="nav-item" data-page="ticker">
+      <div class="icon">🔍</div>
+      <div>Ticker Analysis</div>
+    </div>
     <div class="nav-section">Morning Lens</div>
     <div class="nav-item" data-page="morninglens">
       <div class="icon">☀️</div>
@@ -610,6 +614,27 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         <div class="cc-stat-pill"><span class="label">Breadth</span><span class="val neutral" id="cc-br">—</span></div>
         <div class="cc-stat-pill"><span class="label">Death Nails</span><span class="val neutral" id="cc-dn">—</span></div>
         <div class="cc-stat-pill"><span class="label">Hedge</span><span class="val neutral" id="cc-hedge">—</span></div>
+      </div>
+
+      <!-- Broad Market Overview -->
+      <div class="card" style="margin-top:16px;padding:16px">
+        <h3 style="margin-bottom:12px">Broad Market Overview</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <!-- Left: Index phases + momentum -->
+          <div>
+            <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:6px">Index phases</div>
+            <div id="cc-index-phases" style="display:grid;gap:4px">Loading...</div>
+            <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin:12px 0 6px">Market regime</div>
+            <div id="cc-market-regime" style="font-size:12px;color:var(--dim)">Loading...</div>
+          </div>
+          <!-- Right: Key macro readings -->
+          <div>
+            <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:6px">Key readings</div>
+            <div id="cc-key-readings" style="display:grid;gap:3px">Loading...</div>
+            <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin:12px 0 6px">Sector rotation</div>
+            <div id="cc-sector-rotation" style="font-size:12px;color:var(--dim)">Loading...</div>
+          </div>
+        </div>
       </div>
 
       <!-- Two-column: Aria Brief (left) + Headlines (right) -->
@@ -944,6 +969,21 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div class="card">
         <h3 style="margin-bottom:16px">Inside-of-the-Market Leading Groups</h3>
         <div class="grid-3" id="leading-groups-grid"></div>
+      </div>
+    </div>
+
+    <!-- ══════════ TICKER ANALYSIS PAGE ══════════ -->
+    <div class="page" id="page-ticker">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+        <input type="text" id="ticker-input" placeholder="Enter ticker (e.g., AAPL, TSLA, DHI)" style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:14px" onkeydown="if(event.key==='Enter')analyzeTickerFn()">
+        <button onclick="analyzeTickerFn()" style="padding:10px 20px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap">Analyze</button>
+      </div>
+      <div id="ticker-output">
+        <div style="text-align:center;padding:60px;color:var(--dim)">
+          <div style="font-size:24px;margin-bottom:8px">🔍</div>
+          <div style="font-size:14px">Enter a ticker symbol above to run a full technical + fundamental analysis</div>
+          <div style="font-size:11px;margin-top:8px;color:var(--dim)">Uses the same phase classification, extension metrics, and valuation data as the Chart Grid</div>
+        </div>
       </div>
     </div>
 
@@ -1290,6 +1330,7 @@ function showPage(page) {
   // Update title
   var titles = {
     commandcenter: 'Command Center',
+    ticker: 'Ticker Analysis',
     foreshadow: 'Foreshadow',
     morninglens: 'Morning Brief',
     chartgrid: 'Chart Grid',
@@ -1314,6 +1355,7 @@ function showPage(page) {
 
 function loadPageData(page) {
   if (page === 'commandcenter') loadCommandCenter();
+  else if (page === 'ticker') {} // no auto-load, user triggers
   else if (page === 'foreshadow') loadForeshadow();
   else if (page === 'morninglens') loadMorningLens();
   else if (page === 'chartgrid') loadChartGrid();
@@ -2190,7 +2232,87 @@ function loadCommandCenter() {
       hlList.innerHTML = hlHtml;
     }
 
-    // 7. What Changed (removed from Command Center — available on Morning Brief)
+    // 7. Broad Market Overview
+    if (leading) {
+      // Index phases
+      var indexSyms = ['SPY', 'QQQ', 'IWM', 'DIA'];
+      var indexNames = { SPY: 'S&P 500', QQQ: 'Nasdaq 100', IWM: 'Russell 2000', DIA: 'Dow Jones' };
+      var indexPhaseHtml = '';
+
+      // Get instruments for indices
+      apiCall('/api/lens/instruments').then(function(instData) {
+        if (!instData || !instData.instruments) return;
+
+        indexSyms.forEach(function(sym) {
+          var inst = instData.instruments.find(function(i) { return i.symbol === sym; });
+          if (!inst || !inst.phaseData) return;
+          var pd = inst.phaseData;
+          var d = inst.daily || {};
+          var ext = d.ma200 ? ((d.price/d.ma200)-1)*100 : 0;
+          var phColors = { 1: '#0ea5e9', 2: '#1D9E75', 3: '#f97316', 4: '#e879f9', 5: '#E24B4A' };
+          var pc = phColors[pd.phaseNum] || 'var(--dim)';
+          indexPhaseHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;border-radius:4px;border-left:3px solid ' + pc + '">';
+          indexPhaseHtml += '<span style="font-size:12px;font-weight:500">' + indexNames[sym] + '</span>';
+          indexPhaseHtml += '<span style="font-size:11px"><span style="padding:1px 6px;border-radius:3px;font-weight:500;background:' + pc + '18;color:' + pc + '">' + pd.phaseShort + '</span>';
+          indexPhaseHtml += ' <span style="color:var(--dim)">' + (ext >= 0 ? '+' : '') + ext.toFixed(1) + '%</span></span>';
+          indexPhaseHtml += '</div>';
+        });
+        document.getElementById('cc-index-phases').innerHTML = indexPhaseHtml || '<div style="color:var(--dim)">Loading...</div>';
+
+        // Key readings
+        var vix = instData.instruments.find(function(i) { return i.symbol === '^VIX'; });
+        var dxy = instData.instruments.find(function(i) { return i.symbol === 'DX-Y.NYB'; });
+        var hyg = instData.instruments.find(function(i) { return i.symbol === 'HYG'; });
+        var tnx = instData.instruments.find(function(i) { return i.symbol === '^TNX'; });
+
+        var krHtml = '';
+        var readings = [
+          { label: 'VIX', value: vix ? vix.daily.price.toFixed(1) : '—', chg: vix ? vix.changePct30d : 0, good: vix && vix.daily.price < 20 },
+          { label: '10Y Yield', value: tnx ? tnx.daily.price.toFixed(2) + '%' : '—', chg: tnx ? tnx.changePct30d : 0 },
+          { label: 'Dollar (DXY)', value: dxy ? dxy.daily.price.toFixed(1) : '—', chg: dxy ? dxy.changePct30d : 0 },
+          { label: 'HY Credit', value: hyg ? hyg.daily.price.toFixed(1) : '—', chg: hyg ? hyg.changePct30d : 0 },
+          { label: 'Yield Curve', value: leading.macroMomentum.yieldCurve ? leading.macroMomentum.yieldCurve.bps + 'bps' : '—', signal: leading.macroMomentum.yieldCurve ? leading.macroMomentum.yieldCurve.signal : '' },
+          { label: 'Breadth', value: trifecta ? trifecta.modules.m3_breadth.breadth_pct.toFixed(0) + '%' : '—', signal: trifecta ? trifecta.modules.m3_breadth.signal : '' },
+        ];
+        readings.forEach(function(r) {
+          var chgColor = r.chg > 0 ? '#1D9E75' : r.chg < 0 ? '#f97316' : 'var(--dim)';
+          krHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 8px;font-size:11px">';
+          krHtml += '<span style="color:var(--dim)">' + r.label + '</span>';
+          krHtml += '<span><b>' + r.value + '</b>';
+          if (r.chg) krHtml += ' <span style="color:' + chgColor + ';font-size:10px">' + (r.chg > 0 ? '+' : '') + r.chg.toFixed(1) + '%</span>';
+          if (r.signal) krHtml += ' <span style="font-size:9px;color:var(--dim)">' + r.signal + '</span>';
+          krHtml += '</span></div>';
+        });
+        document.getElementById('cc-key-readings').innerHTML = krHtml;
+
+        // Market regime
+        apiCall('/api/lens/regime').then(function(regime) {
+          if (!regime) return;
+          var regColor = { BROAD_EXPANSION: '#1D9E75', HEALTHY_TREND: '#1D9E75', DIVERGENT: '#BA7517', BROAD_STRESS: '#E24B4A', CAPITULATION: '#378ADD', TRANSITIONAL: 'var(--dim)' };
+          var rc = regColor[regime.regime] || 'var(--dim)';
+          var regHtml = '<div style="padding:6px 10px;border-radius:6px;background:' + rc + '12;border:1px solid ' + rc + '33">';
+          regHtml += '<span style="font-size:12px;font-weight:500;color:' + rc + '">' + regime.regime.replace(/_/g, ' ') + '</span>';
+          regHtml += '<div style="font-size:10px;color:var(--dim);margin-top:2px">' + regime.regimeDescription + '</div>';
+          regHtml += '<div style="font-size:10px;margin-top:4px;color:var(--dim)">Uptrend: ' + regime.breadth.uptrendPct + '% | Stress: ' + regime.breadth.stressPct + '% | Downtrend: ' + regime.breadth.downtrendPct + '%</div>';
+          regHtml += '</div>';
+          document.getElementById('cc-market-regime').innerHTML = regHtml;
+        });
+
+        // Sector rotation — find top 3 leading and lagging by 30d performance
+        var sectors = instData.instruments.filter(function(i) { return ['XLK','XLE','XLF','XLI','XLV','XLY','XLP','XLU','XLB','XLC','XLRE'].indexOf(i.symbol) !== -1; });
+        sectors.sort(function(a, b) { return (b.changePct30d || 0) - (a.changePct30d || 0); });
+        var rotHtml = '<div style="display:flex;gap:8px;flex-wrap:wrap">';
+        sectors.slice(0, 3).forEach(function(s) {
+          rotHtml += '<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(29,158,117,0.1);color:#1D9E75;font-weight:500">' + s.symbol + ' ' + (s.changePct30d > 0 ? '+' : '') + s.changePct30d.toFixed(1) + '%</span>';
+        });
+        rotHtml += '<span style="font-size:10px;color:var(--dim);padding:2px 4px">|</span>';
+        sectors.slice(-3).reverse().forEach(function(s) {
+          rotHtml += '<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:rgba(249,115,22,0.1);color:#f97316;font-weight:500">' + s.symbol + ' ' + (s.changePct30d > 0 ? '+' : '') + s.changePct30d.toFixed(1) + '%</span>';
+        });
+        rotHtml += '</div>';
+        document.getElementById('cc-sector-rotation').innerHTML = rotHtml;
+      });
+    }
 
     // 8. Macro regime indicators
     if (macro && macro.indicators) {
@@ -4187,6 +4309,154 @@ function renderFsSortedRows() {
   });
 
   tbody.innerHTML = html || '<tr><td colspan="12" style="text-align:center;padding:30px;color:var(--dim)">No instruments</td></tr>';
+}
+
+// ═══════════════════════════════════════════════
+// TICKER ANALYSIS
+// ═══════════════════════════════════════════════
+
+function analyzeTickerFn() {
+  var input = document.getElementById('ticker-input');
+  var sym = (input.value || '').trim().toUpperCase();
+  if (!sym) return;
+  var output = document.getElementById('ticker-output');
+  output.innerHTML = '<div style="text-align:center;padding:40px;color:var(--dim)">Analyzing ' + sym + '...</div>';
+
+  // Fetch TA data and fundamentals in parallel
+  Promise.all([
+    apiCall('/api/inflection/full/' + encodeURIComponent(sym)),
+    apiCall('/api/fundamentals/' + encodeURIComponent(sym)),
+  ]).then(function(results) {
+    var ta = results[0];
+    var fund = results[1];
+
+    if (!ta && !fund) {
+      output.innerHTML = '<div style="text-align:center;padding:40px;color:#E24B4A">Could not find data for <b>' + sym + '</b>. Try a US-listed stock ticker.</div>';
+      return;
+    }
+
+    var html = '';
+
+    // Header
+    html += '<div class="card" style="padding:16px;margin-bottom:12px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    html += '<div><span style="font-size:20px;font-weight:500;color:var(--accent)">' + sym + '</span>';
+    if (fund && fund.company) html += ' <span style="font-size:14px;color:var(--dim)">' + fund.company + '</span>';
+    html += '</div>';
+    if (ta && ta.phase) {
+      var phColors = { 1: '#0ea5e9', 2: '#1D9E75', 3: '#f97316', 4: '#e879f9', 5: '#E24B4A' };
+      // Map internal phase to display phase
+      var phaseMap = { SELLING_EXHAUSTION: {n:1,s:'P1 Buy'}, NARRATIVE_COLLAPSE: {n:1,s:'P1 Buy'}, NARRATIVE_EXPANSION: {n:2,s:'P2 Ride'}, INSTITUTIONAL_ACCUMULATION: {n:3,s:'P3 Trim'}, BUYING_EXHAUSTION: {n:4,s:'P4 Exit'}, NARRATIVE_REVERSAL: {n:5,s:'P5 Avoid'} };
+      var pm = phaseMap[ta.phase.phase] || {n:0,s:'?'};
+      var pc = phColors[pm.n] || 'var(--dim)';
+      html += '<span style="padding:4px 12px;border-radius:6px;font-size:14px;font-weight:500;background:' + pc + '18;color:' + pc + ';border:1px solid ' + pc + '44">' + pm.s + '</span>';
+    }
+    html += '</div>';
+    if (ta && ta.phase) {
+      html += '<div style="font-size:12px;color:var(--dim);margin-top:6px">' + (ta.phase.description || '') + '</div>';
+      html += '<div style="font-size:11px;color:var(--dim);margin-top:4px">Confidence: ' + (ta.phase.confidence || '—') + '% | Action: ' + (ta.phase.actionBias || '—') + ' | Risk: ' + (ta.phase.riskLevel || '—') + '</div>';
+    }
+    html += '</div>';
+
+    // Technical Analysis
+    if (ta && ta.ta) {
+      var t = ta.ta;
+      html += '<div class="card" style="padding:16px;margin-bottom:12px">';
+      html += '<h3 style="margin-bottom:10px;font-size:14px">Technical analysis</h3>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+
+      var taItems = [
+        { label: 'Price', value: t.lastClose ? '$' + t.lastClose.toFixed(2) : '—' },
+        { label: '50d MA', value: t.sma50 ? '$' + t.sma50.toFixed(2) : '—' },
+        { label: '200d MA', value: t.sma200 ? '$' + t.sma200.toFixed(2) : '—' },
+        { label: 'vs 200d', value: t.priceVsSma200 ? (t.priceVsSma200 > 0 ? '+' : '') + t.priceVsSma200.toFixed(1) + '%' : '—', color: t.priceVsSma200 > 0 ? '#1D9E75' : '#E24B4A' },
+        { label: 'RSI (14)', value: t.rsi14 ? t.rsi14.toFixed(0) : '—', color: t.rsi14 > 70 ? '#E24B4A' : t.rsi14 < 30 ? '#0ea5e9' : undefined },
+        { label: 'ATR %', value: t.atrPct ? t.atrPct.toFixed(2) + '%' : '—' },
+        { label: 'MACD Hist', value: t.macd ? t.macd.histogram.toFixed(3) : '—', color: t.macd && t.macd.histogram > 0 ? '#1D9E75' : '#E24B4A' },
+        { label: 'Cross', value: t.goldenCross ? 'GOLDEN' : t.deathCross ? 'DEATH' : t.sma50Above200 ? 'Gold intact' : 'Death intact', color: t.sma50Above200 ? '#1D9E75' : '#E24B4A' },
+        { label: 'Velocity', value: t.extensionVelocity !== null ? t.extensionVelocity.toFixed(3) + '%/d' : '—' },
+      ];
+      taItems.forEach(function(item) {
+        html += '<div style="padding:6px 8px;background:var(--card);border-radius:4px">';
+        html += '<div style="font-size:9px;color:var(--dim)">' + item.label + '</div>';
+        html += '<div style="font-size:13px;font-weight:500;' + (item.color ? 'color:' + item.color : '') + '">' + item.value + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+
+      // Transition signals
+      if (ta.phase && ta.phase.transitionSignals && ta.phase.transitionSignals.length > 0) {
+        html += '<div style="margin-top:10px;padding:8px;background:var(--card);border-radius:6px">';
+        html += '<div style="font-size:10px;font-weight:500;color:var(--dim);margin-bottom:4px">TRANSITION SIGNALS</div>';
+        ta.phase.transitionSignals.forEach(function(s) {
+          html += '<div style="font-size:11px;color:var(--text);padding:2px 0">• ' + s + '</div>';
+        });
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+
+    // Fundamentals
+    if (fund && fund.fundamentals) {
+      var f = fund.fundamentals;
+      html += '<div class="card" style="padding:16px;margin-bottom:12px">';
+      html += '<h3 style="margin-bottom:10px;font-size:14px">Fundamentals</h3>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+      var fundItems = [
+        { label: 'Revenue Growth', value: f.revenueGrowthYoY !== null ? (f.revenueGrowthYoY > 0 ? '+' : '') + f.revenueGrowthYoY.toFixed(1) + '%' : '—' },
+        { label: 'EPS Growth', value: f.epsGrowthYoY !== null ? (f.epsGrowthYoY > 0 ? '+' : '') + f.epsGrowthYoY.toFixed(1) + '%' : '—' },
+        { label: 'Operating Margin', value: f.operatingMargin !== null ? f.operatingMargin.toFixed(1) + '%' : '—' },
+        { label: 'ROIC', value: f.roic !== null ? f.roic.toFixed(1) + '%' : '—' },
+        { label: 'FCF Yield', value: f.fcfYield !== null ? f.fcfYield.toFixed(1) + '%' : '—' },
+        { label: 'Debt/Equity', value: f.debtToEquity !== null ? f.debtToEquity.toFixed(2) : '—' },
+      ];
+      fundItems.forEach(function(item) {
+        html += '<div style="padding:6px 8px;background:var(--card);border-radius:4px">';
+        html += '<div style="font-size:9px;color:var(--dim)">' + item.label + '</div>';
+        html += '<div style="font-size:13px;font-weight:500">' + item.value + '</div>';
+        html += '</div>';
+      });
+      html += '</div></div>';
+    }
+
+    // Valuation
+    if (fund && fund.valuation) {
+      var v = fund.valuation;
+      html += '<div class="card" style="padding:16px;margin-bottom:12px">';
+      html += '<h3 style="margin-bottom:10px;font-size:14px">Valuation</h3>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+      var valItems = [
+        { label: 'Forward P/E', value: v.peForward !== null ? v.peForward.toFixed(1) + 'x' : '—' },
+        { label: 'EV/EBITDA', value: v.evToEbitda !== null ? v.evToEbitda.toFixed(1) + 'x' : '—' },
+        { label: 'PEG Ratio', value: v.pegRatio !== null ? v.pegRatio.toFixed(2) : '—' },
+        { label: 'FCF Yield', value: v.fcfYield !== null ? v.fcfYield.toFixed(1) + '%' : '—' },
+        { label: 'PE Percentile', value: v.pePctile !== null ? v.pePctile.toFixed(0) + '%' : '—' },
+        { label: 'GF Value Margin', value: v.gfValueMargin !== null ? (v.gfValueMargin > 0 ? '+' : '') + v.gfValueMargin.toFixed(1) + '%' : '—' },
+      ];
+      valItems.forEach(function(item) {
+        html += '<div style="padding:6px 8px;background:var(--card);border-radius:4px">';
+        html += '<div style="font-size:9px;color:var(--dim)">' + item.label + '</div>';
+        html += '<div style="font-size:13px;font-weight:500">' + item.value + '</div>';
+        html += '</div>';
+      });
+      html += '</div></div>';
+    }
+
+    // Overall signal
+    if (ta) {
+      html += '<div style="padding:12px 16px;background:var(--card);border-radius:8px;border:1px solid var(--border)">';
+      html += '<div style="font-size:11px;font-weight:500;color:var(--dim);margin-bottom:4px">SYSTEM ASSESSMENT</div>';
+      html += '<div style="font-size:13px;color:var(--text)">Overall Signal: <b>' + (ta.overallSignal || '—') + '</b>';
+      if (ta.phase) html += ' | Phase: ' + ta.phase.phase.replace(/_/g, ' ');
+      html += '</div>';
+      html += '<div style="font-size:11px;color:var(--dim);margin-top:4px">This is a confirmation tool. Technicals lag macro reality by 1-2 quarters. Use Foreshadow to model where macro changes will push this before the MAs confirm.</div>';
+      html += '</div>';
+    }
+
+    output.innerHTML = html;
+  }).catch(function(err) {
+    output.innerHTML = '<div style="text-align:center;padding:40px;color:#E24B4A">Error analyzing ' + sym + ': ' + (err.message || 'Unknown error') + '</div>';
+  });
 }
 
 // ═══════════════════════════════════════════════
