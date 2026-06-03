@@ -507,7 +507,6 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div class="icon">🔍</div>
       <div>Ticker Analysis</div>
     </div>
-    <div class="nav-section">Morning Lens</div>
     <div class="nav-item" data-page="morninglens">
       <div class="icon">☀️</div>
       <div>Morning Brief</div>
@@ -3506,18 +3505,22 @@ function openEtfDetail(symbol) {
   tabs.forEach(function(t) { t.classList.remove('active'); });
   tabs[0].classList.add('active');
 
-  // Fetch all data in parallel
+  // Fetch all data in parallel — including TA and valuation
   Promise.all([
     apiCall('/api/history/' + encodeURIComponent(symbol) + '?limit=365').catch(function() { return { snapshots: [] }; }),
     apiCall('/api/history/' + encodeURIComponent(symbol) + '/phases').catch(function() { return { timeline: [] }; }),
     apiCall('/api/history/' + encodeURIComponent(symbol) + '/transitions').catch(function() { return { transitions: [] }; }),
     apiCall('/api/lens/instruments/' + encodeURIComponent(symbol)).catch(function() { return null; }),
+    apiCall('/api/inflection/full/' + encodeURIComponent(symbol)).catch(function() { return null; }),
+    apiCall('/api/lens/valuations').catch(function() { return { valuations: {} }; }),
   ]).then(function(results) {
     etfModalData = {
       history: results[0].snapshots || [],
       phases: results[1].timeline || [],
       transitions: results[2].transitions || [],
       liveSnapshot: results[3],
+      taData: results[4],
+      valuations: (results[5] && results[5].valuations) ? results[5].valuations[symbol] : null,
     };
     var snap = etfModalData.liveSnapshot;
     if (snap) {
@@ -3581,8 +3584,96 @@ function renderEtfOverview(body) {
   html += '<div class="etf-stat-card"><div class="label">History Days</div><div class="value">' + history.length + '</div></div>';
   html += '</div>';
 
+  // Technical Analysis section (from live TA data)
+  var taResult = etfModalData.taData;
+  if (taResult && taResult.ta) {
+    var t = taResult.ta;
+    html += '<div class="etf-accuracy-box" style="margin-top:12px"><h4>Technical analysis</h4>';
+    html += '<div class="etf-stats-grid">';
+    var taItems = [
+      { label: '50d MA', value: t.sma50 ? '$' + t.sma50.toFixed(2) : '—' },
+      { label: '200d MA', value: t.sma200 ? '$' + t.sma200.toFixed(2) : '—' },
+      { label: 'vs 200d', value: t.priceVsSma200 !== null ? (t.priceVsSma200 > 0 ? '+' : '') + t.priceVsSma200.toFixed(1) + '%' : '—' },
+      { label: 'RSI (14)', value: t.rsi14 ? t.rsi14.toFixed(0) : '—' },
+      { label: 'MACD Hist', value: t.macd ? t.macd.histogram.toFixed(3) : '—' },
+      { label: 'ATR %', value: t.atrPct ? t.atrPct.toFixed(2) + '%' : '—' },
+      { label: 'MA Cross', value: t.sma50Above200 ? 'Golden' : 'Death' },
+      { label: 'Velocity', value: t.extensionVelocity !== null ? t.extensionVelocity.toFixed(3) + '%/d' : '—' },
+      { label: 'Days@200d', value: t.daysSinceCross200d !== null ? t.daysSinceCross200d + 'd' : '—' },
+    ];
+    taItems.forEach(function(item) {
+      html += '<div class="etf-stat-card"><div class="label">' + item.label + '</div><div class="value">' + item.value + '</div></div>';
+    });
+    html += '</div>';
+    // Transition signals
+    if (taResult.phase && taResult.phase.transitionSignals && taResult.phase.transitionSignals.length > 0) {
+      html += '<div style="margin-top:8px;padding:8px 10px;background:rgba(249,115,22,0.06);border-radius:6px;border:1px solid rgba(249,115,22,0.15)">';
+      html += '<div style="font-size:10px;font-weight:500;color:var(--amber);margin-bottom:4px">TRANSITION SIGNALS</div>';
+      taResult.phase.transitionSignals.forEach(function(s) {
+        html += '<div style="font-size:11px;color:var(--text);padding:1px 0">• ' + s + '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  // Valuation section
+  var val = etfModalData.valuations;
+  if (val) {
+    html += '<div class="etf-accuracy-box" style="margin-top:12px"><h4>Valuation</h4>';
+    html += '<div class="etf-stats-grid">';
+    var valItems = [
+      { label: 'P/E (TTM)', value: val.pe ? val.pe.toFixed(1) + 'x' : '—' },
+      { label: 'Fwd P/E', value: val.fwdPe ? val.fwdPe.toFixed(1) + 'x' : '—' },
+      { label: 'P/S', value: val.ps ? val.ps.toFixed(2) + 'x' : '—' },
+      { label: 'PE Range', value: (val.peLow && val.peHigh) ? val.peLow.toFixed(0) + '-' + val.peHigh.toFixed(0) : '—' },
+      { label: 'PE %ile', value: val.pePercentile !== null ? val.pePercentile + '%' : '—' },
+      { label: 'Fwd EPS Gr', value: val.fwdEpsGrowth ? val.fwdEpsGrowth.toFixed(1) + '%' : '—' },
+    ];
+    valItems.forEach(function(item) {
+      html += '<div class="etf-stat-card"><div class="label">' + item.label + '</div><div class="value">' + item.value + '</div></div>';
+    });
+    html += '</div></div>';
+  }
+
+  // Top 10 Holdings (hardcoded mapping — GuruFocus doesn't provide ETF holdings via API)
+  var TOP_HOLDINGS = {
+    'XHB': ['DHI','LEN','PHM','NVR','TOL','BLDR','MHO','MDC','MTH','TMHC'],
+    'SMH': ['NVDA','TSM','AVGO','ASML','AMD','QCOM','TXN','INTC','MU','AMAT'],
+    'XLE': ['XOM','CVX','COP','SLB','EOG','MPC','PSX','VLO','PXD','WMB'],
+    'XLF': ['JPM','BAC','WFC','GS','MS','BLK','SCHW','AXP','CB','PGR'],
+    'XLK': ['AAPL','MSFT','NVDA','AVGO','CRM','ORCL','ADBE','AMD','CSCO','ACN'],
+    'XLI': ['CAT','GE','UNP','HON','DE','RTX','BA','LMT','ETN','ITW'],
+    'XLV': ['UNH','LLY','JNJ','ABBV','MRK','TMO','ABT','PFE','DHR','AMGN'],
+    'XLY': ['AMZN','TSLA','HD','MCD','NKE','LOW','SBUX','TJX','BKNG','CMG'],
+    'XLP': ['PG','KO','PEP','COST','WMT','PM','MO','MDLZ','CL','KMB'],
+    'XLU': ['NEE','DUK','SO','D','AEP','SRE','EXC','XEL','ED','WEC'],
+    'XBI': ['MRNA','VRTX','REGN','BIIB','SGEN','ALNY','BMRN','INCY','EXAS','SRPT'],
+    'KRE': ['RF','CFG','KEY','HBAN','ZION','FHN','EWBC','WAL','SNV','CMA'],
+    'IYT': ['UNP','UPS','FDX','DAL','CSX','UAL','NSC','JBHT','XPO','ODFL'],
+    'XRT': ['GME','AMC','CVNA','W','ETSY','BBY','TJX','ROST','DG','DLTR'],
+    'XLC': ['META','GOOGL','GOOG','NFLX','DIS','CMCSA','T','VZ','TMUS','EA'],
+    'XLB': ['LIN','APD','SHW','ECL','FCX','NEM','NUE','DD','DOW','PPG'],
+    'JETS': ['DAL','UAL','LUV','AAL','ALK','JBLU','HA','SAVE','SKYW','MESA'],
+    'IGV': ['CRM','ADBE','NOW','INTU','PANW','SNPS','CDNS','WDAY','ANSS','DDOG'],
+  };
+  var holdings = TOP_HOLDINGS[symbol];
+  if (holdings) {
+    html += '<div class="etf-accuracy-box" style="margin-top:12px"><h4>Top 10 holdings (by market cap)</h4>';
+    html += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px">';
+    holdings.forEach(function(h, idx) {
+      html += '<div style="padding:6px 8px;background:var(--card);border-radius:4px;text-align:center;cursor:pointer" onclick="document.getElementById(\'ticker-input\').value=\'' + h + '\';showPage(\'ticker\');analyzeTickerFn()">';
+      html += '<div style="font-size:12px;font-weight:500;color:var(--accent)">' + h + '</div>';
+      html += '<div style="font-size:9px;color:var(--dim)">#' + (idx+1) + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '<div style="font-size:10px;color:var(--dim);margin-top:4px">Click any ticker to run full analysis</div>';
+    html += '</div>';
+  }
+
   // Price chart from history
-  html += '<div id="etf-history-chart"></div>';
+  html += '<div id="etf-history-chart" style="margin-top:12px"></div>';
   body.innerHTML = html;
 
   if (history.length > 0) {
@@ -4281,7 +4372,7 @@ function renderFsSortedRows() {
       shiftHtml = '<span style="color:var(--dim);font-size:10px">—</span>';
     }
 
-    html += '<tr' + (phaseChanged ? ' style="background:rgba(249,115,22,0.05)"' : '') + '>';
+    html += '<tr onclick="openEtfDetail(\'' + row.symbol + '\')" style="cursor:pointer;' + (phaseChanged ? 'background:rgba(249,115,22,0.05)' : '') + '">';
     html += '<td style="font-weight:700;color:var(--accent)">' + row.symbol + '</td>';
     html += '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + row.name + '</td>';
     html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--dim)">' + row.group + '</td>';
