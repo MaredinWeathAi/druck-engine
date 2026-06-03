@@ -2190,25 +2190,7 @@ function loadCommandCenter() {
       hlList.innerHTML = hlHtml;
     }
 
-    // 7. What Changed
-    var wcFeed = document.getElementById('cc-what-changed');
-    if (!wc || !wc.entries || wc.entries.length === 0) {
-      wcFeed.innerHTML = '<div class="lens-empty"><div class="empty-icon">📋</div><p>No changes detected since yesterday.</p></div>';
-    } else {
-      var icons = { death_nail: '💀', leading_group: '🏗️', breadth: '📊', defensives: '🛡️', curve_credit: '📈', trend_state: '📉' };
-      var severityClass = { critical: 'downgrade', warning: 'new_signal', info: 'cleared' };
-      var wcHtml = '';
-      wc.entries.forEach(function(e) {
-        var cat = e.category || 'trend_state';
-        var cls = severityClass[e.severity] || 'cleared';
-        wcHtml += '<div class="wc-entry ' + cls + '">';
-        wcHtml += '<div class="wc-icon">' + (icons[cat] || '📌') + '</div>';
-        wcHtml += '<div class="wc-text"><div class="wc-headline">' + (e.message || '') + '</div>';
-        if (e.symbol) wcHtml += '<div class="wc-detail">' + e.symbol + ' • ' + (e.category || '') + '</div>';
-        wcHtml += '</div></div>';
-      });
-      wcFeed.innerHTML = wcHtml;
-    }
+    // 7. What Changed (removed from Command Center — available on Morning Brief)
 
     // 8. Macro regime indicators
     if (macro && macro.indicators) {
