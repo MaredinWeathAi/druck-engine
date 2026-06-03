@@ -637,6 +637,26 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         </div>
       </div>
 
+      <!-- Leading Indicators + Macro Regime (directly below Broad Market Overview) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+        <div class="card">
+          <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+            Leading Indicators
+            <span class="cc-viewall" onclick="showPage('liquidity')">Details →</span>
+          </h3>
+          <div id="cc-leading-indicators">
+            <div class="lens-loading">Loading...</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+            Macro Regime Indicators
+            <span class="cc-viewall" onclick="showPage('dashboard')">Full Dashboard →</span>
+          </h3>
+          <div class="grid-4" id="cc-regime-indicators"></div>
+        </div>
+      </div>
+
       <!-- Two-column: Aria Brief (left) + Headlines (right) -->
       <div class="cc-top" style="margin-top:16px">
         <div class="cc-left">
@@ -676,25 +696,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         </div>
       </div>
 
-      <!-- Leading Indicators + Macro Regime -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
-        <div class="card">
-          <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
-            Leading Indicators
-            <span class="cc-viewall" onclick="showPage('liquidity')">Details →</span>
-          </h3>
-          <div id="cc-leading-indicators">
-            <div class="lens-loading">Loading...</div>
-          </div>
-        </div>
-        <div class="card">
-          <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
-            Macro Regime Indicators
-            <span class="cc-viewall" onclick="showPage('dashboard')">Full Dashboard →</span>
-          </h3>
-          <div class="grid-4" id="cc-regime-indicators"></div>
-        </div>
-      </div>
+      <!-- Leading Indicators + Macro Regime moved above Aria/Headlines -->
 
       <!-- What Changed removed — space given to Leading Indicators -->
 
