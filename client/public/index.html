@@ -646,8 +646,28 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         </div>
       </div>
 
-      <!-- Bottom: What Changed + Macro Regime -->
-      <div class="cc-bottom" style="margin-top:16px">
+      <!-- Leading Indicators + Macro Regime -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+        <div class="card">
+          <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+            Leading Indicators
+            <span class="cc-viewall" onclick="showPage('liquidity')">Details →</span>
+          </h3>
+          <div id="cc-leading-indicators">
+            <div class="lens-loading">Loading...</div>
+          </div>
+        </div>
+        <div class="card">
+          <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+            Macro Regime Indicators
+            <span class="cc-viewall" onclick="showPage('dashboard')">Full Dashboard →</span>
+          </h3>
+          <div class="grid-4" id="cc-regime-indicators"></div>
+        </div>
+      </div>
+
+      <!-- What Changed -->
+      <div style="margin-top:16px">
         <div class="card">
           <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
             What Changed Since Yesterday
@@ -656,14 +676,6 @@ button:disabled{opacity:0.5;cursor:not-allowed}
           <div class="what-changed-feed" id="cc-what-changed">
             <div class="lens-loading">Waiting for data...</div>
           </div>
-        </div>
-
-        <div class="card">
-          <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
-            Macro Regime Indicators
-            <span class="cc-viewall" onclick="showPage('dashboard')">Full Dashboard →</span>
-          </h3>
-          <div class="grid-4" id="cc-regime-indicators"></div>
         </div>
       </div>
 
@@ -1980,7 +1992,7 @@ function toggleTransitionsPanel(prefix) {
 // COMMAND CENTER — unified landing page
 // ═══════════════════════════════════════════════
 function loadCommandCenter() {
-  // Parallel fetch: Morning Lens data + Trifecta + Headlines + Macro + Transitions
+  // Parallel fetch: Morning Lens data + Trifecta + Headlines + Macro + Transitions + Leading
   Promise.all([
     apiCall('/api/lens/signals'),
     apiCall('/api/lens/death-nails'),
@@ -1990,7 +2002,8 @@ function loadCommandCenter() {
     apiCall('/api/lens/transitions'),
     apiCall('/api/trifecta'),
     apiCall('/api/intel/headlines?limit=25'),
-    apiCall('/api/macro')
+    apiCall('/api/macro'),
+    apiCall('/api/leading-indicators')
   ]).then(function(results) {
     var signals = results[0];
     var dn = results[1];
@@ -2001,6 +2014,7 @@ function loadCommandCenter() {
     var trifecta = results[6];
     var headlines = results[7];
     var macro = results[8];
+    var leading = results[9];
 
     // 1. Phase Transitions
     renderPhaseTransitions(transitions, 'cc-');
@@ -2184,6 +2198,70 @@ function loadCommandCenter() {
         regHtml += '</div></div></div>';
       });
       document.getElementById('cc-regime-indicators').innerHTML = regHtml;
+    }
+
+    // 8b. Leading Indicators (Liquidity Flow + Macro Second Derivatives)
+    if (leading) {
+      var liq = leading.liquidity || {};
+      var mom = leading.macroMomentum || {};
+      var comp = leading.composite || {};
+
+      var sigColors = { EXPANDING: '#1D9E75', IMPROVING: '#1D9E75', NEUTRAL: '#BA7517', DECELERATING: '#f97316', DRAINING: '#E24B4A', BOTTOMING: '#378ADD' };
+      var liqColor = sigColors[liq.signal] || '#BA7517';
+
+      var compColors = { 'RISK ON': '#1D9E75', 'LEANING BULLISH': '#1D9E75', 'MIXED': '#BA7517', 'LEANING BEARISH': '#f97316', 'RISK OFF': '#E24B4A' };
+      var compColor = compColors[comp.signal] || '#BA7517';
+
+      var liHtml = '';
+
+      // Composite signal banner
+      liHtml += '<div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;background:' + compColor + '15;border:1px solid ' + compColor + '33">';
+      liHtml += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      liHtml += '<span style="font-size:13px;font-weight:500;color:' + compColor + '">' + comp.signal + '</span>';
+      liHtml += '<span style="font-size:10px;color:var(--color-text-secondary)">' + comp.bullCount + ' bull / ' + comp.bearCount + ' bear</span>';
+      liHtml += '</div></div>';
+
+      // Liquidity Flow section
+      liHtml += '<div style="margin-bottom:12px">';
+      liHtml += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--color-text-secondary);margin-bottom:6px">Liquidity flow</div>';
+      liHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:6px;background:' + liqColor + '12;border:1px solid ' + liqColor + '33">';
+      liHtml += '<span style="font-size:12px;font-weight:500;color:' + liqColor + '">' + liq.signal + '</span>';
+      liHtml += '<span style="font-size:10px;color:var(--color-text-secondary)">' + (liq.velocity4w > 0 ? '+' : '') + liq.velocity4w + '% 4w vel</span>';
+      liHtml += '</div>';
+      liHtml += '<div style="font-size:10px;color:var(--color-text-tertiary);margin-top:4px;padding:0 4px">' + liq.description + '</div>';
+      liHtml += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px">';
+      liHtml += '<div style="text-align:center;padding:4px;background:var(--color-background-secondary);border-radius:4px"><div style="font-size:9px;color:var(--color-text-tertiary)">Fed BS</div><div style="font-size:11px;font-weight:500">$' + liq.balanceSheet + 'T</div></div>';
+      liHtml += '<div style="text-align:center;padding:4px;background:var(--color-background-secondary);border-radius:4px"><div style="font-size:9px;color:var(--color-text-tertiary)">TGA</div><div style="font-size:11px;font-weight:500">$' + liq.tga + 'B</div></div>';
+      liHtml += '<div style="text-align:center;padding:4px;background:var(--color-background-secondary);border-radius:4px"><div style="font-size:9px;color:var(--color-text-tertiary)">RRP</div><div style="font-size:11px;font-weight:500">$' + liq.reverseRepo + 'B</div></div>';
+      liHtml += '</div>';
+      liHtml += '<div style="display:flex;justify-content:space-between;margin-top:6px;padding:0 4px">';
+      liHtml += '<span style="font-size:10px;color:var(--color-text-tertiary)">Accel: <b style="color:' + (liq.acceleration > 0 ? '#1D9E75' : liq.acceleration < 0 ? '#E24B4A' : 'var(--color-text-secondary)') + '">' + (liq.acceleration > 0 ? '+' : '') + liq.acceleration + '</b></span>';
+      liHtml += '<span style="font-size:10px;color:var(--color-text-tertiary)">13w vel: ' + (liq.velocity13w > 0 ? '+' : '') + liq.velocity13w + '%</span>';
+      liHtml += '</div></div>';
+
+      // Macro Momentum section
+      liHtml += '<div>';
+      liHtml += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--color-text-secondary);margin-bottom:6px">Macro momentum</div>';
+
+      var momItems = [
+        { label: 'Inflation (PCE)', value: mom.inflation ? mom.inflation.level.toFixed(1) + '%' : '—', signal: mom.inflation ? mom.inflation.signal : '—' },
+        { label: 'GDP Growth', value: mom.growth ? mom.growth.level.toFixed(1) + '%' : '—', signal: mom.growth ? mom.growth.signal : '—' },
+        { label: 'Yield Curve', value: mom.yieldCurve ? mom.yieldCurve.bps + 'bps' : '—', signal: mom.yieldCurve ? mom.yieldCurve.signal : '—' },
+        { label: 'Breadth Accel', value: mom.breadthAccel !== undefined ? (mom.breadthAccel > 0 ? '+' : '') + mom.breadthAccel : '—', signal: mom.breadthAccel > 2 ? 'IMPROVING' : mom.breadthAccel < -2 ? 'WEAKENING' : 'STABLE' },
+      ];
+
+      var momSigColors = { COOLING_FAST: '#1D9E75', COOLING: '#1D9E75', STEADY: '#1D9E75', ACCELERATING: '#1D9E75', STEEP: '#1D9E75', NORMAL: '#1D9E75', IMPROVING: '#1D9E75', STICKY: '#BA7517', SLOWING: '#BA7517', FLAT: '#BA7517', STABLE: '#BA7517', RISING: '#E24B4A', CONTRACTING: '#E24B4A', INVERTED: '#E24B4A', RECESSION: '#E24B4A', STALLING: '#E24B4A', WEAKENING: '#E24B4A', UNKNOWN: 'var(--color-text-tertiary)' };
+
+      momItems.forEach(function(item) {
+        var sc = momSigColors[item.signal] || 'var(--color-text-secondary)';
+        liHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;margin-bottom:3px;border-radius:4px;border-left:3px solid ' + sc + '">';
+        liHtml += '<span style="font-size:11px;color:var(--color-text-primary)">' + item.label + '</span>';
+        liHtml += '<span style="font-size:11px"><b>' + item.value + '</b> <span style="font-size:9px;color:' + sc + ';font-weight:500">' + item.signal + '</span></span>';
+        liHtml += '</div>';
+      });
+      liHtml += '</div>';
+
+      document.getElementById('cc-leading-indicators').innerHTML = liHtml;
     }
 
     // 9. Leading Groups

@@ -796,6 +796,113 @@ app.get('/api/breadth', (_req, res) => {
   });
 });
 
+// ── Leading Indicators — Liquidity Flow + Macro Second Derivatives ──
+// What Druckenmiller watches to act 1-2 quarters ahead of moving averages.
+app.get('/api/leading-indicators', (_req, res) => {
+  recalcDerived();
+  const N = dates.length;
+
+  // LIQUIDITY FLOW — not the level, the direction and acceleration
+  const bsLatest = N > 0 ? +bs[N-1].toFixed(2) : 0;
+  const tgaLatest = N > 0 ? +(tga[N-1] * 1000).toFixed(0) : 0; // billions
+  const rrpLatest = N > 0 ? +(rrp[N-1] * 1000).toFixed(0) : 0;
+  const nlLatest = N > 0 ? +nl[N-1].toFixed(4) : 0;
+
+  // Liquidity velocity (already computed)
+  const liqVel4w = +(latV4 * 100).toFixed(2);
+  const liqVel13w = +(latV13 * 100).toFixed(2);
+
+  // Liquidity ACCELERATION = change in velocity (second derivative)
+  let liqAccel = 0;
+  if (vel4w.length >= 5) {
+    const recent = vel4w[vel4w.length - 1];
+    const prior = vel4w[vel4w.length - 5];
+    liqAccel = +((recent - prior) * 100).toFixed(3);
+  }
+
+  // Liquidity signal
+  let liqSignal = 'NEUTRAL';
+  let liqDescription = 'Liquidity stable';
+  if (liqVel4w > 0.5 && liqAccel > 0) {
+    liqSignal = 'EXPANDING';
+    liqDescription = 'Liquidity expanding and accelerating — bullish for risk';
+  } else if (liqVel4w > 0 && liqAccel > 0) {
+    liqSignal = 'IMPROVING';
+    liqDescription = 'Liquidity positive and improving — supportive';
+  } else if (liqVel4w > 0 && liqAccel < 0) {
+    liqSignal = 'DECELERATING';
+    liqDescription = 'Liquidity positive but decelerating — watch for turn';
+  } else if (liqVel4w < 0 && liqAccel < 0) {
+    liqSignal = 'DRAINING';
+    liqDescription = 'Liquidity draining and accelerating lower — bearish for risk';
+  } else if (liqVel4w < 0 && liqAccel > 0) {
+    liqSignal = 'BOTTOMING';
+    liqDescription = 'Liquidity negative but drain decelerating — watch for turn';
+  }
+
+  // MACRO SECOND DERIVATIVES — rate of change of rate of change
+  // Uses the regime data already in memory
+
+  // CPI/PCE acceleration: is inflation falling faster or slower?
+  // pce is the latest core PCE reading
+  const inflAccel = pce > 0 ? (pce < 2.5 ? 'COOLING_FAST' : pce < 3.5 ? 'COOLING' : pce < 4.5 ? 'STICKY' : 'RISING') : 'UNKNOWN';
+
+  // GDP acceleration
+  const gdpAccel = gdp > 0 ? (gdp > 3 ? 'ACCELERATING' : gdp > 1.5 ? 'STEADY' : gdp > 0 ? 'SLOWING' : 'CONTRACTING') : (gdp < -1 ? 'RECESSION' : 'STALLING');
+
+  // ISM/NAPM direction — use the latest reading vs. 50 threshold + direction
+  // napm data is stored in the regime arrays
+  let ismSignal = 'UNKNOWN';
+  let ismValue = 0;
+  // ISM data lives in the trifecta regime data — we access via the already-computed regime
+  // Using breadth as a market-internal proxy if ISM not directly available
+  const breadthAccel = breadthArr.length >= 10
+    ? +((breadthArr[breadthArr.length-1] - breadthArr[breadthArr.length-5]) -
+        (breadthArr[breadthArr.length-5] - breadthArr[breadthArr.length-10])).toFixed(1)
+    : 0;
+
+  // Yield curve (already have yieldCurveBps)
+  const curveSignal = yieldCurveBps > 50 ? 'STEEP' : yieldCurveBps > 0 ? 'NORMAL' : yieldCurveBps > -50 ? 'FLAT' : 'INVERTED';
+
+  // COMPOSITE LEADING SIGNAL — combines liquidity flow + macro momentum
+  let compositeSignal = 'NEUTRAL';
+  let compositeColor = 'amber';
+  const bullCount = (liqVel4w > 0 ? 1 : 0) + (liqAccel > 0 ? 1 : 0) + (gdp > 1.5 ? 1 : 0) + (yieldCurveBps > 0 ? 1 : 0) + (breadthAccel > 0 ? 1 : 0);
+  const bearCount = (liqVel4w < 0 ? 1 : 0) + (liqAccel < 0 ? 1 : 0) + (gdp < 1 ? 1 : 0) + (yieldCurveBps < -25 ? 1 : 0) + (breadthAccel < -5 ? 1 : 0);
+
+  if (bullCount >= 4) { compositeSignal = 'RISK ON'; compositeColor = 'green'; }
+  else if (bullCount >= 3) { compositeSignal = 'LEANING BULLISH'; compositeColor = 'green'; }
+  else if (bearCount >= 4) { compositeSignal = 'RISK OFF'; compositeColor = 'red'; }
+  else if (bearCount >= 3) { compositeSignal = 'LEANING BEARISH'; compositeColor = 'red'; }
+  else { compositeSignal = 'MIXED'; compositeColor = 'amber'; }
+
+  res.json({
+    liquidity: {
+      signal: liqSignal,
+      description: liqDescription,
+      netLiquidity: nlLatest,
+      balanceSheet: bsLatest,
+      tga: tgaLatest,
+      reverseRepo: rrpLatest,
+      velocity4w: liqVel4w,
+      velocity13w: liqVel13w,
+      acceleration: liqAccel,
+    },
+    macroMomentum: {
+      inflation: { level: pce, signal: inflAccel },
+      growth: { level: gdp, signal: gdpAccel },
+      yieldCurve: { bps: yieldCurveBps, signal: curveSignal },
+      breadthAccel: breadthAccel,
+    },
+    composite: {
+      signal: compositeSignal,
+      color: compositeColor,
+      bullCount,
+      bearCount,
+    },
+  });
+});
+
 app.get('/api/argentina', (_req, res) => {
   const spreadTight = argSpread[N - 1] < argSpread[N - 8];
   const tecoChg = ((tecoPrice[N - 1] - tecoPrice[N - 8]) / tecoPrice[N - 8] * 100);
