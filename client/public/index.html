@@ -666,18 +666,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         </div>
       </div>
 
-      <!-- What Changed -->
-      <div style="margin-top:16px">
-        <div class="card">
-          <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
-            What Changed Since Yesterday
-            <span class="cc-viewall" onclick="showPage('morninglens')">Full Brief →</span>
-          </h3>
-          <div class="what-changed-feed" id="cc-what-changed">
-            <div class="lens-loading">Waiting for data...</div>
-          </div>
-        </div>
-      </div>
+      <!-- What Changed removed — space given to Leading Indicators -->
 
       <!-- Leading Groups -->
       <div class="card" style="margin-top:16px">
@@ -2201,6 +2190,9 @@ function loadCommandCenter() {
     }
 
     // 8b. Leading Indicators (Liquidity Flow + Macro Second Derivatives)
+    if (!leading || (leading.liquidity && leading.liquidity.velocity4w === 0 && leading.liquidity.velocity13w === 0 && leading.liquidity.balanceSheet === 0)) {
+      document.getElementById('cc-leading-indicators').innerHTML = '<div style="padding:16px;background:rgba(226,75,74,0.08);border:1px solid rgba(226,75,74,0.25);border-radius:8px;font-size:12px;color:#E24B4A"><b>FRED API key not configured or data unavailable.</b><br><span style="color:var(--color-text-secondary)">Leading indicators require live FRED data. Please update the FRED_API_KEY environment variable in Railway settings to enable liquidity flow and macro momentum tracking.</span></div>';
+    }
     if (leading) {
       var liq = leading.liquidity || {};
       var mom = leading.macroMomentum || {};
