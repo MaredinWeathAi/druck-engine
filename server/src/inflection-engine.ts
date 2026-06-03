@@ -1630,37 +1630,39 @@ function classifyPhaseStructural(
 
   confidence = Math.max(20, Math.min(95, confidence));
 
-  // Phase metadata
+  // Phase metadata — Druckenmiller Trade Cycle
+  // This is a CONFIRMATION tool. Technicals lag. Druckenmiller acts 1-2 quarters ahead.
+  // Use Foreshadow to model where macro changes will push phases before the MAs confirm.
   const phaseMetadata: Record<InflectionPhase, Omit<PhaseClassification, 'phase' | 'confidence' | 'transitionSignals'>> = {
-    NARRATIVE_EXPANSION: {
-      description: 'EARLY/MID UPTREND — Price above 200d with healthy extension, 50d above 200d, positive momentum. Ride the trend.',
-      actionBias: 'BUY', riskLevel: 'LOW',
-      nextPhase: 'INSTITUTIONAL_ACCUMULATION',
-    },
-    INSTITUTIONAL_ACCUMULATION: {
-      description: 'MOMENTUM FADING — Still above MAs but MACD rolling over or trend extended. Smart money distributes into strength.',
-      actionBias: 'REDUCE', riskLevel: 'MODERATE',
-      nextPhase: 'BUYING_EXHAUSTION',
-    },
-    BUYING_EXHAUSTION: {
-      description: 'TREND EXHAUSTION — Parabolic extension, death cross forming, or structural breakdown. Exit/hedge zone.',
-      actionBias: 'SHORT', riskLevel: 'HIGH',
-      nextPhase: 'NARRATIVE_REVERSAL',
-    },
-    NARRATIVE_REVERSAL: {
-      description: 'CONFIRMED DOWNTREND — Below 200d, bearish MA alignment, negative momentum.',
-      actionBias: 'REDUCE', riskLevel: 'EXTREME',
-      nextPhase: 'SELLING_EXHAUSTION',
-    },
     SELLING_EXHAUSTION: {
-      description: 'MOMENTUM INFLECTION — Still below 200d but decline decelerating. Smart money starts buying.',
+      description: 'BUY ZONE — Decline decelerating, smart money accumulates. Best risk/reward entry for cyclicals.',
       actionBias: 'ACCUMULATE', riskLevel: 'HIGH',
       nextPhase: 'NARRATIVE_COLLAPSE',
     },
     NARRATIVE_COLLAPSE: {
-      description: 'RECOVERY FORMING — Golden cross building, momentum turning. Highest conviction entry zone.',
-      actionBias: 'BUY', riskLevel: 'MODERATE',
+      description: 'BUY ZONE — Deep capitulation, recovery forming. Maximum fear = maximum opportunity.',
+      actionBias: 'BUY', riskLevel: 'HIGH',
       nextPhase: 'NARRATIVE_EXPANSION',
+    },
+    NARRATIVE_EXPANSION: {
+      description: 'RIDE — Uptrend confirmed, structure healthy. Hold positions, add on dips to 50d. Stop below 200d.',
+      actionBias: 'BUY', riskLevel: 'LOW',
+      nextPhase: 'INSTITUTIONAL_ACCUMULATION',
+    },
+    INSTITUTIONAL_ACCUMULATION: {
+      description: 'TRIM — Momentum fading or extended. Start taking profits into strength. Tighten stops.',
+      actionBias: 'REDUCE', riskLevel: 'MODERATE',
+      nextPhase: 'BUYING_EXHAUSTION',
+    },
+    BUYING_EXHAUSTION: {
+      description: 'EXIT — Parabolic extension, death cross, or structural breakdown. Get out. Do not initiate.',
+      actionBias: 'SHORT', riskLevel: 'HIGH',
+      nextPhase: 'NARRATIVE_REVERSAL',
+    },
+    NARRATIVE_REVERSAL: {
+      description: 'AVOID — Confirmed downtrend. No longs. Wait for selling exhaustion before re-entering.',
+      actionBias: 'REDUCE', riskLevel: 'EXTREME',
+      nextPhase: 'SELLING_EXHAUSTION',
     },
   };
 
@@ -1876,38 +1878,37 @@ export function classifyPhase(
     ? Math.min(95, Math.round(((sorted[0] - (sorted[1] || 0)) / sorted[0]) * 100 + 30))
     : 20;
 
-  // Phase metadata
-  // v10.0: Smart Money Cycle — action biases reflect what the BEST investors do, not the crowd
+  // Phase metadata — same Druckenmiller Trade Cycle for stock path
   const phaseMetadata: Record<InflectionPhase, Omit<PhaseClassification, 'phase' | 'confidence' | 'transitionSignals'>> = {
-    NARRATIVE_EXPANSION: {
-      description: 'ENTRY ZONE — New story emerging, smart money enters early alongside the narrative',
-      actionBias: 'BUY', riskLevel: 'MODERATE',
-      nextPhase: 'INSTITUTIONAL_ACCUMULATION',
-    },
-    INSTITUTIONAL_ACCUMULATION: {
-      description: 'DISTRIBUTION ZONE — Crowd piling in, smart money sells to them. If you own it, start taking profits',
-      actionBias: 'REDUCE', riskLevel: 'MODERATE',
-      nextPhase: 'BUYING_EXHAUSTION',
-    },
-    BUYING_EXHAUSTION: {
-      description: 'EXIT ZONE — Everyone is in, no marginal buyer left. Smart money exits aggressively',
-      actionBias: 'SHORT', riskLevel: 'HIGH',
-      nextPhase: 'NARRATIVE_REVERSAL',
-    },
-    NARRATIVE_REVERSAL: {
-      description: 'Story breaking, smart money trims remaining. Watch for selective contrarian entries on specific names',
-      actionBias: 'REDUCE', riskLevel: 'EXTREME',
-      nextPhase: 'SELLING_EXHAUSTION',
-    },
     SELLING_EXHAUSTION: {
-      description: 'STRONG ENTRY — Panic selling overdone. Highest conviction buy zone. This is where the best returns start',
+      description: 'BUY ZONE — Panic selling overdone. Highest conviction buy zone for cheap cyclicals.',
       actionBias: 'ACCUMULATE', riskLevel: 'HIGH',
       nextPhase: 'NARRATIVE_COLLAPSE',
     },
     NARRATIVE_COLLAPSE: {
-      description: 'DEEP VALUE ENTRY — Full capitulation, narrative dead. Maximum fear = maximum opportunity',
+      description: 'BUY ZONE — Full capitulation, narrative dead. Maximum fear = maximum opportunity.',
       actionBias: 'BUY', riskLevel: 'EXTREME',
       nextPhase: 'NARRATIVE_EXPANSION',
+    },
+    NARRATIVE_EXPANSION: {
+      description: 'RIDE — Trend confirmed, smart money holds. Add on dips.',
+      actionBias: 'BUY', riskLevel: 'MODERATE',
+      nextPhase: 'INSTITUTIONAL_ACCUMULATION',
+    },
+    INSTITUTIONAL_ACCUMULATION: {
+      description: 'TRIM — Crowd piling in, smart money distributes. Take profits into strength.',
+      actionBias: 'REDUCE', riskLevel: 'MODERATE',
+      nextPhase: 'BUYING_EXHAUSTION',
+    },
+    BUYING_EXHAUSTION: {
+      description: 'EXIT — No marginal buyer left. Smart money exits aggressively.',
+      actionBias: 'SHORT', riskLevel: 'HIGH',
+      nextPhase: 'NARRATIVE_REVERSAL',
+    },
+    NARRATIVE_REVERSAL: {
+      description: 'AVOID — Downtrend confirmed. No longs. Wait for selling exhaustion.',
+      actionBias: 'REDUCE', riskLevel: 'EXTREME',
+      nextPhase: 'SELLING_EXHAUSTION',
     },
   };
 

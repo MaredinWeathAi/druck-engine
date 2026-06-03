@@ -225,6 +225,7 @@ exports.INSTRUMENTS = INSTRUMENTS;
 // ─── DATA STORAGE ───
 let instrumentSnapshots = new Map();
 let previousPhaseMap = new Map(); // previous refresh phases
+let phaseEntryDates = new Map(); // when each instrument entered its current phase
 let phaseTransitions = []; // detected transitions
 let currentSignals = null;
 let previousSignals = null;
@@ -711,21 +712,28 @@ function computePhaseTransitions(newSnapshots, prevPhases) {
     return transitions;
 }
 // ─── PHASE HELPERS ───
+// ═══════════════════════════════════════════════════════════════════════════
+// v12 PHASE SYSTEM — Druckenmiller Trade Cycle
+// Phases ordered by the TRADE lifecycle, not the market cycle.
+// P1 = where you BUY. P6 = where you WAIT for the next P1.
+// This is a confirmation tool — the technicals confirm what the macro suggests.
+// Druckenmiller acts 1-2 quarters AHEAD of these readings using macro judgment.
+// ═══════════════════════════════════════════════════════════════════════════
 const PHASE_NUM_MAP = {
-    'NARRATIVE_EXPANSION': 1,
-    'INSTITUTIONAL_ACCUMULATION': 2,
-    'BUYING_EXHAUSTION': 3,
-    'NARRATIVE_REVERSAL': 4,
-    'SELLING_EXHAUSTION': 5,
-    'NARRATIVE_COLLAPSE': 6,
+    'SELLING_EXHAUSTION': 1, // P1: BUY — decline stopped, smart money accumulates
+    'NARRATIVE_COLLAPSE': 1, // P1: BUY — deep capitulation, max opportunity (merged with P1)
+    'NARRATIVE_EXPANSION': 2, // P2: RIDE — trend confirmed, hold and add on dips
+    'INSTITUTIONAL_ACCUMULATION': 3, // P3: TRIM — momentum fading, start taking profits
+    'BUYING_EXHAUSTION': 4, // P4: EXIT — exhausted or broken, get out
+    'NARRATIVE_REVERSAL': 5, // P5: AVOID — confirmed downtrend, no longs
 };
 const PHASE_SHORT_MAP = {
-    'NARRATIVE_EXPANSION': 'Expansion',
-    'INSTITUTIONAL_ACCUMULATION': 'Accumulation',
-    'BUYING_EXHAUSTION': 'Buy Exhaustion',
-    'NARRATIVE_REVERSAL': 'Reversal',
-    'SELLING_EXHAUSTION': 'Sell Exhaustion',
-    'NARRATIVE_COLLAPSE': 'Collapse',
+    'SELLING_EXHAUSTION': 'Buy',
+    'NARRATIVE_COLLAPSE': 'Buy',
+    'NARRATIVE_EXPANSION': 'Ride',
+    'INSTITUTIONAL_ACCUMULATION': 'Trim',
+    'BUYING_EXHAUSTION': 'Exit',
+    'NARRATIVE_REVERSAL': 'Avoid',
 };
 function computePhaseForInstrument(bars, spyCloses, prevPhase) {
     // Convert OHLCBar (date: Date) to OHLCVBar (date: string) for inflection engine
@@ -849,6 +857,21 @@ async function refreshMorningLens() {
         // v10.1: Pass previous phase for hysteresis — prevents spurious transitions from minor moves
         const prevPhaseData = previousPhaseMap.get(inst.symbol);
         const phaseData = bars.length >= 50 ? computePhaseForInstrument(bars, spyCloses, prevPhaseData?.phase) : null;
+        // Track time-in-phase
+        if (phaseData) {
+            const prevEntry = phaseEntryDates.get(inst.symbol);
+            if (!prevEntry || prevEntry.phase !== phaseData.phase) {
+                // Phase changed — record new entry date
+                phaseEntryDates.set(inst.symbol, { phase: phaseData.phase, enteredDate: new Date().toISOString().split('T')[0] });
+            }
+            const entry = phaseEntryDates.get(inst.symbol);
+            if (entry) {
+                phaseData.phaseEnteredDate = entry.enteredDate;
+                const entered = new Date(entry.enteredDate);
+                const now = new Date();
+                phaseData.daysInPhase = Math.floor((now.getTime() - entered.getTime()) / (1000 * 60 * 60 * 24));
+            }
+        }
         newSnapshots.set(inst.symbol, {
             symbol: inst.symbol,
             name: inst.name,

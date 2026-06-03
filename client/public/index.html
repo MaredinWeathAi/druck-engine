@@ -1908,7 +1908,7 @@ function getPhasePillHtml(symbol) {
   var inst = lensData.find(function(i) { return i.symbol === symbol; });
   if (!inst || !inst.phaseData) return '';
   var ph = inst.phaseData;
-  var phaseColors = { 1: '#0ea5e9', 2: '#f97316', 3: '#e879f9', 4: '#f97316', 5: '#0ea5e9', 6: '#a78bfa' };
+  var phaseColors = { 1: '#0ea5e9', 2: '#1D9E75', 3: '#f97316', 4: '#e879f9', 5: '#E24B4A' };
   var c = phaseColors[ph.phaseNum] || 'var(--dim)';
   return '<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;background:' + c + '22;color:' + c + ';border:1px solid ' + c + '55;margin-left:6px">' + ph.phaseShort + '</span>';
 }
@@ -2517,12 +2517,11 @@ function renderInstrumentTable(bucket) {
     var signalPill = '—';
     if (ph) {
       var phaseColors = {
-        1: '#0ea5e9', // P1 Expansion — sky blue (BUY)
-        2: '#f97316', // P2 Accumulation — warm orange (SELL)
-        3: '#e879f9', // P3 Buy Exhaustion — magenta (SELL)
-        4: '#f97316', // P4 Reversal — warm orange (SELL)
-        5: '#0ea5e9', // P5 Sell Exhaustion — sky blue (BUY)
-        6: '#a78bfa', // P6 Collapse — purple (BUY)
+        1: '#0ea5e9', // P1 Buy — sky blue (accumulate aggressively)
+        2: '#1D9E75', // P2 Ride — green (hold, add on dips)
+        3: '#f97316', // P3 Trim — orange (take profits)
+        4: '#e879f9', // P4 Exit — magenta (get out)
+        5: '#E24B4A', // P5 Avoid — red (confirmed downtrend)
       };
       var phColor = phaseColors[ph.phaseNum] || 'var(--dim)';
       phasePill = '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + phColor + '22;color:' + phColor + ';border:1px solid ' + phColor + '55">' + ph.phaseShort + '</span>';
@@ -3878,11 +3877,10 @@ function shiftPhase(currentPhaseNum, shift) {
   return shifted;
 }
 
-var PHASE_NAMES = { 1: 'P1 Expansion', 2: 'P2 Distribution', 3: 'P3 Buy Exhaustion', 4: 'P4 Reversal', 5: 'P5 Sell Exhaustion', 6: 'P6 Recovery' };
+var PHASE_NAMES = { 1: 'P1 Buy', 2: 'P2 Ride', 3: 'P3 Trim', 4: 'P4 Exit', 5: 'P5 Avoid' };
 var PHASE_FULL = { 1: 'NARRATIVE_EXPANSION', 2: 'INSTITUTIONAL_ACCUMULATION', 3: 'BUYING_EXHAUSTION', 4: 'NARRATIVE_REVERSAL', 5: 'SELLING_EXHAUSTION', 6: 'NARRATIVE_COLLAPSE' };
 
 function getPhaseMomentum(inst) {
-  // Short human-readable note about where in the phase this instrument sits
   var pd = inst.phaseData;
   if (!pd) return '';
   var d = inst.daily || {};
@@ -3894,35 +3892,34 @@ function getPhaseMomentum(inst) {
   var roc = d.roc20d || 0;
   var phase = pd.phaseNum;
 
-  if (phase === 1) {
-    if (ext > 20) return 'Late P1 — extended, watch for rollover';
+  if (phase === 1) { // BUY zone
+    if (roc > 5) return 'Momentum turning — accumulate now';
+    if (state === 'BASING') return 'Basing below 200d — smart money accumulating';
+    if (ma50 && ma200 && ma50 > ma200 * 0.97) return '50d curling toward 200d — structure repairing';
+    return 'Decline decelerating — building position';
+  }
+  if (phase === 2) { // RIDE
+    if (ext > 15) return 'Extended — still riding but watch closely';
     if (roc > 10) return 'Strong momentum — trend accelerating';
-    if (state === 'BASING') return 'Basing in uptrend — consolidation';
-    return 'Healthy trend — riding it';
+    if (state === 'BASING') return 'Consolidating in uptrend — healthy';
+    return 'Healthy trend — hold and ride';
   }
-  if (phase === 2) {
-    if (ma50 && ma200 && (ma50/ma200 - 1)*100 < 2) return 'MAs converging — P3 approaching';
-    if (roc < -3) return 'Selling into strength — late distribution';
-    return 'Momentum fading — watch the 50d';
+  if (phase === 3) { // TRIM
+    if (ma50 && ma200 && (ma50/ma200 - 1)*100 < 2) return 'MAs converging — exit approaching';
+    if (roc < -3) return 'Momentum dying — trim faster';
+    return 'Momentum fading — take profits into strength';
   }
-  if (phase === 3) {
-    if (ext > 30) return 'Parabolic — blow-off in progress';
-    if (ext < 0) return 'Price broke 200d — structural damage';
-    if (roc > 10) return 'Sharp rally on broken structure — fragile';
-    return 'Trend structure breaking down';
+  if (phase === 4) { // EXIT
+    if (ext > 30) return 'Parabolic blow-off — sell into this';
+    if (ext < 0) return 'Price broke 200d — get out';
+    if (roc > 10) return 'Sharp rally on broken structure — sell the rip';
+    return 'Structure breaking — exit positions';
   }
-  if (phase === 4) {
-    if (roc > 0) return 'Bouncing in downtrend — watch for P5 turn';
-    if (ext < -20) return 'Deep drawdown — capitulation zone';
-    return 'Downtrend intact — stay away';
+  if (phase === 5) { // AVOID
+    if (roc > 0) return 'Dead cat bounce — do not buy';
+    if (ext < -20) return 'Deep drawdown — wait for P1 signal';
+    return 'Downtrend intact — no longs';
   }
-  if (phase === 5) {
-    if (roc > 5) return 'Momentum turning — recovery building';
-    if (state === 'BASING') return 'Basing below 200d — accumulation zone';
-    if (ma50 && ma200 && ma50 > ma200 * 0.97) return '50d curling toward 200d — golden cross building';
-    return 'Decline decelerating — early signs';
-  }
-  if (phase === 6) return 'Recovery forming — highest conviction zone';
   return '';
 }
 
@@ -4029,7 +4026,7 @@ function renderFsSortedRows() {
     });
   }
 
-  var phaseColors = { 1: '#0ea5e9', 2: '#f97316', 3: '#e879f9', 4: '#f97316', 5: '#0ea5e9', 6: '#a78bfa' };
+  var phaseColors = { 1: '#0ea5e9', 2: '#1D9E75', 3: '#f97316', 4: '#e879f9', 5: '#E24B4A' };
   var tbody = document.getElementById('fs-tbody');
   var html = '';
 
