@@ -1572,134 +1572,283 @@ function findEarningsReactions(bars) {
     }
     return reactions.slice(-4).map(r => ({ date: r.date, move: r.move }));
 }
+// ═══ Druckenmiller 4-Step Decision Matrix ═══
+// Step 1: Macro/Liquidity Filter → Step 2: 18-Month Forward Inflection →
+// Step 3: Relative Strength → Step 4: Tape Confirmation → VERDICT
+// Auto-detect sector ETFs from GuruFocus
+async function detectSectorETFs(symbol) {
+    try {
+        const url = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${symbol}/summary`;
+        const response = await fetch(url);
+        if (!response.ok)
+            return { primary: 'SPY', secondary: 'RSP', sectorName: 'Broad Market' };
+        const data = await response.json();
+        const general = data?.summary?.general || {};
+        const sector = (general.supersector || general.sector || '').toLowerCase();
+        const group = (general.group || general.subindustry || '').toLowerCase();
+        // Match by keywords
+        if (group.includes('homebuilder') || group.includes('residential construction'))
+            return { primary: 'ITB', secondary: 'XHB', sectorName: 'Homebuilders' };
+        if (group.includes('semiconductor') || group.includes('chip'))
+            return { primary: 'SMH', secondary: 'XLK', sectorName: 'Semiconductors' };
+        if (group.includes('software') || group.includes('saas'))
+            return { primary: 'IGV', secondary: 'XLK', sectorName: 'Software' };
+        if (group.includes('airline'))
+            return { primary: 'JETS', secondary: 'IYT', sectorName: 'Airlines' };
+        if (group.includes('bank') || group.includes('savings') || group.includes('lending'))
+            return { primary: 'KRE', secondary: 'XLF', sectorName: 'Banks' };
+        if (group.includes('biotech') || group.includes('pharma'))
+            return { primary: 'XBI', secondary: 'XLV', sectorName: 'Biotech/Pharma' };
+        if (group.includes('insurance'))
+            return { primary: 'KIE', secondary: 'XLF', sectorName: 'Insurance' };
+        if (group.includes('oil') || group.includes('gas') || group.includes('energy'))
+            return { primary: 'XLE', secondary: 'XOP', sectorName: 'Energy' };
+        if (group.includes('retail') || group.includes('store'))
+            return { primary: 'XRT', secondary: 'XLY', sectorName: 'Retail' };
+        if (group.includes('auto') || group.includes('vehicle'))
+            return { primary: 'XLY', secondary: 'SPY', sectorName: 'Consumer Discretionary' };
+        if (group.includes('medical') || group.includes('health') || group.includes('hospital'))
+            return { primary: 'XLV', secondary: 'IHI', sectorName: 'Healthcare' };
+        if (group.includes('transport') || group.includes('railroad') || group.includes('freight'))
+            return { primary: 'IYT', secondary: 'XLI', sectorName: 'Transports' };
+        if (group.includes('chemical') || group.includes('materials') || group.includes('metal') || group.includes('mining'))
+            return { primary: 'XLB', secondary: 'SLX', sectorName: 'Materials' };
+        if (group.includes('reit') || group.includes('real estate'))
+            return { primary: 'VNQ', secondary: 'XLRE', sectorName: 'Real Estate' };
+        if (group.includes('utility') || group.includes('electric') || group.includes('water'))
+            return { primary: 'XLU', secondary: 'XLU', sectorName: 'Utilities' };
+        if (group.includes('food') || group.includes('beverage') || group.includes('consumer staple'))
+            return { primary: 'XLP', secondary: 'PBJ', sectorName: 'Consumer Staples' };
+        if (group.includes('aerospace') || group.includes('defense'))
+            return { primary: 'ITA', secondary: 'XLI', sectorName: 'Aerospace & Defense' };
+        if (group.includes('media') || group.includes('telecom') || group.includes('communication'))
+            return { primary: 'XLC', secondary: 'SPY', sectorName: 'Communications' };
+        // Fall back to sector level
+        if (sector.includes('technology') || sector.includes('tech'))
+            return { primary: 'XLK', secondary: 'QQQ', sectorName: 'Technology' };
+        if (sector.includes('financial'))
+            return { primary: 'XLF', secondary: 'KRE', sectorName: 'Financials' };
+        if (sector.includes('health'))
+            return { primary: 'XLV', secondary: 'XBI', sectorName: 'Healthcare' };
+        if (sector.includes('energy'))
+            return { primary: 'XLE', secondary: 'XOP', sectorName: 'Energy' };
+        if (sector.includes('industrial'))
+            return { primary: 'XLI', secondary: 'IYT', sectorName: 'Industrials' };
+        if (sector.includes('consumer') && sector.includes('disc'))
+            return { primary: 'XLY', secondary: 'XRT', sectorName: 'Consumer Discretionary' };
+        if (sector.includes('consumer') && sector.includes('stap'))
+            return { primary: 'XLP', secondary: 'PBJ', sectorName: 'Consumer Staples' };
+        if (sector.includes('material'))
+            return { primary: 'XLB', secondary: 'SLX', sectorName: 'Materials' };
+        if (sector.includes('communication'))
+            return { primary: 'XLC', secondary: 'SPY', sectorName: 'Communications' };
+        return { primary: 'SPY', secondary: 'RSP', sectorName: general.sector || 'Broad Market' };
+    }
+    catch {
+        return { primary: 'SPY', secondary: 'RSP', sectorName: 'Broad Market' };
+    }
+}
 function generateVerdict(upDownRatio, priceVs200d, pctFrom52wHigh, failedBreakdowns, earningsReactions, sma50Above200) {
     const reasoning = [];
-    let bullPoints = 0;
-    let bearPoints = 0;
-    // Volume demand
-    if (upDownRatio !== null) {
-        if (upDownRatio > 1.5) {
-            bullPoints += 2;
-            reasoning.push('Strong institutional accumulation (Up/Down ratio: ' + upDownRatio + ')');
-        }
-        else if (upDownRatio > 1.1) {
-            bullPoints += 1;
-            reasoning.push('Mild buying pressure (Up/Down ratio: ' + upDownRatio + ')');
-        }
-        else if (upDownRatio < 0.7) {
-            bearPoints += 2;
-            reasoning.push('Heavy institutional distribution (Up/Down ratio: ' + upDownRatio + ')');
-        }
-        else if (upDownRatio < 0.9) {
-            bearPoints += 1;
-            reasoning.push('Mild selling pressure (Up/Down ratio: ' + upDownRatio + ')');
-        }
-        else {
-            reasoning.push('Volume in equilibrium (Up/Down ratio: ' + upDownRatio + ')');
-        }
-    }
-    // Price vs 200d
+    const matrix = {};
+    // ── STEP 4: Tape Confirmation (scored from the data) ──
+    // Step 1-3 (Macro, Forward Inflection, Relative Strength) require
+    // fundamental data we don't have in this technical-only analysis.
+    // We note this honestly and score what we CAN see.
+    let tapeScore = 0; // -10 to +10
+    // 200d MA position — THE primary structural anchor
     if (priceVs200d !== null) {
         if (priceVs200d > 15) {
-            bullPoints += 1;
-            reasoning.push('Trading ' + priceVs200d.toFixed(0) + '% above 200d — strong uptrend');
+            tapeScore += 2;
+            matrix['200d_stance'] = 'ABOVE_STRONG';
+            reasoning.push('Comfortably above ascending 200d (' + priceVs200d.toFixed(0) + '%) — structural uptrend confirmed');
         }
         else if (priceVs200d > 0) {
-            bullPoints += 1;
+            tapeScore += 1;
+            matrix['200d_stance'] = 'ABOVE';
             reasoning.push('Above 200d (' + priceVs200d.toFixed(1) + '%) — structure intact');
         }
-        else if (priceVs200d < -20) {
-            bearPoints += 2;
-            reasoning.push('Trading ' + priceVs200d.toFixed(0) + '% below 200d — structural bear market');
+        else if (priceVs200d > -5) {
+            tapeScore -= 1;
+            matrix['200d_stance'] = 'TESTING';
+            reasoning.push('Testing 200d from below (' + priceVs200d.toFixed(1) + '%) — at structural decision point');
         }
-        else if (priceVs200d < 0) {
-            bearPoints += 1;
-            reasoning.push('Below 200d (' + priceVs200d.toFixed(1) + '%) — broken structure');
+        else if (priceVs200d > -20) {
+            tapeScore -= 2;
+            matrix['200d_stance'] = 'BELOW';
+            reasoning.push('Below declining 200d (' + priceVs200d.toFixed(0) + '%) — broken structure');
         }
-    }
-    // 52-week position
-    if (pctFrom52wHigh !== null) {
-        if (pctFrom52wHigh > -10) {
-            bullPoints += 1;
-            reasoning.push('Near 52-week highs (' + pctFrom52wHigh.toFixed(0) + '%)');
-        }
-        else if (pctFrom52wHigh < -40) {
-            bearPoints += 1;
-            reasoning.push('Deep drawdown: ' + pctFrom52wHigh.toFixed(0) + '% from 52-week high');
+        else {
+            tapeScore -= 3;
+            matrix['200d_stance'] = 'DEEP_BELOW';
+            reasoning.push('Deeply below 200d (' + priceVs200d.toFixed(0) + '%) — structural bear market. Druckenmiller: "immediate pass on the long side"');
         }
     }
-    // MA cross
-    if (sma50Above200) {
-        bullPoints += 1;
-        reasoning.push('Golden cross intact — bullish MA structure');
+    // Up/Down Volume Ratio — institutional demand footprint
+    if (upDownRatio !== null) {
+        if (upDownRatio > 1.5) {
+            tapeScore += 3;
+            matrix['volume_demand'] = 'HEAVY_ACCUMULATION';
+            reasoning.push('Violent institutional accumulation (Up/Down: ' + upDownRatio.toFixed(2) + '). Large funds chasing higher, absorbing all available liquidity');
+        }
+        else if (upDownRatio > 1.1) {
+            tapeScore += 1;
+            matrix['volume_demand'] = 'MILD_BUYING';
+            reasoning.push('Mild buying pressure (Up/Down: ' + upDownRatio.toFixed(2) + ')');
+        }
+        else if (upDownRatio < 0.7) {
+            tapeScore -= 3;
+            matrix['volume_demand'] = 'HEAVY_DISTRIBUTION';
+            reasoning.push('Systematic institutional distribution (Up/Down: ' + upDownRatio.toFixed(2) + '). Institutions dumping blocks into any minor bounce');
+        }
+        else if (upDownRatio < 0.9) {
+            tapeScore -= 1;
+            matrix['volume_demand'] = 'MILD_DISTRIBUTION';
+            reasoning.push('Mild selling pressure (Up/Down: ' + upDownRatio.toFixed(2) + '). Capital in "wait-and-see" mode');
+        }
+        else {
+            matrix['volume_demand'] = 'EQUILIBRIUM';
+            reasoning.push('Volume in equilibrium (Up/Down: ' + upDownRatio.toFixed(2) + '). No dominant institutional direction');
+        }
     }
-    else {
-        bearPoints += 1;
-        reasoning.push('Death cross — bearish MA structure');
-    }
-    // Failed breakdowns
+    // Failed Breakdowns — THE most explosive bullish pattern
     if (failedBreakdowns >= 3) {
-        bullPoints += 2;
-        reasoning.push(failedBreakdowns + ' failed breakdowns — strong demand floor proven');
+        tapeScore += 3;
+        matrix['failed_breakdowns'] = 'STRONG_FLOOR';
+        reasoning.push(failedBreakdowns + ' failed breakdowns — massive structural launching pad. Late-coming shorts trapped repeatedly. Druckenmiller: "the single most explosive technical pattern"');
+    }
+    else if (failedBreakdowns >= 2) {
+        tapeScore += 2;
+        matrix['failed_breakdowns'] = 'FLOOR_BUILDING';
+        reasoning.push(failedBreakdowns + ' failed breakdowns — support tested and defended. Institutional value buyers have drawn a line in the sand');
     }
     else if (failedBreakdowns >= 1) {
-        bullPoints += 1;
-        reasoning.push(failedBreakdowns + ' failed breakdown(s) — some support tested');
+        tapeScore += 1;
+        matrix['failed_breakdowns'] = 'SOME_DEFENSE';
+        reasoning.push(failedBreakdowns + ' failed breakdown — some demand surfaced at the lows');
     }
     else {
-        reasoning.push('No failed breakdowns — supports untested or broke clean');
+        tapeScore -= 1;
+        matrix['failed_breakdowns'] = 'NO_DEFENSE';
+        reasoning.push('No failed breakdowns detected — supports either broke clean through or remain untested. No hidden institutional demand');
     }
-    // Earnings trajectory
+    // MA structure
+    if (sma50Above200) {
+        tapeScore += 1;
+        matrix['ma_structure'] = 'GOLDEN_CROSS';
+        reasoning.push('Golden cross intact — 50d above 200d, bullish institutional positioning');
+    }
+    else {
+        tapeScore -= 1;
+        matrix['ma_structure'] = 'DEATH_CROSS';
+        reasoning.push('Death cross — 50d below 200d. Druckenmiller: "won\'t fight the tape when structural anchors break"');
+    }
+    // Earnings trajectory — the forward inflection proxy
     if (earningsReactions.length >= 2) {
         const lastTwo = earningsReactions.slice(-2);
         const improving = lastTwo[1].move > lastTwo[0].move;
         const lastPositive = lastTwo[1].move > 0;
-        if (improving && lastPositive) {
-            bullPoints += 2;
-            reasoning.push('Earnings trajectory improving — last reaction: ' + lastTwo[1].move.toFixed(1) + '%');
+        const lastBig = Math.abs(lastTwo[1].move) > 8;
+        if (improving && lastPositive && lastBig) {
+            tapeScore += 2;
+            matrix['earnings'] = 'ACCELERATING_BEATS';
+            reasoning.push('Earnings trajectory accelerating — last reaction ' + lastTwo[1].move.toFixed(1) + '% (improving from ' + lastTwo[0].move.toFixed(1) + '%). This is the fundamental inflection Druckenmiller hunts for');
         }
-        else if (lastPositive) {
-            bullPoints += 1;
-            reasoning.push('Last earnings positive (' + lastTwo[1].move.toFixed(1) + '%)');
+        else if (improving && lastPositive) {
+            tapeScore += 1;
+            matrix['earnings'] = 'IMPROVING';
+            reasoning.push('Earnings reactions improving — last: ' + lastTwo[1].move.toFixed(1) + '% (prior: ' + lastTwo[0].move.toFixed(1) + '%)');
+        }
+        else if (!improving && !lastPositive && lastBig) {
+            tapeScore -= 2;
+            matrix['earnings'] = 'DETERIORATING_FAST';
+            reasoning.push('Earnings reactions deteriorating sharply — last: ' + lastTwo[1].move.toFixed(1) + '%. Structural degradation in the business model');
         }
         else if (!improving && !lastPositive) {
-            bearPoints += 2;
-            reasoning.push('Earnings trajectory deteriorating — last reaction: ' + lastTwo[1].move.toFixed(1) + '%');
+            tapeScore -= 1;
+            matrix['earnings'] = 'DETERIORATING';
+            reasoning.push('Earnings reactions negative and worsening — last: ' + lastTwo[1].move.toFixed(1) + '%');
         }
         else {
-            bearPoints += 1;
-            reasoning.push('Mixed earnings reactions');
+            matrix['earnings'] = 'MIXED';
+            reasoning.push('Mixed earnings reactions — last: ' + lastTwo[1].move.toFixed(1) + '%');
         }
     }
-    // Verdict
-    const net = bullPoints - bearPoints;
+    // 52-week context
+    if (pctFrom52wHigh !== null) {
+        if (pctFrom52wHigh > -10) {
+            reasoning.push('Near 52-week highs (' + pctFrom52wHigh.toFixed(0) + '%) — strong relative performance');
+        }
+        else if (pctFrom52wHigh < -40) {
+            reasoning.push('Deep drawdown: ' + pctFrom52wHigh.toFixed(0) + '% from 52-week high — either a value trap or a capitulation opportunity');
+        }
+    }
+    // ── ARCHETYPE CLASSIFICATION ──
+    // Based on the combination of signals, classify into Druckenmiller's 3 archetypes
+    let archetype;
     let verdict;
     let signal;
-    if (net >= 5) {
-        verdict = 'STRONG ACCUMULATE';
-        signal = 'Turnaround confirming or structural breakout. Accumulate aggressively on pullbacks.';
+    const below200 = priceVs200d !== null && priceVs200d < 0;
+    const deepBelow = priceVs200d !== null && priceVs200d < -20;
+    const distributing = upDownRatio !== null && upDownRatio < 0.8;
+    const accumulating = upDownRatio !== null && upDownRatio > 1.3;
+    const hasFloor = failedBreakdowns >= 2;
+    const earningsImproving = earningsReactions.length >= 2 && earningsReactions[earningsReactions.length - 1].move > earningsReactions[earningsReactions.length - 2].move;
+    if (below200 && distributing && !hasFloor) {
+        // CATEGORY A: Broken Growth Story
+        archetype = 'BROKEN_GROWTH';
+        verdict = 'STRONG AVOID / SHORT CANDIDATE';
+        signal = 'Broken growth story. Below 200d, institutional distribution, clean breakdowns with zero defense. Druckenmiller: "The path of least resistance is strictly downward. Never buy a stock just because it looks cheap relative to its past highs."';
     }
-    else if (net >= 3) {
+    else if (below200 && distributing && hasFloor) {
+        archetype = 'CAPITULATION_FORMING';
+        verdict = 'WATCH — FLOOR BUILDING';
+        signal = 'Distribution still active but failed breakdowns show demand forming at the lows. The selling may be exhausting. Watch for volume ratio to flip above 1.0 before entering.';
+    }
+    else if (hasFloor && accumulating && (earningsImproving || !below200)) {
+        // CATEGORY B or C: Event-Driven Over-Correction or Structural Turnaround
+        if (below200 && earningsImproving) {
+            archetype = 'EVENT_OVERCORRECTION';
+            verdict = 'BUY AGGRESSIVELY';
+            signal = 'Market panicked and priced in a permanent disaster over a temporary headwind. Failed breakdowns prove selling has dried up, institutions are scrambling to accumulate a heavily mispriced asset.';
+        }
+        else {
+            archetype = 'STRUCTURAL_TURNAROUND';
+            verdict = 'ACCUMULATE ON DIPS';
+            signal = 'Multi-quarter operational decay has officially stopped. Margin expansion beginning to outpace expectations. Chart has transitioned from ugly to beautiful. The wind is at your back.';
+        }
+    }
+    else if (!below200 && sma50Above200 && accumulating) {
+        archetype = 'CONFIRMED_UPTREND';
+        verdict = 'RIDE — ADD ON PULLBACKS';
+        signal = 'Structural uptrend with institutional confirmation. Above 200d, golden cross, accumulation volume. Add on pullbacks to the 50d MA.';
+    }
+    else if (!below200 && sma50Above200 && !accumulating) {
+        archetype = 'LATE_CYCLE';
+        verdict = 'HOLD — TIGHTEN STOPS';
+        signal = 'Structure intact but volume demand fading. Smart money may be distributing into strength. Tighten stops, don\'t add.';
+    }
+    else if (below200 && hasFloor && earningsImproving) {
+        archetype = 'COILED_SPRING';
+        verdict = 'WATCH FOR BREAKOUT';
+        signal = 'Coiled at structural decision point. Failed breakdowns + improving earnings = energy building. If tape breaks above 200d on heavy volume, scale in aggressively.';
+    }
+    else if (tapeScore >= 4) {
+        archetype = 'BULLISH_TAPE';
         verdict = 'ACCUMULATE';
-        signal = 'Technical structure improving. Build position on dips.';
+        signal = 'Multiple bullish tape signals firing. Structure supports a long position.';
     }
-    else if (net >= 1) {
-        verdict = 'WATCH / NIBBLE';
-        signal = 'Some positive signals but not confirmed. Small starter position, wait for structure to confirm.';
-    }
-    else if (net >= -1) {
-        verdict = 'NEUTRAL / COILED';
-        signal = 'At a decision point. Wait for breakout direction before committing capital.';
-    }
-    else if (net >= -3) {
+    else if (tapeScore <= -4) {
+        archetype = 'BEARISH_TAPE';
         verdict = 'AVOID';
-        signal = 'Structure broken or deteriorating. Do not initiate longs. Wait for selling exhaustion.';
+        signal = 'Multiple bearish tape signals. Structure broken or deteriorating. Wait for selling exhaustion before considering entry.';
     }
     else {
-        verdict = 'STRONG AVOID / SHORT CANDIDATE';
-        signal = 'Broken growth story with institutional liquidation. The path of least resistance is lower.';
+        archetype = 'NEUTRAL';
+        verdict = 'NEUTRAL — WAIT FOR CLARITY';
+        signal = 'No dominant signal. The tape is not confirming either direction. Wait for a structural break before committing capital.';
     }
-    return { verdict, signal, reasoning };
+    return { verdict, archetype, signal, reasoning, matrix };
 }
 router.get('/lens/ticker/:symbol', async (req, res) => {
     const symbol = decodeURIComponent(req.params.symbol).toUpperCase();
@@ -1725,14 +1874,11 @@ router.get('/lens/ticker/:symbol', async (req, res) => {
         const nullFund = { revenueGrowthYoY: null, epsGrowthYoY: null, operatingMargin: null, netMargin: null, roic: null, fcfYield: null, debtToEquity: null, piotroskiFScore: null, currentRatio: null };
         const nullVal = { peForward: null, evToEbitda: null, pegRatio: null, fcfYield: null, pePctile: null, gfValueMargin: null };
         const phaseResult = (0, inflection_engine_1.computeFullInflection)(symbol, symbol, stockBars, spyCloses, neutralAccel, nullFund, nullVal, {});
-        // 1. Relative Strength vs sector peers
-        // Auto-detect sector from GuruFocus or use SPY as default
-        const sectorMap = SECTOR_ETF_MAP;
-        // Try to match by fetching the first ETF pair — for now use SPY + RSP as default
-        // We'll enhance this with GuruFocus sector detection later
-        let primaryETF = 'SPY';
-        let secondaryETF = 'RSP';
-        let sectorName = 'Broad Market';
+        // 1. Relative Strength vs sector peers — auto-detect from GuruFocus
+        const sectorInfo = await detectSectorETFs(symbol);
+        const primaryETF = sectorInfo.primary;
+        const secondaryETF = sectorInfo.secondary;
+        const sectorName = sectorInfo.sectorName;
         // Fetch peer ETF bars for ratio computation
         const [peer1Bars, peer2Bars] = await Promise.all([
             fetchTickerBars(primaryETF, 2),
@@ -1816,8 +1962,9 @@ router.get('/lens/ticker/:symbol', async (req, res) => {
                 goldenCross: ta.goldenCross,
                 deathCross: ta.deathCross,
             },
-            // Verdict
+            // Verdict (Druckenmiller 4-Step Matrix)
             verdict,
+            sectorDetected: sectorName,
             // Price history for charting
             priceHistory: {
                 dates: stockBars.slice(-252).map(b => b.date),

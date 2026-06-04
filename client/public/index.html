@@ -4474,7 +4474,17 @@ function analyzeTickerFn() {
     }
     html += '</div>';
     html += '<div style="font-size:16px;font-weight:500;color:' + vc + ';margin-top:8px">' + (v.verdict || '—') + '</div>';
+    if (v.archetype) {
+      var archLabels = { BROKEN_GROWTH: 'Broken Growth Story', EVENT_OVERCORRECTION: 'Event-Driven Over-Correction', STRUCTURAL_TURNAROUND: 'Structural Turnaround Inflection', CONFIRMED_UPTREND: 'Confirmed Uptrend', LATE_CYCLE: 'Late Cycle', COILED_SPRING: 'Coiled Spring', CAPITULATION_FORMING: 'Capitulation Forming', BULLISH_TAPE: 'Bullish Tape', BEARISH_TAPE: 'Bearish Tape', NEUTRAL: 'Neutral' };
+      html += '<div style="font-size:11px;color:' + vc + ';margin-top:2px;opacity:0.8">Archetype: ' + (archLabels[v.archetype] || v.archetype) + '</div>';
+    }
     html += '<div style="font-size:12px;color:var(--dim);margin-top:4px">' + (v.signal || '') + '</div>';
+    if (d.sectorDetected) {
+      html += '<div style="font-size:10px;color:var(--dim);margin-top:4px">Sector: ' + d.sectorDetected + ' | Benchmarks: ' + d.relativeStrength.primary.etf + ' / ' + d.relativeStrength.secondary.etf + '</div>';
+    }
+    // PortGenie comparison button
+    var pgPrompt = encodeURIComponent('Analyze ' + sym + ' using the Druckenmiller framework. Current price: $' + d.price.toFixed(2) + '. ' + (d.anchors.priceVs200d > 0 ? 'Above' : 'Below') + ' 200d MA by ' + Math.abs(d.anchors.priceVs200d || 0).toFixed(1) + '%. Up/Down volume ratio: ' + (d.volumeDemand.upDownRatio || 'N/A') + '. Failed breakdowns: ' + (d.failedBreakdowns.count || 0) + '. ' + (d.anchors.sma50Above200 ? 'Golden cross.' : 'Death cross.') + ' Our system verdict: ' + (v.verdict || '') + ' (' + (v.archetype || '') + '). Provide your Druckenmiller-style narrative analysis.');
+    html += '<div style="margin-top:8px"><a href="https://chatgpt.com/?q=' + pgPrompt + '" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;border:1px solid var(--accent);padding:4px 10px;border-radius:4px">Compare with PortGenie ↗</a></div>';
     html += '</div>';
 
     // ═══ REASONING ═══
