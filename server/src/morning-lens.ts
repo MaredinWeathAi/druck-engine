@@ -1776,8 +1776,19 @@ async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCV
   try {
     const endTs = Math.floor(Date.now() / 1000);
     const startTs = endTs - (years * 365 * 24 * 60 * 60);
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${startTs}&period2=${endTs}&interval=1d&events=history`;
-    const response = await fetch(url, { headers: { 'User-Agent': 'DruckEngine/1.0 (maredinwai@maredin.com)' } });
+    // Try query2 first (same as yahoo-finance2 library), fall back to query1
+    const params = `period1=${startTs}&period2=${endTs}&interval=1d&includePrePost=false&events=history&lang=en-US`;
+    let response = await fetch(
+      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${params}`,
+      { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DruckEngine/13.0)' } },
+    ).catch(() => null);
+    if (!response || !response.ok) {
+      response = await fetch(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${params}`,
+        { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DruckEngine/13.0)' } },
+      ).catch(() => null);
+    }
+    if (!response || !response.ok) return [];
     if (!response.ok) return [];
     const data: any = await response.json();
     const result = data?.chart?.result?.[0];
