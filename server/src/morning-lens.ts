@@ -1213,7 +1213,20 @@ async function refreshMorningLens(): Promise<void> {
     // Store current phases as previous for next refresh
     previousPhaseMap = new Map();
     for (const [symbol, snap] of newSnapshots) {
-      if (snap.phaseData) previousPhaseMap.set(symbol, snap.phaseData);
+      if (snap.phaseData) {
+        previousPhaseMap.set(symbol, snap.phaseData);
+        // Record phase snapshot for long-term tracking
+        try {
+          const d = snap.daily || {} as any;
+          const ext = (d.price && d.ma200) ? ((d.price / d.ma200 - 1) * 100) : 0;
+          recordPhaseVerdictSnapshot(symbol, 'morning_lens', {
+            price: d.price || 0, phaseNum: snap.phaseData.phaseNum, phaseShort: snap.phaseData.phaseShort,
+            verdict: snap.phaseData.actionBias || '', archetype: '',
+            extensionPct: ext, upDownRatio: null, failedBreakdowns: 0,
+            confidence: snap.phaseData.confidence || 0,
+          });
+        } catch {}
+      }
     }
 
     instrumentSnapshots = newSnapshots;

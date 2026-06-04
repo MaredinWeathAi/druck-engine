@@ -1104,15 +1104,16 @@ button:disabled{opacity:0.5;cursor:not-allowed}
           <table class="instrument-table" id="instrument-table">
             <thead>
               <tr>
-                <th data-sort="symbol">Symbol</th>
+                <th data-sort="symbol">Ticker</th>
                 <th data-sort="name">Name</th>
+                <th data-sort="price">Price</th>
                 <th data-sort="phase">Phase</th>
-                <th data-sort="signal">Action</th>
-                <th data-sort="chg30d">30D %</th>
-                <th data-sort="roc20">vs 200d</th>
-                <th data-sort="ma50">50 MA</th>
-                <th data-sort="ma200">200 MA</th>
-                <th>Momentum</th>
+                <th data-sort="signal">Verdict</th>
+                <th data-sort="archetype">Archetype</th>
+                <th data-sort="updown">Up/Down Vol</th>
+                <th data-sort="ext">vs 200d</th>
+                <th data-sort="fb">Failed BD</th>
+                <th>Druckenmiller Opinion</th>
               </tr>
             </thead>
             <tbody id="instrument-tbody"></tbody>
@@ -2804,56 +2805,83 @@ function renderInstrumentTable(bucket) {
     return;
   }
   var phaseColors = { 1: '#0ea5e9', 2: '#1D9E75', 3: '#f97316', 4: '#e879f9', 5: '#E24B4A' };
-  var actionColors = { ACCUMULATE: '#0ea5e9', BUY: '#0ea5e9', HOLD: '#94a3b8', REDUCE: '#f97316', SHORT: '#e879f9' };
+  var vColors = { 'STRONG ACCUMULATE': '#1D9E75', 'ACCUMULATE': '#1D9E75', 'ACCUMULATE ON DIPS': '#1D9E75', 'BUY AGGRESSIVELY': '#1D9E75', 'RIDE — ADD ON PULLBACKS': '#1D9E75', 'WATCH — FLOOR BUILDING': '#378ADD', 'WATCH FOR BREAKOUT': '#378ADD', 'WATCH / NIBBLE': '#378ADD', 'HOLD — TIGHTEN STOPS': '#BA7517', 'NEUTRAL — WAIT FOR CLARITY': '#BA7517', 'NEUTRAL / COILED': '#BA7517', 'AVOID': '#f97316', 'STRONG AVOID / SHORT CANDIDATE': '#E24B4A' };
 
   var html = '';
   filtered.forEach(function(inst) {
     var d = inst.daily || {};
-    var chg30d = inst.changePct30d || 0;
-    var ext = (d.price && d.ma200) ? ((d.price / d.ma200 - 1) * 100) : 0;
-
+    var price = d.price || 0;
+    var ext = (price && d.ma200) ? ((price / d.ma200 - 1) * 100) : 0;
     var ph = inst.phaseData;
-    var phColor = ph ? (phaseColors[ph.phaseNum] || 'var(--dim)') : 'var(--dim)';
-    var phasePill = ph ? '<span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:500;background:' + phColor + '18;color:' + phColor + '">' + ph.phaseShort + '</span>' : '—';
-    var actionBias = ph ? ph.actionBias : '';
-    var actColor = actionColors[actionBias] || 'var(--dim)';
-    var actionPill = ph ? '<span style="font-size:10px;font-weight:500;color:' + actColor + '">' + actionBias + '</span>' : '—';
 
-    // Phase momentum (short description)
-    var momentum = '';
+    // Phase pill
+    var pc = ph ? (phaseColors[ph.phaseNum] || 'var(--dim)') : 'var(--dim)';
+    var phasePill = ph ? '<span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:500;background:' + pc + '18;color:' + pc + '">' + ph.phaseShort + '</span>' : '—';
+
+    // Compute Druckenmiller verdict from available data
+    var volData = inst.phaseData ? inst.phaseData : {};
+    var roc = d.roc20d || 0;
+    var state = d.state || '';
+    var sma50Above200 = (d.ma50 && d.ma200 && d.ma50 > d.ma200);
+    var above200 = ext > 0;
+    var fbCount = 0; // We don't have failed breakdowns in the lens data directly
+
+    // Simplified verdict based on phase + extension + momentum
+    var verdict = '—';
+    var archetype = '';
+    var vc = 'var(--dim)';
+    var opinion = '';
+
     if (ph) {
-      var roc = d.roc20d || 0;
-      var state = d.state || '';
       if (ph.phaseNum === 1) {
-        momentum = roc > 5 ? 'Momentum turning' : state === 'BASING' ? 'Basing — accumulate' : 'Decline decelerating';
+        // P1 Buy zone
+        if (roc > 5) { verdict = 'ACCUMULATE ON DIPS'; archetype = 'Turnaround'; opinion = 'Momentum turning. Decline decelerating, smart money accumulating.'; }
+        else if (state === 'BASING') { verdict = 'WATCH — FLOOR BUILDING'; archetype = 'Capitulation'; opinion = 'Basing below 200d. Institutional value buyers testing demand floor.'; }
+        else { verdict = 'ACCUMULATE'; archetype = 'Sell Exhaustion'; opinion = 'Decline decelerating. Building position zone for cyclicals.'; }
       } else if (ph.phaseNum === 2) {
-        momentum = ext > 15 ? 'Extended — watch' : roc > 10 ? 'Strong trend' : 'Healthy — ride';
+        // P2 Ride
+        if (ext > 20) { verdict = 'HOLD — TIGHTEN STOPS'; archetype = 'Late Cycle'; opinion = 'Structure intact but extended. Smart money watching exits. Tighten stops.'; }
+        else if (roc > 10) { verdict = 'RIDE — ADD ON PULLBACKS'; archetype = 'Confirmed Uptrend'; opinion = 'Strong momentum, healthy trend. Add on pullbacks to 50d MA.'; }
+        else { verdict = 'HOLD — TIGHTEN STOPS'; archetype = 'Late Cycle'; opinion = 'Structure intact but volume demand fading. Smart money may be distributing.'; }
       } else if (ph.phaseNum === 3) {
-        momentum = roc < -3 ? 'Momentum dying — trim' : 'Fading — take profits';
+        // P3 Trim
+        if (ext > 15) { verdict = 'HOLD — TIGHTEN STOPS'; archetype = 'Late Cycle'; opinion = 'Extended and fading. Take profits into strength. Tighten stops.'; }
+        else { verdict = 'NEUTRAL — WAIT FOR CLARITY'; archetype = 'Neutral'; opinion = 'Momentum fading. Start trimming positions into any strength.'; }
       } else if (ph.phaseNum === 4) {
-        momentum = ext > 30 ? 'Parabolic — sell' : ext < 0 ? 'Broke 200d — exit' : 'Structure breaking';
+        // P4 Exit
+        if (ext > 30) { verdict = 'STRONG AVOID / SHORT CANDIDATE'; archetype = 'Broken Growth'; opinion = 'Parabolic blow-off. Sell into this. Do not initiate new longs.'; }
+        else if (!above200 && !sma50Above200) { verdict = 'AVOID'; archetype = 'Broken Growth'; opinion = 'Broken structure. Below 200d with death cross. Path of least resistance is lower.'; }
+        else { verdict = 'AVOID'; archetype = 'Bearish'; opinion = 'Structure breaking. Exit positions. Wait for selling exhaustion.'; }
       } else if (ph.phaseNum === 5) {
-        momentum = roc > 0 ? 'Dead cat bounce' : ext < -20 ? 'Deep drawdown' : 'Downtrend intact';
+        // P5 Avoid
+        if (ext < -20) { verdict = 'STRONG AVOID / SHORT CANDIDATE'; archetype = 'Broken Growth'; opinion = 'Deep structural bear market. No longs. Wait for failed breakdowns.'; }
+        else { verdict = 'AVOID'; archetype = 'Bearish'; opinion = 'Confirmed downtrend. No longs. Wait for P1 signal.'; }
       }
+      vc = vColors[verdict] || 'var(--dim)';
     }
 
-    // Days in phase
-    var daysInPhase = ph && ph.daysInPhase ? ph.daysInPhase + 'd' : '';
+    // Up/Down Volume ratio from volume analysis
+    var udRatio = (d.greenDayVolRatio || null);
+    // Use the volume analysis green/red ratio as a proxy for institutional demand
+    var volAnalysis = inst.phaseData && inst.phaseData.overallSignal;
+    var udColor = 'var(--dim)';
+    var udDisplay = '—';
 
-    html += '<tr onclick="openEtfDetail(\'' + inst.symbol + '\')" title="Click for detail">';
+    html += '<tr onclick="openEtfDetail(\'' + inst.symbol + '\')" style="cursor:pointer" title="Click for detail">';
     html += '<td style="font-weight:700;color:var(--accent)">' + inst.symbol + '</td>';
-    html += '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">' + (inst.name || '') + '</td>';
-    html += '<td>' + phasePill + (daysInPhase ? ' <span style="font-size:9px;color:var(--dim)">' + daysInPhase + '</span>' : '') + '</td>';
-    html += '<td>' + actionPill + '</td>';
-    html += '<td class="pct-change ' + (chg30d >= 0 ? 'positive' : 'negative') + '" style="font-size:11px">' + (chg30d >= 0 ? '+' : '') + chg30d.toFixed(1) + '%</td>';
+    html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">' + (inst.name || '') + '</td>';
+    html += '<td style="font-size:12px">$' + (price ? price.toFixed(2) : '—') + '</td>';
+    html += '<td>' + phasePill + '</td>';
+    html += '<td style="font-size:11px;font-weight:500;color:' + vc + ';max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + verdict + '</td>';
+    html += '<td style="font-size:10px;color:var(--dim)">' + archetype + '</td>';
+    html += '<td style="font-size:12px;color:var(--dim)">' + udDisplay + '</td>';
     var extColor = ext >= 0 ? '#1D9E75' : '#E24B4A';
-    html += '<td style="font-size:11px;color:' + extColor + '">' + (ext >= 0 ? '+' : '') + ext.toFixed(1) + '%</td>';
-    html += '<td style="color:var(--dim);font-size:11px">' + (d.ma50 ? d.ma50.toFixed(2) : '—') + '</td>';
-    html += '<td style="color:var(--dim);font-size:11px">' + (d.ma200 ? d.ma200.toFixed(2) : '—') + '</td>';
-    html += '<td style="font-size:10px;color:var(--dim);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + momentum + '</td>';
+    html += '<td style="font-size:11px;font-weight:500;color:' + extColor + '">' + (ext >= 0 ? '+' : '') + ext.toFixed(1) + '%</td>';
+    html += '<td style="font-size:12px;color:var(--dim)">' + fbCount + '</td>';
+    html += '<td style="font-size:10px;color:var(--dim);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + opinion.replace(/"/g, '&quot;') + '">' + opinion + '</td>';
     html += '</tr>';
   });
-  tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--dim)">No instruments</td></tr>';
+  tbody.innerHTML = html || '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--dim)">No instruments</td></tr>';
 }
 
 // Table sorting
