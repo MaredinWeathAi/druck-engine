@@ -406,29 +406,92 @@ interface OHLCBar {
   volume: number;
 }
 
+// Yahoo-only symbols: futures (=F), yields (^TNX, ^FVX, ^TYX, ^IRX), FX (=X)
+const YAHOO_ONLY_PATTERN = /[=]F$|^\^TNX$|^\^FVX$|^\^TYX$|^\^IRX$|[=]X$/;
+
 async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar[]> {
+  const isYahooOnly = YAHOO_ONLY_PATTERN.test(symbol);
+  const years = period === '5y' ? 5 : period === '2y' ? 2 : 1;
+
+  // ── TRY GURUFOCUS FIRST for non-Yahoo-only symbols ──
+  if (!isYahooOnly) {
+    try {
+      const gfUrl = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${encodeURIComponent(symbol)}/price`;
+      const gfResponse = await fetch(gfUrl);
+      if (gfResponse.ok) {
+        const gfData: any = await gfResponse.json();
+        if (Array.isArray(gfData) && gfData.length >= 50) {
+          const cutoffDate = new Date();
+          cutoffDate.setFullYear(cutoffDate.getFullYear() - years);
+          const cutoffStr = cutoffDate.toISOString().split('T')[0];
+
+          const bars: OHLCBar[] = [];
+          for (const entry of gfData) {
+            if (!Array.isArray(entry) || entry.length < 2) continue;
+            const rawDate = entry[0] as string;
+            const price = entry[1] as number;
+            if (!price || price <= 0) continue;
+            const parts = rawDate.split('-');
+            if (parts.length !== 3) continue;
+            const isoDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+            if (isoDate < cutoffStr) continue;
+            bars.push({ date: new Date(isoDate), open: price, high: price, low: price, close: price, volume: 0 });
+          }
+
+          if (bars.length >= 50) {
+            // Try to enhance with Yahoo OHLCV (non-blocking, 6s timeout)
+            try {
+              const endDate = new Date();
+              const startDate = new Date();
+              startDate.setFullYear(startDate.getFullYear() - years);
+              const yResult = await Promise.race([
+                yahooFinance.chart(symbol, { period1: startDate, period2: endDate, interval: '1d' as any }, { validateResult: false }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000)),
+              ]) as any;
+              const yQuotes = yResult?.quotes || [];
+              if (yQuotes.length >= 50) {
+                const volMap: Record<string, { o: number; h: number; l: number; v: number }> = {};
+                for (const q of yQuotes) {
+                  if (q.close && q.date) {
+                    const d = new Date(q.date).toISOString().split('T')[0];
+                    volMap[d] = { o: q.open || q.close, h: q.high || q.close, l: q.low || q.close, v: q.volume || 0 };
+                  }
+                }
+                for (const bar of bars) {
+                  const key = bar.date.toISOString().split('T')[0];
+                  const yData = volMap[key];
+                  if (yData) { bar.open = yData.o; bar.high = yData.h; bar.low = yData.l; bar.volume = yData.v; }
+                }
+              }
+            } catch {} // Yahoo enhancement is best-effort
+
+            return bars;
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[GF] GuruFocus failed for ${symbol}: ${err?.message}`);
+    }
+  }
+
+  // ── FALLBACK TO YAHOO (primary for futures/yields/FX, fallback for everything else) ──
   const maxRetries = 4;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const endDate = new Date();
       const startDate = new Date();
-      if (period === '2y') startDate.setFullYear(startDate.getFullYear() - 2);
-      else if (period === '5y') startDate.setFullYear(startDate.getFullYear() - 5);
-      else startDate.setFullYear(startDate.getFullYear() - 1);
+      startDate.setFullYear(startDate.getFullYear() - years);
 
-      // Use chart() with validation: false to prevent schema validation errors
-      // (Yahoo sometimes returns valid data with missing meta fields like currency/regularMarketPrice)
       const result = await yahooFinance.chart(symbol, {
         period1: startDate,
         period2: endDate,
         interval: '1d' as any,
       }, { validateResult: false }) as any;
 
-      // chart() returns { quotes: [...], meta: {...} }
       const quotes = result?.quotes || result || [];
       if (!quotes || !Array.isArray(quotes) || quotes.length === 0) {
         if (attempt < maxRetries) {
-          const delayMs = attempt * 4000; // escalating: 4s, 8s, 12s
+          const delayMs = attempt * 4000;
           console.warn(`[YF] No data for ${symbol} (attempt ${attempt}/${maxRetries}), retrying in ${delayMs / 1000}s...`);
           await new Promise(r => setTimeout(r, delayMs));
           continue;
