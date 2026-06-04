@@ -2243,6 +2243,65 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
       verdict,
       sectorDetected: sectorName,
 
+      // Narrative (generated async by Claude API using PortGenie framework)
+      narrative: await (async () => {
+        const apiKey = process.env.ANTHROPIC_API_KEY || '';
+        if (!apiKey) return null;
+        try {
+          const anthropic = new Anthropic({ apiKey });
+          const dataPayload = JSON.stringify({
+            symbol, price: Math.round(price * 100) / 100,
+            ma50: ta.sma50, ma200: ta.sma200,
+            extension_from_200d: ta.priceVsSma200,
+            golden_cross: ta.sma50Above200,
+            rsi: ta.rsi14 ? Math.round(ta.rsi14) : null,
+            macd_histogram: ta.macd?.histogram,
+            macd_slope: ta.macdHistSlope,
+            up_down_volume_ratio: upDownRatio,
+            failed_breakdowns: failedBreakdownCount,
+            earnings_reactions: earningsReactions.map(e => e.move),
+            pct_from_52w_high: pctFrom52wHigh,
+            sector: sectorName,
+            sector_etf_primary: primaryETF,
+            sector_etf_secondary: secondaryETF,
+            relative_strength_vs_spy: ta.rsVsSpy20d,
+            green_day_vol_ratio: ta.volume?.greenDayVolRatio || null,
+            system_verdict: verdict.verdict,
+            system_archetype: verdict.archetype,
+            atr_pct: ta.atrPct,
+            velocity: ta.extensionVelocity,
+            days_since_200d_cross: ta.daysSinceCross200d,
+          });
+
+          const msg = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 800,
+            system: `You are PortGenie, a Druckenmiller-style investment analyst. Your framework:
+
+CORE PRINCIPLE: Markets are expectation-discounting mechanisms. Price moves when Reality ≠ Expectations. You identify inflection points where narrative, expectations, positioning, and fundamentals diverge from price.
+
+DECISION STACK: 1) Current Narrative (what story is the market pricing?), 2) Expectations vs Reality (what's already priced in?), 3) Institutional Positioning (capital flowing toward or away?), 4) Price Behavior (evidence, not opinion).
+
+MARKET PHASES: Narrative Expansion → Buying Exhaustion → Narrative Collapse → Selling Exhaustion → Institutional Accumulation → Narrative Reversal.
+
+ARCHETYPES: Broken Growth (avoid/short), Event-Driven Over-Correction (buy aggressively), Structural Turnaround (accumulate on dips), Momentum Leader (ride), Narrative Bubble (distribution risk).
+
+DRUCKENMILLER RULES: "Liquidity drives markets, not earnings." Never fight the tape when structural anchors break. The most explosive pattern is a failed breakdown. Buy when pain is priced in, sell when perfection is priced in.
+
+OUTPUT FORMAT: Write 2-3 concise paragraphs. First paragraph: the macro/narrative read — what story is the market pricing for this stock and is it right? Second paragraph: the tape evidence — what the technicals confirm or deny. Third paragraph: the verdict — what Druckenmiller would do, stated in his voice. Be direct, confident, specific. No hedging. No "could go either way." Take a position.
+
+CRITICAL: You only have technical data, not fundamental data. Acknowledge what you can see and what you can't. Note that forward estimate revisions and institutional ownership changes are not available — flag this as a blind spot.`,
+            messages: [{ role: 'user', content: `Analyze this stock using the PortGenie/Druckenmiller framework. Here is the complete technical dataset:\n\n${dataPayload}` }],
+          });
+
+          const text = msg.content[0]?.type === 'text' ? msg.content[0].text : null;
+          return text;
+        } catch (err: any) {
+          console.error('[NARRATIVE] Claude API error:', err?.message);
+          return null;
+        }
+      })(),
+
       // Price history for charting
       priceHistory: {
         dates: stockBars.slice(-252).map(b => b.date),

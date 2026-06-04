@@ -4487,6 +4487,18 @@ function analyzeTickerFn() {
     html += '<div style="margin-top:8px"><a href="https://chatgpt.com/?q=' + pgPrompt + '" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;border:1px solid var(--accent);padding:4px 10px;border-radius:4px">Compare with PortGenie ↗</a></div>';
     html += '</div>';
 
+    // ═══ NARRATIVE (Claude/PortGenie analysis) ═══
+    if (d.narrative) {
+      html += '<div class="card" style="padding:16px;margin-bottom:12px;border-left:3px solid var(--accent)">';
+      html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent);margin-bottom:8px">Druckenmiller narrative analysis</div>';
+      // Convert newlines to paragraphs
+      var paras = d.narrative.split(/\n\n+/);
+      paras.forEach(function(p) {
+        if (p.trim()) html += '<div style="font-size:13px;color:var(--text);margin-bottom:10px;line-height:1.6">' + p.trim() + '</div>';
+      });
+      html += '</div>';
+    }
+
     // ═══ REASONING ═══
     if (v.reasoning && v.reasoning.length > 0) {
       html += '<div class="card" style="padding:12px 16px;margin-bottom:12px">';
