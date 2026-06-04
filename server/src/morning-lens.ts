@@ -14,6 +14,9 @@ import {
   updateTransitionOutcomes,
   SnapshotRecord, TransitionRecord,
   getWatchlist, addWatchlistTicker, removeWatchlistTicker, updateWatchlistAnalysis, getWatchlistPhaseLog,
+  recordPhaseVerdictSnapshot, getPhaseVerdictHistory,
+  recordForeshadowSnapshot, getForeshadowHistory,
+  getDruckenmiller13FHistory,
 } from './history-store';
 
 const router = Router();
@@ -2492,6 +2495,22 @@ CRITICAL: You only have technical data, not fundamental data. Acknowledge what y
     // Cache the full analysis result for 2 hours
     tickerAnalysisCache.set(symbol, { data: responseData, fetchedAt: Date.now() });
 
+    // Record phase + verdict to history for long-term tracking
+    try {
+      const pi = responseData.phase;
+      const vi = responseData.verdict;
+      if (pi && vi) {
+        recordPhaseVerdictSnapshot(symbol, 'ticker_analysis', {
+          price: responseData.price, phaseNum: pi.phaseNum, phaseShort: pi.phaseShort,
+          verdict: vi.verdict, archetype: vi.archetype,
+          extensionPct: responseData.anchors?.priceVs200d || 0,
+          upDownRatio: responseData.volumeDemand?.upDownRatio || null,
+          failedBreakdowns: responseData.failedBreakdowns?.count || 0,
+          confidence: pi.confidence || 0,
+        });
+      }
+    } catch {}
+
     res.json(responseData);
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Analysis failed' });
@@ -2534,6 +2553,26 @@ router.get('/lens/watchlist/phase-log', (req: Request, res: Response) => {
   const symbol = req.query.symbol as string | undefined;
   const log = getWatchlistPhaseLog(symbol);
   res.json({ count: log.length, log });
+});
+
+// Phase + Verdict history for accuracy tracking
+router.get('/lens/history/phase-verdict', (req: Request, res: Response) => {
+  const symbol = req.query.symbol as string | undefined;
+  const limit = parseInt(req.query.limit as string || '100');
+  const history = getPhaseVerdictHistory(symbol, limit);
+  res.json({ count: history.length, history });
+});
+
+// Foreshadow snapshot history
+router.get('/lens/history/foreshadow', (_req: Request, res: Response) => {
+  const history = getForeshadowHistory();
+  res.json({ count: history.length, history });
+});
+
+// Druckenmiller 13F comparison history
+router.get('/lens/history/druckenmiller', (_req: Request, res: Response) => {
+  const history = getDruckenmiller13FHistory();
+  res.json({ count: history.length, history });
 });
 
 export default router;

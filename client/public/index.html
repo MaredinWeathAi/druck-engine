@@ -511,13 +511,13 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div class="icon">📋</div>
       <div>Watchlist</div>
     </div>
-    <div class="nav-item" data-page="morninglens">
-      <div class="icon">☀️</div>
-      <div>Morning Brief</div>
-    </div>
     <div class="nav-item" data-page="chartgrid">
       <div class="icon">📉</div>
       <div>Chart Grid</div>
+    </div>
+    <div class="nav-item" data-page="morninglens">
+      <div class="icon">☀️</div>
+      <div>Morning Brief</div>
     </div>
 
     <!-- Market Intel -->
@@ -1107,13 +1107,12 @@ button:disabled{opacity:0.5;cursor:not-allowed}
                 <th data-sort="symbol">Symbol</th>
                 <th data-sort="name">Name</th>
                 <th data-sort="phase">Phase</th>
-                <th data-sort="signal">Signal</th>
+                <th data-sort="signal">Action</th>
                 <th data-sort="chg30d">30D %</th>
-                <th data-sort="weekly">Weekly</th>
-                <th data-sort="monthly">Monthly</th>
-                <th data-sort="roc20">20d ROC</th>
+                <th data-sort="roc20">vs 200d</th>
                 <th data-sort="ma50">50 MA</th>
                 <th data-sort="ma200">200 MA</th>
+                <th>Momentum</th>
               </tr>
             </thead>
             <tbody id="instrument-tbody"></tbody>
@@ -2804,50 +2803,57 @@ function renderInstrumentTable(bucket) {
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--dim)">No instruments in this bucket</td></tr>';
     return;
   }
+  var phaseColors = { 1: '#0ea5e9', 2: '#1D9E75', 3: '#f97316', 4: '#e879f9', 5: '#E24B4A' };
+  var actionColors = { ACCUMULATE: '#0ea5e9', BUY: '#0ea5e9', HOLD: '#94a3b8', REDUCE: '#f97316', SHORT: '#e879f9' };
+
   var html = '';
   filtered.forEach(function(inst) {
     var d = inst.daily || {};
-    var w = inst.weekly || {};
-    var m = inst.monthly || {};
     var chg30d = inst.changePct30d || 0;
-    var roc20 = d.roc20d || 0;
-    var wState = w ? (w.state || '—') : '—';
-    var mState = m ? (m.state || '—') : '—';
+    var ext = (d.price && d.ma200) ? ((d.price / d.ma200 - 1) * 100) : 0;
 
-    // Phase pill — color-coded by phase number
     var ph = inst.phaseData;
-    var phasePill = '—';
-    var signalPill = '—';
+    var phColor = ph ? (phaseColors[ph.phaseNum] || 'var(--dim)') : 'var(--dim)';
+    var phasePill = ph ? '<span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:500;background:' + phColor + '18;color:' + phColor + '">' + ph.phaseShort + '</span>' : '—';
+    var actionBias = ph ? ph.actionBias : '';
+    var actColor = actionColors[actionBias] || 'var(--dim)';
+    var actionPill = ph ? '<span style="font-size:10px;font-weight:500;color:' + actColor + '">' + actionBias + '</span>' : '—';
+
+    // Phase momentum (short description)
+    var momentum = '';
     if (ph) {
-      var phaseColors = {
-        1: '#0ea5e9', // P1 Buy — sky blue (accumulate aggressively)
-        2: '#1D9E75', // P2 Ride — green (hold, add on dips)
-        3: '#f97316', // P3 Trim — orange (take profits)
-        4: '#e879f9', // P4 Exit — magenta (get out)
-        5: '#E24B4A', // P5 Avoid — red (confirmed downtrend)
-      };
-      var phColor = phaseColors[ph.phaseNum] || 'var(--dim)';
-      phasePill = '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:' + phColor + '22;color:' + phColor + ';border:1px solid ' + phColor + '55">' + ph.phaseShort + '</span>';
-      // Signal pill
-      var sigColors = { STRONG_BUY: '#0ea5e9', BUY: '#0ea5e9', ACCUMULATE: '#38bdf8', HOLD: '#94a3b8', REDUCE: '#f97316', SELL: '#f97316', STRONG_SELL: '#e879f9' };
-      var sigColor = sigColors[ph.overallSignal] || 'var(--dim)';
-      signalPill = '<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;color:' + sigColor + '">' + ph.overallSignal.replace('_', ' ') + '</span>';
+      var roc = d.roc20d || 0;
+      var state = d.state || '';
+      if (ph.phaseNum === 1) {
+        momentum = roc > 5 ? 'Momentum turning' : state === 'BASING' ? 'Basing — accumulate' : 'Decline decelerating';
+      } else if (ph.phaseNum === 2) {
+        momentum = ext > 15 ? 'Extended — watch' : roc > 10 ? 'Strong trend' : 'Healthy — ride';
+      } else if (ph.phaseNum === 3) {
+        momentum = roc < -3 ? 'Momentum dying — trim' : 'Fading — take profits';
+      } else if (ph.phaseNum === 4) {
+        momentum = ext > 30 ? 'Parabolic — sell' : ext < 0 ? 'Broke 200d — exit' : 'Structure breaking';
+      } else if (ph.phaseNum === 5) {
+        momentum = roc > 0 ? 'Dead cat bounce' : ext < -20 ? 'Deep drawdown' : 'Downtrend intact';
+      }
     }
 
-    html += '<tr onclick="openEtfDetail(\'' + inst.symbol + '\')" title="Click for full history">';
+    // Days in phase
+    var daysInPhase = ph && ph.daysInPhase ? ph.daysInPhase + 'd' : '';
+
+    html += '<tr onclick="openEtfDetail(\'' + inst.symbol + '\')" title="Click for detail">';
     html += '<td style="font-weight:700;color:var(--accent)">' + inst.symbol + '</td>';
-    html += '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (inst.name || '') + '</td>';
-    html += '<td>' + phasePill + '</td>';
-    html += '<td>' + signalPill + '</td>';
-    html += '<td class="pct-change ' + (chg30d >= 0 ? 'positive' : 'negative') + '">' + (chg30d >= 0 ? '+' : '') + chg30d.toFixed(2) + '%</td>';
-    html += '<td><span class="trend-pill ' + wState + '">' + wState + '</span></td>';
-    html += '<td><span class="trend-pill ' + mState + '">' + mState + '</span></td>';
-    html += '<td class="pct-change ' + (roc20 >= 0 ? 'positive' : 'negative') + '">' + (roc20 >= 0 ? '+' : '') + roc20.toFixed(2) + '%</td>';
-    html += '<td style="color:var(--dim)">' + (d.ma50 ? d.ma50.toFixed(2) : '—') + '</td>';
-    html += '<td style="color:var(--dim)">' + (d.ma200 ? d.ma200.toFixed(2) : '—') + '</td>';
+    html += '<td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">' + (inst.name || '') + '</td>';
+    html += '<td>' + phasePill + (daysInPhase ? ' <span style="font-size:9px;color:var(--dim)">' + daysInPhase + '</span>' : '') + '</td>';
+    html += '<td>' + actionPill + '</td>';
+    html += '<td class="pct-change ' + (chg30d >= 0 ? 'positive' : 'negative') + '" style="font-size:11px">' + (chg30d >= 0 ? '+' : '') + chg30d.toFixed(1) + '%</td>';
+    var extColor = ext >= 0 ? '#1D9E75' : '#E24B4A';
+    html += '<td style="font-size:11px;color:' + extColor + '">' + (ext >= 0 ? '+' : '') + ext.toFixed(1) + '%</td>';
+    html += '<td style="color:var(--dim);font-size:11px">' + (d.ma50 ? d.ma50.toFixed(2) : '—') + '</td>';
+    html += '<td style="color:var(--dim);font-size:11px">' + (d.ma200 ? d.ma200.toFixed(2) : '—') + '</td>';
+    html += '<td style="font-size:10px;color:var(--dim);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + momentum + '</td>';
     html += '</tr>';
   });
-  tbody.innerHTML = html;
+  tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--dim)">No instruments</td></tr>';
 }
 
 // Table sorting

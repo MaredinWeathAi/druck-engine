@@ -699,6 +699,60 @@ export function initWatchlistTable(): void {
       verdict_at_change TEXT
     )
   `);
+
+  // ── PHASE & VERDICT HISTORY — tracks both systems over time ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS phase_verdict_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      symbol TEXT NOT NULL,
+      recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+      source TEXT NOT NULL,
+      price REAL,
+      phase_num INTEGER,
+      phase_short TEXT,
+      verdict TEXT,
+      archetype TEXT,
+      extension_pct REAL,
+      up_down_ratio REAL,
+      failed_breakdowns INTEGER,
+      confidence INTEGER
+    )
+  `);
+
+  // ── FORESHADOW SNAPSHOTS — tracks narrative overlay settings over time ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS foreshadow_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+      fed_input INTEGER,
+      oil_input INTEGER,
+      growth_input INTEGER,
+      derived_dollar INTEGER,
+      derived_inflation INTEGER,
+      derived_credit INTEGER,
+      derived_gold INTEGER,
+      phase_shifts TEXT,
+      notes TEXT
+    )
+  `);
+
+  // ── DRUCKENMILLER 13F TRACKING — compare our calls vs his actual decisions ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS druckenmiller_13f (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      filing_date TEXT NOT NULL,
+      report_date TEXT NOT NULL,
+      symbol TEXT NOT NULL,
+      action TEXT NOT NULL,
+      shares_delta_pct REAL,
+      position_value REAL,
+      portfolio_pct REAL,
+      our_phase_at_time INTEGER,
+      our_verdict_at_time TEXT,
+      sector TEXT,
+      notes TEXT
+    )
+  `);
 }
 
 export function getWatchlist(): any[] {
@@ -808,6 +862,64 @@ export function updateWatchlistAnalysis(symbol: string, data: any): void {
   } catch (err: any) {
     console.error('[WATCHLIST] Update error:', err?.message);
   }
+}
+
+// ── Record phase/verdict snapshot for tracking accuracy over time ──
+export function recordPhaseVerdictSnapshot(symbol: string, source: string, data: {
+  price: number; phaseNum: number; phaseShort: string; verdict: string;
+  archetype: string; extensionPct: number; upDownRatio: number | null;
+  failedBreakdowns: number; confidence: number;
+}): void {
+  try {
+    db.prepare(`
+      INSERT INTO phase_verdict_history (symbol, source, price, phase_num, phase_short, verdict, archetype, extension_pct, up_down_ratio, failed_breakdowns, confidence)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(symbol, source, data.price, data.phaseNum, data.phaseShort, data.verdict, data.archetype, data.extensionPct, data.upDownRatio, data.failedBreakdowns, data.confidence);
+  } catch {}
+}
+
+export function getPhaseVerdictHistory(symbol?: string, limit: number = 100): any[] {
+  try {
+    if (symbol) return db.prepare('SELECT * FROM phase_verdict_history WHERE symbol = ? ORDER BY recorded_at DESC LIMIT ?').all(symbol.toUpperCase(), limit);
+    return db.prepare('SELECT * FROM phase_verdict_history ORDER BY recorded_at DESC LIMIT ?').all(limit);
+  } catch { return []; }
+}
+
+// ── Record Foreshadow snapshot ──
+export function recordForeshadowSnapshot(inputs: {
+  fed: number; oil: number; growth: number;
+  dollar: number; inflation: number; credit: number; gold: number;
+}, phaseShifts: string, notes?: string): void {
+  try {
+    db.prepare(`
+      INSERT INTO foreshadow_snapshots (fed_input, oil_input, growth_input, derived_dollar, derived_inflation, derived_credit, derived_gold, phase_shifts, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(inputs.fed, inputs.oil, inputs.growth, inputs.dollar, inputs.inflation, inputs.credit, inputs.gold, phaseShifts, notes || null);
+  } catch {}
+}
+
+export function getForeshadowHistory(limit: number = 50): any[] {
+  try { return db.prepare('SELECT * FROM foreshadow_snapshots ORDER BY recorded_at DESC LIMIT ?').all(limit); }
+  catch { return []; }
+}
+
+// ── Record Druckenmiller 13F entry ──
+export function recordDruckenmiller13F(entry: {
+  filingDate: string; reportDate: string; symbol: string; action: string;
+  sharesDeltaPct: number; positionValue: number; portfolioPct: number;
+  ourPhase: number; ourVerdict: string; sector: string; notes: string;
+}): void {
+  try {
+    db.prepare(`
+      INSERT INTO druckenmiller_13f (filing_date, report_date, symbol, action, shares_delta_pct, position_value, portfolio_pct, our_phase_at_time, our_verdict_at_time, sector, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(entry.filingDate, entry.reportDate, entry.symbol, entry.action, entry.sharesDeltaPct, entry.positionValue, entry.portfolioPct, entry.ourPhase, entry.ourVerdict, entry.sector, entry.notes);
+  } catch {}
+}
+
+export function getDruckenmiller13FHistory(): any[] {
+  try { return db.prepare('SELECT * FROM druckenmiller_13f ORDER BY report_date DESC, symbol ASC').all(); }
+  catch { return []; }
 }
 
 export function closeDatabase(): void {

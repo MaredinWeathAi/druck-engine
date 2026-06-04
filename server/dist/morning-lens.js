@@ -2208,6 +2208,22 @@ CRITICAL: You only have technical data, not fundamental data. Acknowledge what y
         };
         // Cache the full analysis result for 2 hours
         tickerAnalysisCache.set(symbol, { data: responseData, fetchedAt: Date.now() });
+        // Record phase + verdict to history for long-term tracking
+        try {
+            const pi = responseData.phase;
+            const vi = responseData.verdict;
+            if (pi && vi) {
+                (0, history_store_1.recordPhaseVerdictSnapshot)(symbol, 'ticker_analysis', {
+                    price: responseData.price, phaseNum: pi.phaseNum, phaseShort: pi.phaseShort,
+                    verdict: vi.verdict, archetype: vi.archetype,
+                    extensionPct: responseData.anchors?.priceVs200d || 0,
+                    upDownRatio: responseData.volumeDemand?.upDownRatio || null,
+                    failedBreakdowns: responseData.failedBreakdowns?.count || 0,
+                    confidence: pi.confidence || 0,
+                });
+            }
+        }
+        catch { }
         res.json(responseData);
     }
     catch (err) {
@@ -2249,6 +2265,23 @@ router.get('/lens/watchlist/phase-log', (req, res) => {
     const symbol = req.query.symbol;
     const log = (0, history_store_1.getWatchlistPhaseLog)(symbol);
     res.json({ count: log.length, log });
+});
+// Phase + Verdict history for accuracy tracking
+router.get('/lens/history/phase-verdict', (req, res) => {
+    const symbol = req.query.symbol;
+    const limit = parseInt(req.query.limit || '100');
+    const history = (0, history_store_1.getPhaseVerdictHistory)(symbol, limit);
+    res.json({ count: history.length, history });
+});
+// Foreshadow snapshot history
+router.get('/lens/history/foreshadow', (_req, res) => {
+    const history = (0, history_store_1.getForeshadowHistory)();
+    res.json({ count: history.length, history });
+});
+// Druckenmiller 13F comparison history
+router.get('/lens/history/druckenmiller', (_req, res) => {
+    const history = (0, history_store_1.getDruckenmiller13FHistory)();
+    res.json({ count: history.length, history });
 });
 exports.default = router;
 //# sourceMappingURL=morning-lens.js.map

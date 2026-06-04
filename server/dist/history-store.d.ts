@@ -62,5 +62,41 @@ export declare function addWatchlistTicker(symbol: string): void;
 export declare function removeWatchlistTicker(symbol: string): void;
 export declare function getWatchlistPhaseLog(symbol?: string): any[];
 export declare function updateWatchlistAnalysis(symbol: string, data: any): void;
+export declare function recordPhaseVerdictSnapshot(symbol: string, source: string, data: {
+    price: number;
+    phaseNum: number;
+    phaseShort: string;
+    verdict: string;
+    archetype: string;
+    extensionPct: number;
+    upDownRatio: number | null;
+    failedBreakdowns: number;
+    confidence: number;
+}): void;
+export declare function getPhaseVerdictHistory(symbol?: string, limit?: number): any[];
+export declare function recordForeshadowSnapshot(inputs: {
+    fed: number;
+    oil: number;
+    growth: number;
+    dollar: number;
+    inflation: number;
+    credit: number;
+    gold: number;
+}, phaseShifts: string, notes?: string): void;
+export declare function getForeshadowHistory(limit?: number): any[];
+export declare function recordDruckenmiller13F(entry: {
+    filingDate: string;
+    reportDate: string;
+    symbol: string;
+    action: string;
+    sharesDeltaPct: number;
+    positionValue: number;
+    portfolioPct: number;
+    ourPhase: number;
+    ourVerdict: string;
+    sector: string;
+    notes: string;
+}): void;
+export declare function getDruckenmiller13FHistory(): any[];
 export declare function closeDatabase(): void;
 //# sourceMappingURL=history-store.d.ts.map
