@@ -4493,6 +4493,11 @@ function addToWatchlist() {
   // Support comma-separated tickers: "AAPL, MSFT, DHI"
   var syms = raw.split(/[,\s]+/).map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
   var idx = 0;
+  // Save to localStorage backup immediately
+  var backup = getWatchlistBackup();
+  syms.forEach(function(s) { if (backup.indexOf(s) === -1) backup.push(s); });
+  try { localStorage.setItem('wl_backup', JSON.stringify(backup)); } catch(e) {}
+
   function addNext() {
     if (idx >= syms.length) { loadWatchlist(); return; }
     var sym = syms[idx];
@@ -4522,13 +4527,59 @@ function addToWatchlist() {
 function removeFromWatchlist(sym) {
   apiCall('/api/lens/watchlist/remove', 'POST', { symbol: sym }).then(function() {
     delete wlData[sym];
+    // Update local backup immediately
+    var backup = getWatchlistBackup().filter(function(s) { return s !== sym; });
+    try { localStorage.setItem('wl_backup', JSON.stringify(backup)); } catch(e) {}
     loadWatchlist();
   });
+}
+
+// Save ticker list to localStorage as backup (survives server resets)
+function saveWatchlistBackup() {
+  var syms = wlItems.map(function(i) { return i.symbol; });
+  try { localStorage.setItem('wl_backup', JSON.stringify(syms)); } catch(e) {}
+}
+
+function getWatchlistBackup() {
+  try { return JSON.parse(localStorage.getItem('wl_backup') || '[]'); } catch(e) { return []; }
 }
 
 function loadWatchlist() {
   apiCall('/api/lens/watchlist').then(function(data) {
     wlItems = (data && data.items) || [];
+
+    // If server has no tickers but localStorage backup does, restore them
+    if (wlItems.length === 0) {
+      var backup = getWatchlistBackup();
+      if (backup.length > 0) {
+        console.log('[WATCHLIST] Server empty, restoring ' + backup.length + ' tickers from local backup');
+        var status = document.getElementById('wl-status');
+        if (status) status.textContent = 'Restoring ' + backup.length + ' tickers from backup...';
+        var idx = 0;
+        function restoreNext() {
+          if (idx >= backup.length) {
+            // Reload from server after all restored
+            apiCall('/api/lens/watchlist').then(function(d2) {
+              wlItems = (d2 && d2.items) || [];
+              saveWatchlistBackup();
+              renderWatchlistTable();
+              if (status) status.textContent = 'Restored ' + backup.length + ' tickers. Click Refresh All to update analysis.';
+            });
+            return;
+          }
+          apiCall('/api/lens/watchlist/add', 'POST', { symbol: backup[idx] }).then(function() {
+            idx++;
+            restoreNext();
+          });
+        }
+        restoreNext();
+        return;
+      }
+    }
+
+    // Save current list as backup
+    saveWatchlistBackup();
+
     // Populate wlData from server-stored analysis
     wlItems.forEach(function(item) {
       if (item.verdict && !wlData[item.symbol]) {
