@@ -980,7 +980,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     <!-- ══════════ WATCHLIST PAGE ══════════ -->
     <div class="page" id="page-watchlist">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
-        <input type="text" id="wl-input" placeholder="Add ticker (e.g., AAPL, DHI, NVDA)" style="flex:1;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px" onkeydown="if(event.key==='Enter')addToWatchlist()">
+        <input type="text" id="wl-input" placeholder="Add tickers — comma separated (e.g., AAPL, DHI, NVDA, TSLA)" style="flex:1;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px" onkeydown="if(event.key==='Enter')addToWatchlist()">
         <button onclick="addToWatchlist()" style="padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap">Add</button>
         <button onclick="refreshAllWatchlist()" style="padding:8px 14px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap">Refresh All</button>
       </div>
@@ -4487,14 +4487,36 @@ var wlItems = []; // server-side watchlist items
 
 function addToWatchlist() {
   var input = document.getElementById('wl-input');
-  var sym = (input.value || '').trim().toUpperCase();
-  if (!sym) return;
+  var raw = (input.value || '').trim().toUpperCase();
+  if (!raw) return;
   input.value = '';
-  apiCall('/api/lens/watchlist/add', 'POST', { symbol: sym }).then(function() {
-    loadWatchlist();
-    // Auto-analyze the new ticker
-    fetchWatchlistTicker(sym);
-  });
+  // Support comma-separated tickers: "AAPL, MSFT, DHI"
+  var syms = raw.split(/[,\s]+/).map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; });
+  var idx = 0;
+  function addNext() {
+    if (idx >= syms.length) { loadWatchlist(); return; }
+    var sym = syms[idx];
+    apiCall('/api/lens/watchlist/add', 'POST', { symbol: sym }).then(function() {
+      idx++;
+      addNext();
+    });
+  }
+  addNext();
+  // Start analyzing all new tickers after a brief delay
+  setTimeout(function() {
+    var status = document.getElementById('wl-status');
+    if (status) status.textContent = 'Analyzing ' + syms.length + ' tickers...';
+    var aidx = 0;
+    function analyzeNext() {
+      if (aidx >= syms.length) {
+        if (status) status.textContent = 'Done — ' + syms.length + ' tickers added and analyzed';
+        return;
+      }
+      if (status) status.textContent = 'Analyzing ' + syms[aidx] + ' (' + (aidx+1) + '/' + syms.length + ')...';
+      fetchWatchlistTicker(syms[aidx], function() { aidx++; setTimeout(analyzeNext, 500); });
+    }
+    analyzeNext();
+  }, 1000);
 }
 
 function removeFromWatchlist(sym) {

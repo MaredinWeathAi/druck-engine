@@ -1772,27 +1772,40 @@ const SECTOR_ETF_MAP: Record<string, { primary: string; secondary: string; name:
 };
 
 async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCVBar[]> {
+  // Direct Yahoo Finance API — bypasses yahoo-finance2 library which fails on many tickers
   try {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setFullYear(startDate.getFullYear() - years);
-    const result = await yahooFinance.chart(symbol, {
-      period1: startDate.toISOString().split('T')[0],
-      period2: endDate.toISOString().split('T')[0],
-      interval: '1d',
-    });
-    if (!result?.quotes) return [];
-    return result.quotes
-      .filter((q: any) => q.close !== null && q.close !== undefined)
-      .map((q: any) => ({
-        date: new Date(q.date).toISOString().split('T')[0],
-        open: q.open || q.close,
-        high: q.high || q.close,
-        low: q.low || q.close,
-        close: q.close,
-        volume: q.volume || 0,
-      }));
-  } catch {
+    const endTs = Math.floor(Date.now() / 1000);
+    const startTs = endTs - (years * 365 * 24 * 60 * 60);
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${startTs}&period2=${endTs}&interval=1d&events=history`;
+    const response = await fetch(url, { headers: { 'User-Agent': 'DruckEngine/1.0 (maredinwai@maredin.com)' } });
+    if (!response.ok) return [];
+    const data: any = await response.json();
+    const result = data?.chart?.result?.[0];
+    if (!result || !result.timestamp) return [];
+
+    const timestamps = result.timestamp;
+    const quote = result.indicators?.quote?.[0] || {};
+    const closes = quote.close || [];
+    const opens = quote.open || [];
+    const highs = quote.high || [];
+    const lows = quote.low || [];
+    const volumes = quote.volume || [];
+
+    const bars: OHLCVBar[] = [];
+    for (let i = 0; i < timestamps.length; i++) {
+      if (closes[i] === null || closes[i] === undefined) continue;
+      bars.push({
+        date: new Date(timestamps[i] * 1000).toISOString().split('T')[0],
+        open: opens[i] || closes[i],
+        high: highs[i] || closes[i],
+        low: lows[i] || closes[i],
+        close: closes[i],
+        volume: volumes[i] || 0,
+      });
+    }
+    return bars;
+  } catch (err: any) {
+    console.error(`[TICKER] Failed to fetch ${symbol}:`, err?.message);
     return [];
   }
 }
