@@ -4448,141 +4448,194 @@ function analyzeTickerFn() {
   var input = document.getElementById('ticker-input');
   var sym = (input.value || '').trim().toUpperCase();
   if (!sym) return;
+  input.value = sym;
   var output = document.getElementById('ticker-output');
-  output.innerHTML = '<div style="text-align:center;padding:40px;color:var(--dim)">Analyzing ' + sym + '...</div>';
+  output.innerHTML = '<div style="text-align:center;padding:40px;color:var(--dim)">Analyzing ' + sym + '... <div style="font-size:11px;margin-top:8px">Fetching price history + computing TA + generating verdict</div></div>';
 
-  // Fetch TA data and fundamentals in parallel
-  Promise.all([
-    apiCall('/api/inflection/full/' + encodeURIComponent(sym)),
-    apiCall('/api/fundamentals/' + encodeURIComponent(sym)),
-  ]).then(function(results) {
-    var ta = results[0];
-    var fund = results[1];
-
-    if (!ta && !fund) {
-      output.innerHTML = '<div style="text-align:center;padding:40px;color:#E24B4A">Could not find data for <b>' + sym + '</b>. Try a US-listed stock ticker.</div>';
+  apiCall('/api/lens/ticker/' + encodeURIComponent(sym)).then(function(d) {
+    if (!d || d.error) {
+      output.innerHTML = '<div style="text-align:center;padding:40px;color:#E24B4A">Could not analyze <b>' + sym + '</b>: ' + (d ? d.error : 'No data') + '</div>';
       return;
     }
 
+    var phColors = { 1: '#0ea5e9', 2: '#1D9E75', 3: '#f97316', 4: '#e879f9', 5: '#E24B4A' };
     var html = '';
 
-    // Header
-    html += '<div class="card" style="padding:16px;margin-bottom:12px">';
+    // ═══ VERDICT BANNER ═══
+    var v = d.verdict || {};
+    var vColors = { 'STRONG ACCUMULATE': '#1D9E75', 'ACCUMULATE': '#1D9E75', 'WATCH / NIBBLE': '#378ADD', 'NEUTRAL / COILED': '#BA7517', 'AVOID': '#f97316', 'STRONG AVOID / SHORT CANDIDATE': '#E24B4A' };
+    var vc = vColors[v.verdict] || 'var(--dim)';
+    html += '<div style="padding:14px 18px;border-radius:10px;margin-bottom:14px;background:' + vc + '12;border:2px solid ' + vc + '44">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-    html += '<div><span style="font-size:20px;font-weight:500;color:var(--accent)">' + sym + '</span>';
-    if (fund && fund.company) html += ' <span style="font-size:14px;color:var(--dim)">' + fund.company + '</span>';
-    html += '</div>';
-    if (ta && ta.phase) {
-      var phColors = { 1: '#0ea5e9', 2: '#1D9E75', 3: '#f97316', 4: '#e879f9', 5: '#E24B4A' };
-      // Map internal phase to display phase
-      var phaseMap = { SELLING_EXHAUSTION: {n:1,s:'P1 Buy'}, NARRATIVE_COLLAPSE: {n:1,s:'P1 Buy'}, NARRATIVE_EXPANSION: {n:2,s:'P2 Ride'}, INSTITUTIONAL_ACCUMULATION: {n:3,s:'P3 Trim'}, BUYING_EXHAUSTION: {n:4,s:'P4 Exit'}, NARRATIVE_REVERSAL: {n:5,s:'P5 Avoid'} };
-      var pm = phaseMap[ta.phase.phase] || {n:0,s:'?'};
-      var pc = phColors[pm.n] || 'var(--dim)';
-      html += '<span style="padding:4px 12px;border-radius:6px;font-size:14px;font-weight:500;background:' + pc + '18;color:' + pc + ';border:1px solid ' + pc + '44">' + pm.s + '</span>';
+    html += '<div><span style="font-size:20px;font-weight:500;color:var(--accent)">' + sym + '</span> <span style="font-size:13px;color:var(--dim)">$' + d.price.toFixed(2) + '</span></div>';
+    if (d.phase) {
+      var pc = phColors[d.phase.phaseNum] || 'var(--dim)';
+      html += '<span style="padding:4px 12px;border-radius:6px;font-size:14px;font-weight:500;background:' + pc + '18;color:' + pc + ';border:1px solid ' + pc + '44">' + d.phase.phaseShort + '</span>';
     }
     html += '</div>';
-    if (ta && ta.phase) {
-      html += '<div style="font-size:12px;color:var(--dim);margin-top:6px">' + (ta.phase.description || '') + '</div>';
-      html += '<div style="font-size:11px;color:var(--dim);margin-top:4px">Confidence: ' + (ta.phase.confidence || '—') + '% | Action: ' + (ta.phase.actionBias || '—') + ' | Risk: ' + (ta.phase.riskLevel || '—') + '</div>';
-    }
+    html += '<div style="font-size:16px;font-weight:500;color:' + vc + ';margin-top:8px">' + (v.verdict || '—') + '</div>';
+    html += '<div style="font-size:12px;color:var(--dim);margin-top:4px">' + (v.signal || '') + '</div>';
     html += '</div>';
 
-    // Technical Analysis
-    if (ta && ta.ta) {
-      var t = ta.ta;
-      html += '<div class="card" style="padding:16px;margin-bottom:12px">';
-      html += '<h3 style="margin-bottom:10px;font-size:14px">Technical analysis</h3>';
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+    // ═══ REASONING ═══
+    if (v.reasoning && v.reasoning.length > 0) {
+      html += '<div class="card" style="padding:12px 16px;margin-bottom:12px">';
+      html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:6px">Druckenmiller framework reasoning</div>';
+      v.reasoning.forEach(function(r) {
+        html += '<div style="font-size:12px;color:var(--text);padding:2px 0">• ' + r + '</div>';
+      });
+      html += '</div>';
+    }
 
-      var taItems = [
-        { label: 'Price', value: t.lastClose ? '$' + t.lastClose.toFixed(2) : '—' },
-        { label: '50d MA', value: t.sma50 ? '$' + t.sma50.toFixed(2) : '—' },
-        { label: '200d MA', value: t.sma200 ? '$' + t.sma200.toFixed(2) : '—' },
-        { label: 'vs 200d', value: t.priceVsSma200 ? (t.priceVsSma200 > 0 ? '+' : '') + t.priceVsSma200.toFixed(1) + '%' : '—', color: t.priceVsSma200 > 0 ? '#1D9E75' : '#E24B4A' },
-        { label: 'RSI (14)', value: t.rsi14 ? t.rsi14.toFixed(0) : '—', color: t.rsi14 > 70 ? '#E24B4A' : t.rsi14 < 30 ? '#0ea5e9' : undefined },
-        { label: 'ATR %', value: t.atrPct ? t.atrPct.toFixed(2) + '%' : '—' },
-        { label: 'MACD Hist', value: t.macd ? t.macd.histogram.toFixed(3) : '—', color: t.macd && t.macd.histogram > 0 ? '#1D9E75' : '#E24B4A' },
-        { label: 'Cross', value: t.goldenCross ? 'GOLDEN' : t.deathCross ? 'DEATH' : t.sma50Above200 ? 'Gold intact' : 'Death intact', color: t.sma50Above200 ? '#1D9E75' : '#E24B4A' },
-        { label: 'Velocity', value: t.extensionVelocity !== null ? t.extensionVelocity.toFixed(3) + '%/d' : '—' },
-      ];
-      taItems.forEach(function(item) {
-        html += '<div style="padding:6px 8px;background:var(--card);border-radius:4px">';
-        html += '<div style="font-size:9px;color:var(--dim)">' + item.label + '</div>';
-        html += '<div style="font-size:13px;font-weight:500;' + (item.color ? 'color:' + item.color : '') + '">' + item.value + '</div>';
+    // ═══ 2. STRUCTURAL ANCHORS (bar gauges) ═══
+    var a = d.anchors || {};
+    html += '<div class="card" style="padding:14px 16px;margin-bottom:12px">';
+    html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:10px">Structural anchors</div>';
+    // Price vs 52wk high
+    var pct52 = a.pctFrom52wHigh !== null ? 100 + a.pctFrom52wHigh : 0;
+    html += '<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span>Price vs 52-week high' + (a.high52w ? ' ($' + a.high52w.toFixed(2) + ')' : '') + '</span><span style="font-weight:500">' + pct52.toFixed(0) + '% of high (' + (a.pctFrom52wHigh !== null ? a.pctFrom52wHigh.toFixed(0) : '?') + '%)</span></div>';
+    html += '<div style="height:8px;background:var(--card);border-radius:4px;overflow:hidden"><div style="height:100%;width:' + Math.max(5, pct52) + '%;background:' + (pct52 > 80 ? '#1D9E75' : pct52 > 50 ? '#BA7517' : '#E24B4A') + ';border-radius:4px"></div></div></div>';
+    // Price vs 200d
+    var pct200 = a.priceVs200d !== null ? 100 + a.priceVs200d : 0;
+    var aboveBelow = a.priceVs200d !== null ? (a.priceVs200d > 0 ? a.priceVs200d.toFixed(1) + '% ABOVE' : Math.abs(a.priceVs200d).toFixed(1) + '% BELOW') : '?';
+    html += '<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px"><span>Price vs 200d MA' + (a.sma200 ? ' ($' + a.sma200.toFixed(2) + ')' : '') + '</span><span style="font-weight:500;color:' + (a.priceVs200d > 0 ? '#1D9E75' : '#E24B4A') + '">' + aboveBelow + '</span></div>';
+    html += '<div style="height:8px;background:var(--card);border-radius:4px;overflow:hidden"><div style="height:100%;width:' + Math.max(5, Math.min(100, pct200)) + '%;background:' + (a.priceVs200d > 0 ? '#1D9E75' : '#E24B4A') + ';border-radius:4px"></div></div></div>';
+    // MA structure
+    html += '<div style="font-size:12px;color:' + (a.sma50Above200 ? '#1D9E75' : '#E24B4A') + ';font-weight:500">' + (a.sma50Above200 ? 'Golden Cross — bullish MA structure' : 'Death Cross — bearish MA structure') + '</div>';
+    html += '</div>';
+
+    // ═══ 3. VOLUME DEMAND ═══
+    var vd = d.volumeDemand || {};
+    var ratio = vd.upDownRatio || 0;
+    var vdColor = ratio > 1.5 ? '#1D9E75' : ratio > 1.1 ? '#38bdf8' : ratio > 0.9 ? '#BA7517' : ratio > 0.7 ? '#f97316' : '#E24B4A';
+    var vdLabels = { HEAVY_ACCUMULATION: 'Violent institutional accumulation', MILD_BUYING: 'Mild buying pressure', EQUILIBRIUM: 'Volume in equilibrium', MILD_DISTRIBUTION: 'Mild selling pressure', HEAVY_DISTRIBUTION: 'Heavy institutional distribution' };
+    html += '<div class="card" style="padding:14px 16px;margin-bottom:12px">';
+    html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:8px">Volume demand (20-day up/down ratio)</div>';
+    html += '<div style="display:flex;align-items:center;gap:12px">';
+    html += '<span style="font-size:24px;font-weight:500;color:' + vdColor + '">' + ratio.toFixed(2) + '</span>';
+    html += '<span style="font-size:12px;color:var(--dim)">' + (vdLabels[vd.signal] || vd.signal || '') + '</span>';
+    html += '</div>';
+    // Visual bar
+    var barPos = Math.max(0, Math.min(100, (ratio / 2.0) * 100));
+    html += '<div style="position:relative;height:12px;background:linear-gradient(to right, #E24B4A33, #BA751733, #1D9E7533);border-radius:6px;margin-top:8px">';
+    html += '<div style="position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--dim)"></div>';
+    html += '<div style="position:absolute;left:' + barPos + '%;top:-2px;width:12px;height:16px;border-radius:50%;background:' + vdColor + ';border:2px solid var(--text);transform:translateX(-50%)"></div>';
+    html += '</div>';
+    html += '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim);margin-top:2px"><span>Distribution</span><span>Neutral</span><span>Accumulation</span></div>';
+    html += '</div>';
+
+    // ═══ 4. EARNINGS REACTIONS ═══
+    var er = d.earningsReactions || [];
+    if (er.length > 0) {
+      html += '<div class="card" style="padding:14px 16px;margin-bottom:12px">';
+      html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:8px">Earnings reactions (detected high-volume moves)</div>';
+      er.forEach(function(e) {
+        var eColor = e.move > 0 ? '#1D9E75' : '#E24B4A';
+        var barWidth = Math.min(80, Math.abs(e.move) * 4);
+        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
+        html += '<span style="font-size:11px;color:var(--dim);min-width:80px">' + e.date + '</span>';
+        html += '<div style="flex:1;height:16px;background:var(--card);border-radius:3px;position:relative;overflow:hidden">';
+        if (e.move > 0) {
+          html += '<div style="position:absolute;left:50%;height:100%;width:' + barWidth + '%;background:' + eColor + '55;border-radius:0 3px 3px 0"></div>';
+        } else {
+          html += '<div style="position:absolute;right:50%;height:100%;width:' + barWidth + '%;background:' + eColor + '55;border-radius:3px 0 0 3px"></div>';
+        }
+        html += '<div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--dim)33"></div>';
+        html += '</div>';
+        html += '<span style="font-size:12px;font-weight:500;color:' + eColor + ';min-width:50px;text-align:right">' + (e.move > 0 ? '+' : '') + e.move.toFixed(1) + '%</span>';
         html += '</div>';
       });
       html += '</div>';
+    }
 
+    // ═══ 5. FAILED BREAKDOWNS ═══
+    var fb = d.failedBreakdowns || {};
+    html += '<div class="card" style="padding:14px 16px;margin-bottom:12px">';
+    html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:8px">Failed breakdowns (bear trap reversals, past year)</div>';
+    var fbCount = fb.count || 0;
+    var fbColor = fbCount >= 3 ? '#1D9E75' : fbCount >= 1 ? '#BA7517' : '#E24B4A';
+    html += '<div style="display:flex;align-items:center;gap:8px">';
+    html += '<span style="font-size:24px;font-weight:500;color:' + fbColor + '">' + fbCount + '</span>';
+    html += '<span style="font-size:12px;color:var(--dim)">' + (fbCount >= 3 ? 'Strong demand floor — multiple institutional defenses' : fbCount >= 1 ? 'Some support tested' : 'No failed breakdowns — supports broke clean or untested') + '</span>';
+    html += '</div>';
+    // Visual blocks
+    html += '<div style="display:flex;gap:4px;margin-top:6px">';
+    for (var i = 0; i < 5; i++) {
+      html += '<div style="width:24px;height:8px;border-radius:2px;background:' + (i < fbCount ? fbColor : 'var(--card)') + '"></div>';
+    }
+    html += '</div></div>';
+
+    // ═══ TA DETAILS ═══
+    if (d.ta) {
+      var t = d.ta;
+      html += '<div class="card" style="padding:14px 16px;margin-bottom:12px">';
+      html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:8px">Technical detail</div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">';
+      [
+        { l: 'RSI', v: t.rsi14 ? t.rsi14.toFixed(0) : '—', c: t.rsi14 > 70 ? '#E24B4A' : t.rsi14 < 30 ? '#0ea5e9' : '' },
+        { l: 'MACD Hist', v: t.macdHistogram ? t.macdHistogram.toFixed(3) : '—', c: t.macdHistogram > 0 ? '#1D9E75' : '#E24B4A' },
+        { l: 'ATR %', v: t.atrPct ? t.atrPct.toFixed(2) + '%' : '—' },
+        { l: 'Velocity', v: t.extensionVelocity !== null && t.extensionVelocity !== undefined ? t.extensionVelocity.toFixed(3) + '%/d' : '—' },
+        { l: 'Days@200d', v: t.daysSinceCross200d !== null && t.daysSinceCross200d !== undefined ? t.daysSinceCross200d + 'd' : '—' },
+        { l: 'MACD Slope', v: t.macdHistSlope ? t.macdHistSlope.toFixed(3) : '—', c: t.macdHistSlope > 0 ? '#1D9E75' : '#E24B4A' },
+        { l: 'Cross', v: t.goldenCross ? 'GOLDEN!' : t.deathCross ? 'DEATH!' : '—', c: t.goldenCross ? '#1D9E75' : t.deathCross ? '#E24B4A' : '' },
+        { l: '50>200', v: d.anchors.sma50Above200 ? 'Yes' : 'No', c: d.anchors.sma50Above200 ? '#1D9E75' : '#E24B4A' },
+      ].forEach(function(item) {
+        html += '<div style="padding:5px 6px;background:var(--card);border-radius:4px"><div style="font-size:9px;color:var(--dim)">' + item.l + '</div><div style="font-size:12px;font-weight:500;' + (item.c ? 'color:' + item.c : '') + '">' + item.v + '</div></div>';
+      });
+      html += '</div>';
       // Transition signals
-      if (ta.phase && ta.phase.transitionSignals && ta.phase.transitionSignals.length > 0) {
-        html += '<div style="margin-top:10px;padding:8px;background:var(--card);border-radius:6px">';
-        html += '<div style="font-size:10px;font-weight:500;color:var(--dim);margin-bottom:4px">TRANSITION SIGNALS</div>';
-        ta.phase.transitionSignals.forEach(function(s) {
-          html += '<div style="font-size:11px;color:var(--text);padding:2px 0">• ' + s + '</div>';
+      if (d.phase && d.phase.transitionSignals && d.phase.transitionSignals.length > 0) {
+        html += '<div style="margin-top:8px;padding:8px 10px;background:rgba(249,115,22,0.06);border-radius:6px;border:1px solid rgba(249,115,22,0.15)">';
+        html += '<div style="font-size:10px;font-weight:500;color:var(--amber);margin-bottom:4px">TRANSITION SIGNALS</div>';
+        d.phase.transitionSignals.forEach(function(s) {
+          html += '<div style="font-size:11px;color:var(--text);padding:1px 0">• ' + s + '</div>';
         });
         html += '</div>';
       }
       html += '</div>';
-    }
 
-    // Fundamentals
-    if (fund && fund.fundamentals) {
-      var f = fund.fundamentals;
-      html += '<div class="card" style="padding:16px;margin-bottom:12px">';
-      html += '<h3 style="margin-bottom:10px;font-size:14px">Fundamentals</h3>';
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
-      var fundItems = [
-        { label: 'Revenue Growth', value: f.revenueGrowthYoY !== null ? (f.revenueGrowthYoY > 0 ? '+' : '') + f.revenueGrowthYoY.toFixed(1) + '%' : '—' },
-        { label: 'EPS Growth', value: f.epsGrowthYoY !== null ? (f.epsGrowthYoY > 0 ? '+' : '') + f.epsGrowthYoY.toFixed(1) + '%' : '—' },
-        { label: 'Operating Margin', value: f.operatingMargin !== null ? f.operatingMargin.toFixed(1) + '%' : '—' },
-        { label: 'ROIC', value: f.roic !== null ? f.roic.toFixed(1) + '%' : '—' },
-        { label: 'FCF Yield', value: f.fcfYield !== null ? f.fcfYield.toFixed(1) + '%' : '—' },
-        { label: 'Debt/Equity', value: f.debtToEquity !== null ? f.debtToEquity.toFixed(2) : '—' },
-      ];
-      fundItems.forEach(function(item) {
-        html += '<div style="padding:6px 8px;background:var(--card);border-radius:4px">';
-        html += '<div style="font-size:9px;color:var(--dim)">' + item.label + '</div>';
-        html += '<div style="font-size:13px;font-weight:500">' + item.value + '</div>';
-        html += '</div>';
-      });
-      html += '</div></div>';
-    }
-
-    // Valuation
-    if (fund && fund.valuation) {
-      var v = fund.valuation;
-      html += '<div class="card" style="padding:16px;margin-bottom:12px">';
-      html += '<h3 style="margin-bottom:10px;font-size:14px">Valuation</h3>';
-      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
-      var valItems = [
-        { label: 'Forward P/E', value: v.peForward !== null ? v.peForward.toFixed(1) + 'x' : '—' },
-        { label: 'EV/EBITDA', value: v.evToEbitda !== null ? v.evToEbitda.toFixed(1) + 'x' : '—' },
-        { label: 'PEG Ratio', value: v.pegRatio !== null ? v.pegRatio.toFixed(2) : '—' },
-        { label: 'FCF Yield', value: v.fcfYield !== null ? v.fcfYield.toFixed(1) + '%' : '—' },
-        { label: 'PE Percentile', value: v.pePctile !== null ? v.pePctile.toFixed(0) + '%' : '—' },
-        { label: 'GF Value Margin', value: v.gfValueMargin !== null ? (v.gfValueMargin > 0 ? '+' : '') + v.gfValueMargin.toFixed(1) + '%' : '—' },
-      ];
-      valItems.forEach(function(item) {
-        html += '<div style="padding:6px 8px;background:var(--card);border-radius:4px">';
-        html += '<div style="font-size:9px;color:var(--dim)">' + item.label + '</div>';
-        html += '<div style="font-size:13px;font-weight:500">' + item.value + '</div>';
-        html += '</div>';
-      });
-      html += '</div></div>';
-    }
-
-    // Overall signal
-    if (ta) {
-      html += '<div style="padding:12px 16px;background:var(--card);border-radius:8px;border:1px solid var(--border)">';
-      html += '<div style="font-size:11px;font-weight:500;color:var(--dim);margin-bottom:4px">SYSTEM ASSESSMENT</div>';
-      html += '<div style="font-size:13px;color:var(--text)">Overall Signal: <b>' + (ta.overallSignal || '—') + '</b>';
-      if (ta.phase) html += ' | Phase: ' + ta.phase.phase.replace(/_/g, ' ');
-      html += '</div>';
-      html += '<div style="font-size:11px;color:var(--dim);margin-top:4px">This is a confirmation tool. Technicals lag macro reality by 1-2 quarters. Use Foreshadow to model where macro changes will push this before the MAs confirm.</div>';
+    // ═══ PRICE CHART ═══
+    if (d.priceHistory && d.priceHistory.dates.length > 0) {
+      html += '<div class="card" style="padding:14px 16px;margin-bottom:12px">';
+      html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:8px">Price chart (1 year)</div>';
+      html += '<div id="ticker-price-chart" style="height:280px"></div>';
       html += '</div>';
     }
+
+    // Disclaimer
+    html += '<div style="padding:10px 14px;background:var(--card);border-radius:6px;border:1px solid var(--border);font-size:11px;color:var(--dim)">';
+    html += '<b>Confirmation tool.</b> Technicals lag macro reality by 1-2 quarters. Druckenmiller acts on forward macro projection, not current chart structure. Use Foreshadow to model where macro changes push this before the MAs confirm.';
+    html += '</div>';
 
     output.innerHTML = html;
+
+    // Render price chart with Plotly
+    if (d.priceHistory && d.priceHistory.dates.length > 0) {
+      var ph = d.priceHistory;
+      var traces = [
+        { x: ph.dates, y: ph.closes, type: 'scatter', mode: 'lines', name: 'Price', line: { color: '#f59e0b', width: 2 } },
+      ];
+      if (ph.sma50 && ph.sma50.length > 0) {
+        traces.push({ x: ph.dates, y: ph.sma50, type: 'scatter', mode: 'lines', name: '50d MA', line: { color: '#0ea5e9', width: 1, dash: 'dot' } });
+      }
+      if (ph.sma200 && ph.sma200.length > 0) {
+        traces.push({ x: ph.dates, y: ph.sma200, type: 'scatter', mode: 'lines', name: '200d MA', line: { color: '#e879f9', width: 1, dash: 'dot' } });
+      }
+      try {
+        Plotly.newPlot('ticker-price-chart', traces, {
+          xaxis: { type: 'date', color: '#94a3b8', gridcolor: 'rgba(255,255,255,0.03)' },
+          yaxis: { color: '#94a3b8', gridcolor: 'rgba(255,255,255,0.05)' },
+          plot_bgcolor: 'rgba(15,20,30,0.95)', paper_bgcolor: 'rgba(15,20,30,0)',
+          font: { color: '#e2e8f0', family: 'Inter, system-ui, sans-serif', size: 11 },
+          margin: { t: 10, b: 30, l: 50, r: 20 },
+          showlegend: true, legend: { x: 0, y: 1, font: { size: 10 } },
+          hovermode: 'x unified',
+        }, { responsive: true, displayModeBar: false });
+      } catch(e) {}
+    }
+
+    }
   }).catch(function(err) {
     output.innerHTML = '<div style="text-align:center;padding:40px;color:#E24B4A">Error analyzing ' + sym + ': ' + (err.message || 'Unknown error') + '</div>';
   });

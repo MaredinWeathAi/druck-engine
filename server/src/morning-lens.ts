@@ -8,7 +8,7 @@
 import { Router, Request, Response } from 'express';
 import YahooFinance from 'yahoo-finance2';
 import Anthropic from '@anthropic-ai/sdk';
-import { computeFullInflection, InflectionPhase, OHLCVBar } from './inflection-engine';
+import { computeFullInflection, computeExtendedTA, InflectionPhase, OHLCVBar } from './inflection-engine';
 import {
   recordSnapshotBatch, recordTransitionBatch,
   updateTransitionOutcomes,
@@ -1734,6 +1734,365 @@ router.post('/lens/refresh', async (req: Request, res: Response) => {
     res.json({ status: 'refreshed', instrumentCount: instrumentSnapshots.size, errors: lensRefreshErrors.slice(0, 5) });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Refresh failed' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMPREHENSIVE TICKER ANALYSIS — Druckenmiller 5-Pillar Framework
+// ═══════════════════════════════════════════════════════════════════════════
+// 1. Relative Strength vs Sector Peers (ratio charts)
+// 2. Price vs Structural Anchors (52wk high, 200d MA)
+// 3. Volume Demand Profile (20d up/down volume ratio)
+// 4. Earnings Reactions (last 4 quarters, next-day moves)
+// 5. Failed Breakdowns (bear traps in past year)
+// + Phase classification + Druckenmiller verdict synthesis
+
+// Sector ETF mapping by GICS-like categories
+const SECTOR_ETF_MAP: Record<string, { primary: string; secondary: string; name: string }> = {
+  'Technology': { primary: 'XLK', secondary: 'QQQ', name: 'Technology' },
+  'Semiconductors': { primary: 'SMH', secondary: 'XLK', name: 'Semiconductors' },
+  'Software': { primary: 'IGV', secondary: 'XLK', name: 'Software' },
+  'Financials': { primary: 'XLF', secondary: 'KRE', name: 'Financials' },
+  'Banks': { primary: 'KRE', secondary: 'XLF', name: 'Regional Banks' },
+  'Healthcare': { primary: 'XLV', secondary: 'XBI', name: 'Healthcare' },
+  'Biotech': { primary: 'XBI', secondary: 'XLV', name: 'Biotech' },
+  'Energy': { primary: 'XLE', secondary: 'XOP', name: 'Energy' },
+  'Industrials': { primary: 'XLI', secondary: 'IYT', name: 'Industrials' },
+  'Consumer Discretionary': { primary: 'XLY', secondary: 'XRT', name: 'Consumer Discretionary' },
+  'Consumer Staples': { primary: 'XLP', secondary: 'PBJ', name: 'Consumer Staples' },
+  'Homebuilders': { primary: 'ITB', secondary: 'XHB', name: 'Homebuilders' },
+  'Materials': { primary: 'XLB', secondary: 'SLX', name: 'Materials' },
+  'Utilities': { primary: 'XLU', secondary: 'XLU', name: 'Utilities' },
+  'Real Estate': { primary: 'VNQ', secondary: 'XLRE', name: 'Real Estate' },
+  'Communications': { primary: 'XLC', secondary: 'XLC', name: 'Communications' },
+  'Airlines': { primary: 'JETS', secondary: 'IYT', name: 'Airlines' },
+  'Retail': { primary: 'XRT', secondary: 'XLY', name: 'Retail' },
+  'default': { primary: 'SPY', secondary: 'RSP', name: 'Broad Market' },
+};
+
+async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCVBar[]> {
+  try {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setFullYear(startDate.getFullYear() - years);
+    const result = await yahooFinance.chart(symbol, {
+      period1: startDate.toISOString().split('T')[0],
+      period2: endDate.toISOString().split('T')[0],
+      interval: '1d',
+    });
+    if (!result?.quotes) return [];
+    return result.quotes
+      .filter((q: any) => q.close !== null && q.close !== undefined)
+      .map((q: any) => ({
+        date: new Date(q.date).toISOString().split('T')[0],
+        open: q.open || q.close,
+        high: q.high || q.close,
+        low: q.low || q.close,
+        close: q.close,
+        volume: q.volume || 0,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function computeUpDownVolumeRatio(bars: OHLCVBar[], period: number = 20): number | null {
+  if (bars.length < period) return null;
+  const recent = bars.slice(-period);
+  let upVol = 0, downVol = 0;
+  for (let i = 1; i < recent.length; i++) {
+    if (recent[i].close >= recent[i - 1].close) {
+      upVol += recent[i].volume;
+    } else {
+      downVol += recent[i].volume;
+    }
+  }
+  if (downVol === 0) return upVol > 0 ? 2.0 : 1.0;
+  return Math.round((upVol / downVol) * 100) / 100;
+}
+
+function computeRelativeStrengthSeries(stockBars: OHLCVBar[], benchBars: OHLCVBar[]): { dates: string[]; ratios: number[] } {
+  // Align by date and compute price ratio over time
+  const benchMap: Record<string, number> = {};
+  for (const b of benchBars) benchMap[b.date] = b.close;
+
+  const dates: string[] = [];
+  const ratios: number[] = [];
+  for (const s of stockBars) {
+    const benchClose = benchMap[s.date];
+    if (benchClose && benchClose > 0) {
+      dates.push(s.date);
+      ratios.push(Math.round((s.close / benchClose) * 1000) / 1000);
+    }
+  }
+  return { dates, ratios };
+}
+
+function findEarningsReactions(bars: OHLCVBar[]): { date: string; move: number }[] {
+  // Detect likely earnings dates by finding days with >3x average volume AND >2% move
+  if (bars.length < 100) return [];
+  const avgVol = bars.slice(-252).reduce((s, b) => s + b.volume, 0) / Math.min(bars.length, 252);
+  const reactions: { date: string; move: number; idx: number }[] = [];
+
+  for (let i = 1; i < bars.length; i++) {
+    const move = ((bars[i].close - bars[i - 1].close) / bars[i - 1].close) * 100;
+    const volSpike = bars[i].volume > avgVol * 3;
+    const bigMove = Math.abs(move) > 2;
+
+    if (volSpike && bigMove) {
+      // Check it's not too close to a previous detection (at least 45 trading days apart)
+      const tooClose = reactions.some(r => i - r.idx < 45);
+      if (!tooClose) {
+        reactions.push({ date: bars[i].date, move: Math.round(move * 10) / 10, idx: i });
+      }
+    }
+  }
+
+  return reactions.slice(-4).map(r => ({ date: r.date, move: r.move }));
+}
+
+function generateVerdict(
+  upDownRatio: number | null,
+  priceVs200d: number | null,
+  pctFrom52wHigh: number | null,
+  failedBreakdowns: number,
+  earningsReactions: { date: string; move: number }[],
+  sma50Above200: boolean,
+): { verdict: string; signal: string; reasoning: string[] } {
+  const reasoning: string[] = [];
+  let bullPoints = 0;
+  let bearPoints = 0;
+
+  // Volume demand
+  if (upDownRatio !== null) {
+    if (upDownRatio > 1.5) { bullPoints += 2; reasoning.push('Strong institutional accumulation (Up/Down ratio: ' + upDownRatio + ')'); }
+    else if (upDownRatio > 1.1) { bullPoints += 1; reasoning.push('Mild buying pressure (Up/Down ratio: ' + upDownRatio + ')'); }
+    else if (upDownRatio < 0.7) { bearPoints += 2; reasoning.push('Heavy institutional distribution (Up/Down ratio: ' + upDownRatio + ')'); }
+    else if (upDownRatio < 0.9) { bearPoints += 1; reasoning.push('Mild selling pressure (Up/Down ratio: ' + upDownRatio + ')'); }
+    else { reasoning.push('Volume in equilibrium (Up/Down ratio: ' + upDownRatio + ')'); }
+  }
+
+  // Price vs 200d
+  if (priceVs200d !== null) {
+    if (priceVs200d > 15) { bullPoints += 1; reasoning.push('Trading ' + priceVs200d.toFixed(0) + '% above 200d — strong uptrend'); }
+    else if (priceVs200d > 0) { bullPoints += 1; reasoning.push('Above 200d (' + priceVs200d.toFixed(1) + '%) — structure intact'); }
+    else if (priceVs200d < -20) { bearPoints += 2; reasoning.push('Trading ' + priceVs200d.toFixed(0) + '% below 200d — structural bear market'); }
+    else if (priceVs200d < 0) { bearPoints += 1; reasoning.push('Below 200d (' + priceVs200d.toFixed(1) + '%) — broken structure'); }
+  }
+
+  // 52-week position
+  if (pctFrom52wHigh !== null) {
+    if (pctFrom52wHigh > -10) { bullPoints += 1; reasoning.push('Near 52-week highs (' + pctFrom52wHigh.toFixed(0) + '%)'); }
+    else if (pctFrom52wHigh < -40) { bearPoints += 1; reasoning.push('Deep drawdown: ' + pctFrom52wHigh.toFixed(0) + '% from 52-week high'); }
+  }
+
+  // MA cross
+  if (sma50Above200) { bullPoints += 1; reasoning.push('Golden cross intact — bullish MA structure'); }
+  else { bearPoints += 1; reasoning.push('Death cross — bearish MA structure'); }
+
+  // Failed breakdowns
+  if (failedBreakdowns >= 3) { bullPoints += 2; reasoning.push(failedBreakdowns + ' failed breakdowns — strong demand floor proven'); }
+  else if (failedBreakdowns >= 1) { bullPoints += 1; reasoning.push(failedBreakdowns + ' failed breakdown(s) — some support tested'); }
+  else { reasoning.push('No failed breakdowns — supports untested or broke clean'); }
+
+  // Earnings trajectory
+  if (earningsReactions.length >= 2) {
+    const lastTwo = earningsReactions.slice(-2);
+    const improving = lastTwo[1].move > lastTwo[0].move;
+    const lastPositive = lastTwo[1].move > 0;
+    if (improving && lastPositive) { bullPoints += 2; reasoning.push('Earnings trajectory improving — last reaction: ' + lastTwo[1].move.toFixed(1) + '%'); }
+    else if (lastPositive) { bullPoints += 1; reasoning.push('Last earnings positive (' + lastTwo[1].move.toFixed(1) + '%)'); }
+    else if (!improving && !lastPositive) { bearPoints += 2; reasoning.push('Earnings trajectory deteriorating — last reaction: ' + lastTwo[1].move.toFixed(1) + '%'); }
+    else { bearPoints += 1; reasoning.push('Mixed earnings reactions'); }
+  }
+
+  // Verdict
+  const net = bullPoints - bearPoints;
+  let verdict: string;
+  let signal: string;
+
+  if (net >= 5) { verdict = 'STRONG ACCUMULATE'; signal = 'Turnaround confirming or structural breakout. Accumulate aggressively on pullbacks.'; }
+  else if (net >= 3) { verdict = 'ACCUMULATE'; signal = 'Technical structure improving. Build position on dips.'; }
+  else if (net >= 1) { verdict = 'WATCH / NIBBLE'; signal = 'Some positive signals but not confirmed. Small starter position, wait for structure to confirm.'; }
+  else if (net >= -1) { verdict = 'NEUTRAL / COILED'; signal = 'At a decision point. Wait for breakout direction before committing capital.'; }
+  else if (net >= -3) { verdict = 'AVOID'; signal = 'Structure broken or deteriorating. Do not initiate longs. Wait for selling exhaustion.'; }
+  else { verdict = 'STRONG AVOID / SHORT CANDIDATE'; signal = 'Broken growth story with institutional liquidation. The path of least resistance is lower.'; }
+
+  return { verdict, signal, reasoning };
+}
+
+router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
+  const symbol = decodeURIComponent(req.params.symbol as string).toUpperCase();
+
+  try {
+    // Fetch stock data + SPY benchmark in parallel
+    const [stockBars, spyBars] = await Promise.all([
+      fetchTickerBars(symbol, 2),
+      fetchTickerBars('SPY', 2),
+    ]);
+
+    if (stockBars.length < 50) {
+      return res.status(404).json({ error: `Insufficient data for ${symbol} (got ${stockBars.length} bars, need 50+)` });
+    }
+
+    // Compute TA
+    const spyCloses = spyBars.map(b => b.close);
+    const ta = computeExtendedTA(symbol, symbol, stockBars.map(b => ({
+      date: b.date, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume,
+    })), spyCloses);
+
+    if (!ta) {
+      return res.status(400).json({ error: 'TA computation failed' });
+    }
+
+    // Phase classification
+    const neutralAccel = { rocAccel: null, logAccelSmooth: null, emaAccel: null, trend: 'neutral' as const, recentSignals: [] };
+    const nullFund = { revenueGrowthYoY: null, epsGrowthYoY: null, operatingMargin: null, netMargin: null, roic: null, fcfYield: null, debtToEquity: null, piotroskiFScore: null, currentRatio: null };
+    const nullVal = { peForward: null, evToEbitda: null, pegRatio: null, fcfYield: null, pePctile: null, gfValueMargin: null };
+    const phaseResult = computeFullInflection(symbol, symbol, stockBars, spyCloses, neutralAccel, nullFund, nullVal, {});
+
+    // 1. Relative Strength vs sector peers
+    // Auto-detect sector from GuruFocus or use SPY as default
+    const sectorMap = SECTOR_ETF_MAP;
+    // Try to match by fetching the first ETF pair — for now use SPY + RSP as default
+    // We'll enhance this with GuruFocus sector detection later
+    let primaryETF = 'SPY';
+    let secondaryETF = 'RSP';
+    let sectorName = 'Broad Market';
+
+    // Fetch peer ETF bars for ratio computation
+    const [peer1Bars, peer2Bars] = await Promise.all([
+      fetchTickerBars(primaryETF, 2),
+      fetchTickerBars(secondaryETF, 2),
+    ]);
+
+    const rs1 = computeRelativeStrengthSeries(stockBars, peer1Bars);
+    const rs2 = computeRelativeStrengthSeries(stockBars, peer2Bars);
+
+    // 2. Price anchors (already in ta)
+    const price = stockBars[stockBars.length - 1].close;
+    const pctFrom52wHigh = ta.highLow ? ta.highLow.pctFromHigh : null;
+
+    // 3. Volume demand
+    const upDownRatio = computeUpDownVolumeRatio(stockBars, 20);
+
+    // 4. Earnings reactions
+    const earningsReactions = findEarningsReactions(stockBars);
+
+    // 5. Failed breakdowns
+    const failedBreakdownCount = ta.failedBreaks.filter(b => b.type === 'failed_breakdown').length;
+
+    // Verdict
+    const verdict = generateVerdict(
+      upDownRatio, ta.priceVsSma200, pctFrom52wHigh,
+      failedBreakdownCount, earningsReactions, ta.sma50Above200,
+    );
+
+    // Phase mapping for display
+    const phaseDisplayMap: Record<string, { num: number; short: string }> = {
+      SELLING_EXHAUSTION: { num: 1, short: 'P1 Buy' },
+      NARRATIVE_COLLAPSE: { num: 1, short: 'P1 Buy' },
+      NARRATIVE_EXPANSION: { num: 2, short: 'P2 Ride' },
+      INSTITUTIONAL_ACCUMULATION: { num: 3, short: 'P3 Trim' },
+      BUYING_EXHAUSTION: { num: 4, short: 'P4 Exit' },
+      NARRATIVE_REVERSAL: { num: 5, short: 'P5 Avoid' },
+    };
+
+    const phaseInfo = phaseResult ? phaseDisplayMap[phaseResult.phase.phase] || { num: 0, short: '?' } : null;
+
+    res.json({
+      symbol,
+      price: Math.round(price * 100) / 100,
+
+      // Phase
+      phase: phaseResult ? {
+        phase: phaseResult.phase.phase,
+        phaseNum: phaseInfo?.num,
+        phaseShort: phaseInfo?.short,
+        confidence: phaseResult.phase.confidence,
+        actionBias: phaseResult.phase.actionBias,
+        description: phaseResult.phase.description,
+        transitionSignals: phaseResult.phase.transitionSignals || [],
+      } : null,
+
+      // 1. Relative strength ratios
+      relativeStrength: {
+        primary: { etf: primaryETF, name: sectorName, dates: rs1.dates, ratios: rs1.ratios },
+        secondary: { etf: secondaryETF, name: 'Equal Weight', dates: rs2.dates, ratios: rs2.ratios },
+      },
+
+      // 2. Structural anchors
+      anchors: {
+        price,
+        high52w: ta.highLow?.high52w || null,
+        pctFrom52wHigh: pctFrom52wHigh !== null ? Math.round(pctFrom52wHigh * 10) / 10 : null,
+        sma200: ta.sma200,
+        priceVs200d: ta.priceVsSma200,
+        sma50: ta.sma50,
+        sma50Above200: ta.sma50Above200,
+      },
+
+      // 3. Volume demand
+      volumeDemand: {
+        upDownRatio,
+        signal: upDownRatio === null ? 'UNKNOWN' :
+          upDownRatio > 1.5 ? 'HEAVY_ACCUMULATION' :
+          upDownRatio > 1.1 ? 'MILD_BUYING' :
+          upDownRatio > 0.9 ? 'EQUILIBRIUM' :
+          upDownRatio > 0.7 ? 'MILD_DISTRIBUTION' : 'HEAVY_DISTRIBUTION',
+      },
+
+      // 4. Earnings reactions
+      earningsReactions,
+
+      // 5. Failed breakdowns
+      failedBreakdowns: {
+        count: failedBreakdownCount,
+        details: ta.failedBreaks.filter(b => b.type === 'failed_breakdown'),
+      },
+
+      // TA details
+      ta: {
+        rsi14: ta.rsi14,
+        macdHistogram: ta.macd?.histogram,
+        macdHistSlope: ta.macdHistSlope,
+        atrPct: ta.atrPct,
+        extensionVelocity: ta.extensionVelocity,
+        daysSinceCross200d: ta.daysSinceCross200d,
+        goldenCross: ta.goldenCross,
+        deathCross: ta.deathCross,
+      },
+
+      // Verdict
+      verdict,
+
+      // Price history for charting
+      priceHistory: {
+        dates: stockBars.slice(-252).map(b => b.date),
+        closes: stockBars.slice(-252).map(b => b.close),
+        volumes: stockBars.slice(-252).map(b => b.volume),
+        sma50: stockBars.length >= 50 ? (() => {
+          const c = stockBars.map(b => b.close);
+          const arr: (number|null)[] = [];
+          for (let i = 0; i < c.length; i++) {
+            if (i < 49) { arr.push(null); continue; }
+            arr.push(c.slice(i-49, i+1).reduce((a,b) => a+b, 0) / 50);
+          }
+          return arr.slice(-252);
+        })() : [],
+        sma200: stockBars.length >= 200 ? (() => {
+          const c = stockBars.map(b => b.close);
+          const arr: (number|null)[] = [];
+          for (let i = 0; i < c.length; i++) {
+            if (i < 199) { arr.push(null); continue; }
+            arr.push(c.slice(i-199, i+1).reduce((a,b) => a+b, 0) / 200);
+          }
+          return arr.slice(-252);
+        })() : [],
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Analysis failed' });
   }
 });
 
