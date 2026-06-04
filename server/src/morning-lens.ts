@@ -1771,72 +1771,82 @@ const SECTOR_ETF_MAP: Record<string, { primary: string; secondary: string; name:
   'default': { primary: 'SPY', secondary: 'RSP', name: 'Broad Market' },
 };
 
-// Warm up yahoo-finance2 crumb token by fetching a known symbol
-let yfWarmedUp = false;
-async function warmUpYahoo(): Promise<void> {
-  if (yfWarmedUp) return;
-  try {
-    // A simple quote call establishes the crumb/cookie
-    await yahooFinance.chart('SPY', {
-      period1: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-      period2: new Date(),
-      interval: '1d' as any,
-    }, { validateResult: false });
-    yfWarmedUp = true;
-    console.log('[TICKER] Yahoo Finance crumb token warmed up');
-  } catch (err: any) {
-    console.warn('[TICKER] Yahoo warmup failed:', err?.message);
-  }
-}
-
 async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCVBar[]> {
-  // Ensure yahoo-finance2 crumb token is initialized
-  await warmUpYahoo();
+  // Try Yahoo Finance first via library, then fall back to GuruFocus price API
 
-  const maxRetries = 3;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setFullYear(startDate.getFullYear() - years);
+  // Attempt 1: Yahoo Finance (same method as morning lens ETF fetcher)
+  try {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setFullYear(startDate.getFullYear() - years);
 
-      const result = await yahooFinance.chart(symbol, {
-        period1: startDate,
-        period2: endDate,
-        interval: '1d' as any,
-      }, { validateResult: false }) as any;
+    const result = await yahooFinance.chart(symbol, {
+      period1: startDate,
+      period2: endDate,
+      interval: '1d' as any,
+    }, { validateResult: false }) as any;
 
-      const quotes = result?.quotes || result || [];
-      if (!quotes || !Array.isArray(quotes) || quotes.length === 0) {
-        if (attempt < maxRetries) {
-          console.warn(`[TICKER] No data for ${symbol} (attempt ${attempt}/${maxRetries}), retrying in ${attempt * 3}s...`);
-          await new Promise(r => setTimeout(r, attempt * 3000));
-          continue;
-        }
-        return [];
-      }
+    const quotes = result?.quotes || result || [];
+    if (quotes && Array.isArray(quotes) && quotes.length >= 50) {
+      console.log(`[TICKER] Yahoo returned ${quotes.length} bars for ${symbol}`);
+      return quotes
+        .filter((q: any) => q.close !== null && q.close !== undefined)
+        .map((q: any) => ({
+          date: new Date(q.date).toISOString().split('T')[0],
+          open: q.open || q.close,
+          high: q.high || q.close,
+          low: q.low || q.close,
+          close: q.close,
+          volume: q.volume || 0,
+        }));
+    }
+    console.warn(`[TICKER] Yahoo returned ${quotes?.length || 0} bars for ${symbol}, trying GuruFocus...`);
+  } catch (err: any) {
+    console.warn(`[TICKER] Yahoo failed for ${symbol}: ${err?.message}, trying GuruFocus...`);
+  }
 
-    return quotes
-      .filter((q: any) => q.close !== null && q.close !== undefined)
-      .map((q: any) => ({
-        date: new Date(q.date).toISOString().split('T')[0],
-        open: q.open || q.close,
-        high: q.high || q.close,
-        low: q.low || q.close,
-        close: q.close,
-        volume: q.volume || 0,
-      }));
-    } catch (err: any) {
-      if (attempt < maxRetries) {
-        console.warn(`[TICKER] Error for ${symbol} (attempt ${attempt}/${maxRetries}): ${err?.message}, retrying...`);
-        await new Promise(r => setTimeout(r, attempt * 3000));
-        continue;
-      }
-      console.error(`[TICKER] yahoo-finance2 failed for ${symbol} after ${maxRetries} attempts:`, err?.message);
+  // Attempt 2: GuruFocus price API (reliable backup — has daily prices going back decades)
+  try {
+    const url = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${encodeURIComponent(symbol)}/price`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`[TICKER] GuruFocus also failed for ${symbol}: HTTP ${response.status}`);
       return [];
     }
+    const priceData: any = await response.json();
+    if (!Array.isArray(priceData) || priceData.length < 50) {
+      console.error(`[TICKER] GuruFocus returned ${priceData?.length || 0} prices for ${symbol}`);
+      return [];
+    }
+
+    // GuruFocus returns [["MM-DD-YYYY", price], ...] — close-only, no OHLCV
+    // We use close for open/high/low and 0 for volume (sufficient for TA)
+    const cutoffDate = new Date();
+    cutoffDate.setFullYear(cutoffDate.getFullYear() - years);
+    const cutoffStr = cutoffDate.toISOString().split('T')[0];
+
+    const bars: OHLCVBar[] = [];
+    for (const entry of priceData) {
+      if (!Array.isArray(entry) || entry.length < 2) continue;
+      const rawDate = entry[0] as string;  // "MM-DD-YYYY"
+      const price = entry[1] as number;
+      if (price === null || price === undefined || price <= 0) continue;
+
+      // Parse MM-DD-YYYY to YYYY-MM-DD
+      const parts = rawDate.split('-');
+      if (parts.length !== 3) continue;
+      const isoDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+      if (isoDate < cutoffStr) continue;
+
+      bars.push({ date: isoDate, open: price, high: price, low: price, close: price, volume: 0 });
+    }
+
+    console.log(`[TICKER] GuruFocus returned ${bars.length} price bars for ${symbol} (close-only, no volume)`);
+    return bars;
+  } catch (err: any) {
+    console.error(`[TICKER] Both Yahoo and GuruFocus failed for ${symbol}:`, err?.message);
+    return [];
   }
-  return [];
 }
 
 
