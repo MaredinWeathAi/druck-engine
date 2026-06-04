@@ -659,6 +659,10 @@ export function initWatchlistTable(): void {
       price REAL,
       phase_num INTEGER,
       phase_short TEXT,
+      prev_phase_num INTEGER,
+      prev_phase_short TEXT,
+      phase_changed_at TEXT,
+      phase_change_direction TEXT,
       verdict TEXT,
       archetype TEXT,
       signal TEXT,
@@ -671,6 +675,28 @@ export function initWatchlistTable(): void {
       narrative TEXT,
       reasoning TEXT,
       full_data TEXT
+    )
+  `);
+
+  // Add phase change columns if they don't exist (migration for existing DBs)
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN prev_phase_num INTEGER'); } catch {}
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN prev_phase_short TEXT'); } catch {}
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN phase_changed_at TEXT'); } catch {}
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN phase_change_direction TEXT'); } catch {}
+
+  // Phase change history log
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS watchlist_phase_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      symbol TEXT NOT NULL,
+      changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      from_phase_num INTEGER,
+      from_phase_short TEXT,
+      to_phase_num INTEGER,
+      to_phase_short TEXT,
+      direction TEXT,
+      price_at_change REAL,
+      verdict_at_change TEXT
     )
   `);
 }
@@ -693,6 +719,15 @@ export function removeWatchlistTicker(symbol: string): void {
   } catch {}
 }
 
+export function getWatchlistPhaseLog(symbol?: string): any[] {
+  try {
+    if (symbol) {
+      return db.prepare('SELECT * FROM watchlist_phase_log WHERE symbol = ? ORDER BY changed_at DESC LIMIT 50').all(symbol.toUpperCase());
+    }
+    return db.prepare('SELECT * FROM watchlist_phase_log ORDER BY changed_at DESC LIMIT 100').all();
+  } catch { return []; }
+}
+
 export function updateWatchlistAnalysis(symbol: string, data: any): void {
   try {
     const phase = data.phase || {};
@@ -700,6 +735,29 @@ export function updateWatchlistAnalysis(symbol: string, data: any): void {
     const anchors = data.anchors || {};
     const vd = data.volumeDemand || {};
     const fb = data.failedBreakdowns || {};
+    const newPhaseNum = phase.phaseNum || null;
+    const newPhaseShort = phase.phaseShort || null;
+
+    // Detect phase change — compare with current stored phase
+    const current = db.prepare('SELECT phase_num, phase_short, price FROM watchlist WHERE symbol = ?').get(symbol.toUpperCase()) as any;
+    const oldPhaseNum = current?.phase_num || null;
+    const oldPhaseShort = current?.phase_short || null;
+
+    let phaseChanged = false;
+    let changeDirection = '';
+    if (oldPhaseNum !== null && newPhaseNum !== null && oldPhaseNum !== newPhaseNum) {
+      phaseChanged = true;
+      // Lower phase number = more bullish in our system (P1=Buy, P5=Avoid)
+      changeDirection = newPhaseNum < oldPhaseNum ? 'IMPROVING' : 'WORSENING';
+
+      // Log the phase change
+      db.prepare(`
+        INSERT INTO watchlist_phase_log (symbol, from_phase_num, from_phase_short, to_phase_num, to_phase_short, direction, price_at_change, verdict_at_change)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(symbol.toUpperCase(), oldPhaseNum, oldPhaseShort, newPhaseNum, newPhaseShort, changeDirection, data.price || null, verdict.verdict || null);
+
+      console.log(`[WATCHLIST] ⚡ PHASE CHANGE: ${symbol} ${oldPhaseShort} → ${newPhaseShort} (${changeDirection})`);
+    }
 
     db.prepare(`
       UPDATE watchlist SET
@@ -707,6 +765,10 @@ export function updateWatchlistAnalysis(symbol: string, data: any): void {
         price = ?,
         phase_num = ?,
         phase_short = ?,
+        prev_phase_num = ?,
+        prev_phase_short = ?,
+        phase_changed_at = CASE WHEN ? = 1 THEN datetime('now') ELSE phase_changed_at END,
+        phase_change_direction = CASE WHEN ? = 1 THEN ? ELSE phase_change_direction END,
         verdict = ?,
         archetype = ?,
         signal = ?,
@@ -722,8 +784,13 @@ export function updateWatchlistAnalysis(symbol: string, data: any): void {
       WHERE symbol = ?
     `).run(
       data.price || null,
-      phase.phaseNum || null,
-      phase.phaseShort || null,
+      newPhaseNum,
+      newPhaseShort,
+      oldPhaseNum,  // prev_phase_num
+      oldPhaseShort, // prev_phase_short
+      phaseChanged ? 1 : 0, // phase_changed_at condition
+      phaseChanged ? 1 : 0, // phase_change_direction condition
+      changeDirection || null, // phase_change_direction value
       verdict.verdict || null,
       verdict.archetype || null,
       verdict.signal || null,

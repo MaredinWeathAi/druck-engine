@@ -4594,6 +4594,9 @@ function loadWatchlist() {
           narrative: item.narrative,
           _fromServer: true,
           _lastAnalyzed: item.last_analyzed,
+          _prevPhase: item.prev_phase_short,
+          _phaseChangedAt: item.phase_changed_at,
+          _phaseChangeDirection: item.phase_change_direction,
         };
       }
     });
@@ -4699,11 +4702,16 @@ function renderWatchlistTable() {
       if (opinion.length > 200) opinion = opinion.substring(0, 200) + '...';
     }
 
-    html += '<tr onclick="document.getElementById(\'ticker-input\').value=\'' + sym + '\';showPage(\'ticker\');analyzeTickerFn()" style="cursor:pointer">';
+    var rowHighlight = (d._phaseChangeDirection === 'IMPROVING') ? 'background:rgba(29,158,117,0.08);border-left:3px solid #1D9E75;' : (d._phaseChangeDirection === 'WORSENING') ? 'background:rgba(226,75,74,0.08);border-left:3px solid #E24B4A;' : '';
+    html += '<tr onclick="document.getElementById(\'ticker-input\').value=\'' + sym + '\';showPage(\'ticker\');analyzeTickerFn()" style="cursor:pointer;' + rowHighlight + '">';
     html += '<td><button onclick="event.stopPropagation();removeFromWatchlist(\'' + sym + '\')" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:10px">✕</button></td>';
     html += '<td style="font-weight:700;color:var(--accent)">' + sym + '</td>';
     html += '<td style="font-size:12px">$' + (d.price ? d.price.toFixed(2) : '—') + '</td>';
-    html += '<td><span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:500;background:' + pc + '18;color:' + pc + '">' + (phase.phaseShort || '—') + '</span></td>';
+    // Phase cell with change indicator
+    var phaseChanged = d._phaseChangeDirection && d._phaseChangedAt;
+    var changeBorder = phaseChanged ? (d._phaseChangeDirection === 'IMPROVING' ? ';box-shadow:0 0 8px rgba(29,158,117,0.5);animation:pulse 2s infinite' : ';box-shadow:0 0 8px rgba(226,75,74,0.5);animation:pulse 2s infinite') : '';
+    var changeArrow = phaseChanged ? (d._phaseChangeDirection === 'IMPROVING' ? ' <span style="color:#1D9E75;font-size:9px">▲ from ' + (d._prevPhase || '?') + '</span>' : ' <span style="color:#E24B4A;font-size:9px">▼ from ' + (d._prevPhase || '?') + '</span>') : '';
+    html += '<td><span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:500;background:' + pc + '18;color:' + pc + changeBorder + '">' + (phase.phaseShort || '—') + '</span>' + changeArrow + '</td>';
     html += '<td style="font-size:11px;font-weight:500;color:' + vc + '">' + (v.verdict || '—') + '</td>';
     var archLabels = { BROKEN_GROWTH: 'Broken Growth', EVENT_OVERCORRECTION: 'Over-Correction', STRUCTURAL_TURNAROUND: 'Turnaround', CONFIRMED_UPTREND: 'Uptrend', LATE_CYCLE: 'Late Cycle', COILED_SPRING: 'Coiled Spring', CAPITULATION_FORMING: 'Capitulation', BULLISH_TAPE: 'Bullish', BEARISH_TAPE: 'Bearish', NEUTRAL: 'Neutral' };
     html += '<td style="font-size:10px;color:var(--dim)">' + (archLabels[v.archetype] || v.archetype || '—') + '</td>';

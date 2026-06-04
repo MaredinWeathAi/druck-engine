@@ -1031,26 +1031,60 @@ async function refreshMorningLens() {
 const INTRADAY_REFRESH_MS = 2 * 60 * 60 * 1000; // 2 hours
 setInterval(() => {
     refreshMorningLens().catch(err => console.error('[LENS] Auto-refresh error:', err));
-    // Pre-fetch watchlist tickers during the refresh cycle (10s after lens refresh starts)
+    // Watchlist monitoring — full re-analysis every refresh cycle to detect phase changes
     setTimeout(async () => {
         try {
             const watchlistItems = (0, history_store_1.getWatchlist)();
             if (watchlistItems.length === 0)
                 return;
-            console.log(`[WATCHLIST] Pre-fetching ${watchlistItems.length} watchlist tickers...`);
+            console.log(`[WATCHLIST] Monitoring ${watchlistItems.length} tickers for phase changes...`);
+            let changes = 0;
             for (const item of watchlistItems) {
                 try {
-                    await fetchTickerBars(item.symbol, 2); // Just warm the cache
+                    // Fetch price data (uses cache if fresh, otherwise fetches)
+                    const bars = await fetchTickerBars(item.symbol, 2);
+                    if (bars.length < 50)
+                        continue;
+                    // Run phase classification
+                    const spyBars = await fetchTickerBars('SPY', 2);
+                    const spyCloses = spyBars.map((b) => b.close);
+                    const ta = (0, inflection_engine_1.computeExtendedTA)(item.symbol, item.symbol, bars.map((b) => ({ date: b.date, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume })), spyCloses);
+                    if (!ta)
+                        continue;
+                    const neutralAccel = { rocAccel: null, logAccelSmooth: null, emaAccel: null, trend: 'neutral', recentSignals: [] };
+                    const nullFund = { revenueGrowthYoY: null, epsGrowthYoY: null, operatingMargin: null, netMargin: null, roic: null, fcfYield: null, debtToEquity: null, piotroskiFScore: null, currentRatio: null };
+                    const nullVal = { peForward: null, evToEbitda: null, pegRatio: null, fcfYield: null, pePctile: null, gfValueMargin: null };
+                    const phaseResult = (0, inflection_engine_1.computeFullInflection)(item.symbol, item.symbol, bars, spyCloses, neutralAccel, nullFund, nullVal, {});
+                    if (!phaseResult)
+                        continue;
+                    const phaseDisplayMap = {
+                        SELLING_EXHAUSTION: { num: 1, short: 'P1 Buy' }, NARRATIVE_COLLAPSE: { num: 1, short: 'P1 Buy' },
+                        NARRATIVE_EXPANSION: { num: 2, short: 'P2 Ride' }, INSTITUTIONAL_ACCUMULATION: { num: 3, short: 'P3 Trim' },
+                        BUYING_EXHAUSTION: { num: 4, short: 'P4 Exit' }, NARRATIVE_REVERSAL: { num: 5, short: 'P5 Avoid' },
+                    };
+                    const pi = phaseDisplayMap[phaseResult.phase.phase] || { num: 0, short: '?' };
+                    // Update watchlist — this triggers phase change detection in updateWatchlistAnalysis
+                    (0, history_store_1.updateWatchlistAnalysis)(item.symbol, {
+                        price: bars[bars.length - 1].close,
+                        phase: { phaseNum: pi.num, phaseShort: pi.short },
+                        verdict: { verdict: '', archetype: '', signal: '', reasoning: [] },
+                        anchors: { priceVs200d: ta.priceVsSma200, pctFrom52wHigh: ta.highLow?.pctFromHigh, sma50Above200: ta.sma50Above200 },
+                        volumeDemand: { upDownRatio: null },
+                        failedBreakdowns: { count: ta.failedBreaks.filter((b) => b.type === 'failed_breakdown').length },
+                    });
+                    // Check if phase changed
+                    if (item.phase_num && pi.num !== item.phase_num)
+                        changes++;
                 }
                 catch { }
-                await new Promise(r => setTimeout(r, 1500)); // Rate limit
+                await new Promise(r => setTimeout(r, 2000));
             }
-            console.log(`[WATCHLIST] Pre-fetch complete for ${watchlistItems.length} tickers`);
+            console.log(`[WATCHLIST] Monitoring complete — ${changes} phase change(s) detected`);
         }
         catch (err) {
-            console.error('[WATCHLIST] Pre-fetch error:', err?.message);
+            console.error('[WATCHLIST] Monitoring error:', err?.message);
         }
-    }, 10000);
+    }, 30000); // Start 30s after main refresh to let ETFs load first
 }, INTRADAY_REFRESH_MS);
 // ─── ARIA NARRATIVE ───
 async function generateAriaNarrative(apiKey) {
@@ -2210,6 +2244,11 @@ router.post('/lens/watchlist/update', (req, res) => {
         return res.status(400).json({ error: 'Symbol and data required' });
     (0, history_store_1.updateWatchlistAnalysis)(symbol, data);
     res.json({ ok: true, symbol: symbol.toUpperCase() });
+});
+router.get('/lens/watchlist/phase-log', (req, res) => {
+    const symbol = req.query.symbol;
+    const log = (0, history_store_1.getWatchlistPhaseLog)(symbol);
+    res.json({ count: log.length, log });
 });
 exports.default = router;
 //# sourceMappingURL=morning-lens.js.map
