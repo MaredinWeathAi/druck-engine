@@ -13,6 +13,7 @@ import {
   recordSnapshotBatch, recordTransitionBatch,
   updateTransitionOutcomes,
   SnapshotRecord, TransitionRecord,
+  getWatchlist, addWatchlistTicker, removeWatchlistTicker, updateWatchlistAnalysis,
 } from './history-store';
 
 const router = Router();
@@ -2337,6 +2338,38 @@ CRITICAL: You only have technical data, not fundamental data. Acknowledge what y
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Analysis failed' });
   }
+});
+
+// ═══ Watchlist API — persistent server-side storage ═══
+
+router.get('/lens/watchlist', (_req: Request, res: Response) => {
+  try {
+    const items = getWatchlist();
+    res.json({ count: items.length, items });
+  } catch (err: any) {
+    res.json({ count: 0, items: [], error: err?.message });
+  }
+});
+
+router.post('/lens/watchlist/add', (req: Request, res: Response) => {
+  const { symbol } = req.body;
+  if (!symbol) return res.status(400).json({ error: 'Symbol required' });
+  addWatchlistTicker(symbol);
+  res.json({ ok: true, symbol: symbol.toUpperCase() });
+});
+
+router.post('/lens/watchlist/remove', (req: Request, res: Response) => {
+  const { symbol } = req.body;
+  if (!symbol) return res.status(400).json({ error: 'Symbol required' });
+  removeWatchlistTicker(symbol);
+  res.json({ ok: true, symbol: symbol.toUpperCase() });
+});
+
+router.post('/lens/watchlist/update', (req: Request, res: Response) => {
+  const { symbol, data } = req.body;
+  if (!symbol || !data) return res.status(400).json({ error: 'Symbol and data required' });
+  updateWatchlistAnalysis(symbol, data);
+  res.json({ ok: true, symbol: symbol.toUpperCase() });
 });
 
 export default router;

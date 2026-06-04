@@ -4482,75 +4482,81 @@ function renderFsSortedRows() {
 // WATCHLIST
 // ═══════════════════════════════════════════════
 
-var wlData = {};  // cached analysis results keyed by symbol
-
-function getWatchlistTickers() {
-  try { return JSON.parse(localStorage.getItem('wl_tickers') || '[]'); } catch(e) { return []; }
-}
-
-function saveWatchlistTickers(tickers) {
-  try { localStorage.setItem('wl_tickers', JSON.stringify(tickers)); } catch(e) {}
-}
+var wlData = {};  // in-memory cache of analysis results
+var wlItems = []; // server-side watchlist items
 
 function addToWatchlist() {
   var input = document.getElementById('wl-input');
   var sym = (input.value || '').trim().toUpperCase();
   if (!sym) return;
-  var tickers = getWatchlistTickers();
-  if (tickers.indexOf(sym) !== -1) { input.value = ''; return; } // already in list
-  tickers.push(sym);
-  saveWatchlistTickers(tickers);
   input.value = '';
-  renderWatchlistTable();
-  fetchWatchlistTicker(sym);
+  apiCall('/api/lens/watchlist/add', 'POST', { symbol: sym }).then(function() {
+    loadWatchlist();
+    // Auto-analyze the new ticker
+    fetchWatchlistTicker(sym);
+  });
 }
 
 function removeFromWatchlist(sym) {
-  var tickers = getWatchlistTickers().filter(function(t) { return t !== sym; });
-  saveWatchlistTickers(tickers);
-  delete wlData[sym];
-  renderWatchlistTable();
+  apiCall('/api/lens/watchlist/remove', 'POST', { symbol: sym }).then(function() {
+    delete wlData[sym];
+    loadWatchlist();
+  });
 }
 
 function loadWatchlist() {
-  renderWatchlistTable();
-  // Auto-refresh tickers that don't have cached data
-  var tickers = getWatchlistTickers();
-  tickers.forEach(function(sym) {
-    if (!wlData[sym]) fetchWatchlistTicker(sym);
+  apiCall('/api/lens/watchlist').then(function(data) {
+    wlItems = (data && data.items) || [];
+    // Populate wlData from server-stored analysis
+    wlItems.forEach(function(item) {
+      if (item.verdict && !wlData[item.symbol]) {
+        wlData[item.symbol] = {
+          price: item.price,
+          phase: { phaseNum: item.phase_num, phaseShort: item.phase_short },
+          verdict: { verdict: item.verdict, archetype: item.archetype, signal: item.signal, reasoning: item.reasoning ? JSON.parse(item.reasoning) : [] },
+          anchors: { priceVs200d: item.price_vs_200d, pctFrom52wHigh: item.pct_from_52w_high, sma50Above200: !!item.golden_cross },
+          volumeDemand: { upDownRatio: item.up_down_ratio },
+          failedBreakdowns: { count: item.failed_breakdowns },
+          sectorDetected: item.sector,
+          narrative: item.narrative,
+          _fromServer: true,
+          _lastAnalyzed: item.last_analyzed,
+        };
+      }
+    });
+    renderWatchlistTable();
   });
 }
 
 function refreshAllWatchlist() {
-  wlData = {};
-  renderWatchlistTable();
-  var tickers = getWatchlistTickers();
+  var tickers = wlItems.map(function(i) { return i.symbol; });
   var status = document.getElementById('wl-status');
   if (status) status.textContent = 'Refreshing ' + tickers.length + ' tickers...';
   var idx = 0;
   function fetchNext() {
     if (idx >= tickers.length) {
-      if (status) status.textContent = 'All ' + tickers.length + ' tickers refreshed';
+      if (status) status.textContent = 'All ' + tickers.length + ' tickers refreshed at ' + new Date().toLocaleTimeString();
       return;
     }
     var sym = tickers[idx];
     if (status) status.textContent = 'Analyzing ' + sym + ' (' + (idx+1) + '/' + tickers.length + ')...';
     fetchWatchlistTicker(sym, function() {
       idx++;
-      setTimeout(fetchNext, 500); // slight delay to avoid hammering the API
+      setTimeout(fetchNext, 500);
     });
   }
   fetchNext();
 }
 
 function fetchWatchlistTicker(sym, callback) {
-  // Mark as loading
   wlData[sym] = { loading: true };
   renderWatchlistTable();
 
   apiCall('/api/lens/ticker/' + encodeURIComponent(sym)).then(function(d) {
     if (d && !d.error) {
       wlData[sym] = d;
+      // Persist to server
+      apiCall('/api/lens/watchlist/update', 'POST', { symbol: sym, data: d }).catch(function(){});
     } else {
       wlData[sym] = { error: d ? d.error : 'No data' };
     }
@@ -4564,7 +4570,7 @@ function fetchWatchlistTicker(sym, callback) {
 }
 
 function renderWatchlistTable() {
-  var tickers = getWatchlistTickers();
+  var tickers = wlItems.map(function(i) { return i.symbol; });
   var tbody = document.getElementById('wl-tbody');
   if (!tbody) return;
 

@@ -31,6 +31,11 @@ exports.getSnapshotsByDate = getSnapshotsByDate;
 exports.updateTransitionOutcomes = updateTransitionOutcomes;
 exports.computeAccuracyMetrics = computeAccuracyMetrics;
 exports.getDbStats = getDbStats;
+exports.initWatchlistTable = initWatchlistTable;
+exports.getWatchlist = getWatchlist;
+exports.addWatchlistTicker = addWatchlistTicker;
+exports.removeWatchlistTicker = removeWatchlistTicker;
+exports.updateWatchlistAnalysis = updateWatchlistAnalysis;
 exports.closeDatabase = closeDatabase;
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const path_1 = __importDefault(require("path"));
@@ -59,6 +64,8 @@ function initDatabase() {
       approval_note TEXT
     )
   `);
+    // Watchlist table
+    initWatchlistTable();
     // Seed initial version if none exists
     const versionCount = db.prepare('SELECT COUNT(*) as cnt FROM algorithm_versions').get();
     if (versionCount.cnt === 0) {
@@ -543,6 +550,85 @@ function getDbStats() {
         dbPath: DB_PATH,
         dbSizeBytes: fs_1.default.existsSync(DB_PATH) ? fs_1.default.statSync(DB_PATH).size : 0,
     };
+}
+// ═══════════════════════════════════════════════════════════════════
+// WATCHLIST — Persistent ticker tracking with analysis snapshots
+// ═══════════════════════════════════════════════════════════════════
+function initWatchlistTable() {
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS watchlist (
+      symbol TEXT PRIMARY KEY,
+      added_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_analyzed TEXT,
+      price REAL,
+      phase_num INTEGER,
+      phase_short TEXT,
+      verdict TEXT,
+      archetype TEXT,
+      signal TEXT,
+      up_down_ratio REAL,
+      price_vs_200d REAL,
+      pct_from_52w_high REAL,
+      failed_breakdowns INTEGER,
+      golden_cross INTEGER,
+      sector TEXT,
+      narrative TEXT,
+      reasoning TEXT,
+      full_data TEXT
+    )
+  `);
+}
+function getWatchlist() {
+    try {
+        return db.prepare('SELECT * FROM watchlist ORDER BY added_at DESC').all();
+    }
+    catch {
+        return [];
+    }
+}
+function addWatchlistTicker(symbol) {
+    try {
+        db.prepare('INSERT OR IGNORE INTO watchlist (symbol) VALUES (?)').run(symbol.toUpperCase());
+    }
+    catch { }
+}
+function removeWatchlistTicker(symbol) {
+    try {
+        db.prepare('DELETE FROM watchlist WHERE symbol = ?').run(symbol.toUpperCase());
+    }
+    catch { }
+}
+function updateWatchlistAnalysis(symbol, data) {
+    try {
+        const phase = data.phase || {};
+        const verdict = data.verdict || {};
+        const anchors = data.anchors || {};
+        const vd = data.volumeDemand || {};
+        const fb = data.failedBreakdowns || {};
+        db.prepare(`
+      UPDATE watchlist SET
+        last_analyzed = datetime('now'),
+        price = ?,
+        phase_num = ?,
+        phase_short = ?,
+        verdict = ?,
+        archetype = ?,
+        signal = ?,
+        up_down_ratio = ?,
+        price_vs_200d = ?,
+        pct_from_52w_high = ?,
+        failed_breakdowns = ?,
+        golden_cross = ?,
+        sector = ?,
+        narrative = ?,
+        reasoning = ?,
+        full_data = ?
+      WHERE symbol = ?
+    `).run(data.price || null, phase.phaseNum || null, phase.phaseShort || null, verdict.verdict || null, verdict.archetype || null, verdict.signal || null, vd.upDownRatio || null, anchors.priceVs200d || null, anchors.pctFrom52wHigh || null, fb.count || 0, anchors.sma50Above200 ? 1 : 0, data.sectorDetected || null, data.narrative || null, JSON.stringify(verdict.reasoning || []), JSON.stringify(data), symbol.toUpperCase());
+    }
+    catch (err) {
+        console.error('[WATCHLIST] Update error:', err?.message);
+    }
 }
 function closeDatabase() {
     if (db)

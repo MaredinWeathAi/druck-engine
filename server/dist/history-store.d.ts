@@ -56,5 +56,10 @@ export declare function getSnapshotsByDate(date: string): any[];
 export declare function updateTransitionOutcomes(): number;
 export declare function computeAccuracyMetrics(algorithmVersion?: string): any;
 export declare function getDbStats(): any;
+export declare function initWatchlistTable(): void;
+export declare function getWatchlist(): any[];
+export declare function addWatchlistTicker(symbol: string): void;
+export declare function removeWatchlistTicker(symbol: string): void;
+export declare function updateWatchlistAnalysis(symbol: string, data: any): void;
 export declare function closeDatabase(): void;
 //# sourceMappingURL=history-store.d.ts.map

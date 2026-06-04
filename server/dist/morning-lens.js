@@ -2066,5 +2066,36 @@ CRITICAL: You only have technical data, not fundamental data. Acknowledge what y
         res.status(500).json({ error: err?.message || 'Analysis failed' });
     }
 });
+// ═══ Watchlist API — persistent server-side storage ═══
+router.get('/lens/watchlist', (_req, res) => {
+    try {
+        const items = (0, history_store_1.getWatchlist)();
+        res.json({ count: items.length, items });
+    }
+    catch (err) {
+        res.json({ count: 0, items: [], error: err?.message });
+    }
+});
+router.post('/lens/watchlist/add', (req, res) => {
+    const { symbol } = req.body;
+    if (!symbol)
+        return res.status(400).json({ error: 'Symbol required' });
+    (0, history_store_1.addWatchlistTicker)(symbol);
+    res.json({ ok: true, symbol: symbol.toUpperCase() });
+});
+router.post('/lens/watchlist/remove', (req, res) => {
+    const { symbol } = req.body;
+    if (!symbol)
+        return res.status(400).json({ error: 'Symbol required' });
+    (0, history_store_1.removeWatchlistTicker)(symbol);
+    res.json({ ok: true, symbol: symbol.toUpperCase() });
+});
+router.post('/lens/watchlist/update', (req, res) => {
+    const { symbol, data } = req.body;
+    if (!symbol || !data)
+        return res.status(400).json({ error: 'Symbol and data required' });
+    (0, history_store_1.updateWatchlistAnalysis)(symbol, data);
+    res.json({ ok: true, symbol: symbol.toUpperCase() });
+});
 exports.default = router;
 //# sourceMappingURL=morning-lens.js.map
