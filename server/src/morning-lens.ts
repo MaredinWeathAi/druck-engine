@@ -1772,20 +1772,30 @@ const SECTOR_ETF_MAP: Record<string, { primary: string; secondary: string; name:
 };
 
 async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCVBar[]> {
-  // Use the same yahoo-finance2 library + validateResult:false that works for ETFs
-  try {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setFullYear(startDate.getFullYear() - years);
+  // Use yahoo-finance2 library with retry logic (same as morning lens ETF fetcher)
+  // The library needs a warm crumb token — first call may fail, retries succeed
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setFullYear(startDate.getFullYear() - years);
 
-    const result = await yahooFinance.chart(symbol, {
-      period1: startDate,
-      period2: endDate,
-      interval: '1d' as any,
-    }, { validateResult: false }) as any;
+      const result = await yahooFinance.chart(symbol, {
+        period1: startDate,
+        period2: endDate,
+        interval: '1d' as any,
+      }, { validateResult: false }) as any;
 
-    const quotes = result?.quotes || result || [];
-    if (!quotes || !Array.isArray(quotes) || quotes.length === 0) return [];
+      const quotes = result?.quotes || result || [];
+      if (!quotes || !Array.isArray(quotes) || quotes.length === 0) {
+        if (attempt < maxRetries) {
+          console.warn(`[TICKER] No data for ${symbol} (attempt ${attempt}/${maxRetries}), retrying in ${attempt * 3}s...`);
+          await new Promise(r => setTimeout(r, attempt * 3000));
+          continue;
+        }
+        return [];
+      }
 
     return quotes
       .filter((q: any) => q.close !== null && q.close !== undefined)
@@ -1797,10 +1807,17 @@ async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCV
         close: q.close,
         volume: q.volume || 0,
       }));
-  } catch (err: any) {
-    console.error(`[TICKER] yahoo-finance2 failed for ${symbol}:`, err?.message);
-    return [];
+    } catch (err: any) {
+      if (attempt < maxRetries) {
+        console.warn(`[TICKER] Error for ${symbol} (attempt ${attempt}/${maxRetries}): ${err?.message}, retrying...`);
+        await new Promise(r => setTimeout(r, attempt * 3000));
+        continue;
+      }
+      console.error(`[TICKER] yahoo-finance2 failed for ${symbol} after ${maxRetries} attempts:`, err?.message);
+      return [];
+    }
   }
+  return [];
 }
 
 

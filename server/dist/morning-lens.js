@@ -1493,34 +1493,50 @@ const SECTOR_ETF_MAP = {
     'default': { primary: 'SPY', secondary: 'RSP', name: 'Broad Market' },
 };
 async function fetchTickerBars(symbol, years = 2) {
-    // Use the same yahoo-finance2 library + validateResult:false that works for ETFs
-    try {
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setFullYear(startDate.getFullYear() - years);
-        const result = await yahooFinance.chart(symbol, {
-            period1: startDate,
-            period2: endDate,
-            interval: '1d',
-        }, { validateResult: false });
-        const quotes = result?.quotes || result || [];
-        if (!quotes || !Array.isArray(quotes) || quotes.length === 0)
+    // Use yahoo-finance2 library with retry logic (same as morning lens ETF fetcher)
+    // The library needs a warm crumb token — first call may fail, retries succeed
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setFullYear(startDate.getFullYear() - years);
+            const result = await yahooFinance.chart(symbol, {
+                period1: startDate,
+                period2: endDate,
+                interval: '1d',
+            }, { validateResult: false });
+            const quotes = result?.quotes || result || [];
+            if (!quotes || !Array.isArray(quotes) || quotes.length === 0) {
+                if (attempt < maxRetries) {
+                    console.warn(`[TICKER] No data for ${symbol} (attempt ${attempt}/${maxRetries}), retrying in ${attempt * 3}s...`);
+                    await new Promise(r => setTimeout(r, attempt * 3000));
+                    continue;
+                }
+                return [];
+            }
+            return quotes
+                .filter((q) => q.close !== null && q.close !== undefined)
+                .map((q) => ({
+                date: new Date(q.date).toISOString().split('T')[0],
+                open: q.open || q.close,
+                high: q.high || q.close,
+                low: q.low || q.close,
+                close: q.close,
+                volume: q.volume || 0,
+            }));
+        }
+        catch (err) {
+            if (attempt < maxRetries) {
+                console.warn(`[TICKER] Error for ${symbol} (attempt ${attempt}/${maxRetries}): ${err?.message}, retrying...`);
+                await new Promise(r => setTimeout(r, attempt * 3000));
+                continue;
+            }
+            console.error(`[TICKER] yahoo-finance2 failed for ${symbol} after ${maxRetries} attempts:`, err?.message);
             return [];
-        return quotes
-            .filter((q) => q.close !== null && q.close !== undefined)
-            .map((q) => ({
-            date: new Date(q.date).toISOString().split('T')[0],
-            open: q.open || q.close,
-            high: q.high || q.close,
-            low: q.low || q.close,
-            close: q.close,
-            volume: q.volume || 0,
-        }));
+        }
     }
-    catch (err) {
-        console.error(`[TICKER] yahoo-finance2 failed for ${symbol}:`, err?.message);
-        return [];
-    }
+    return [];
 }
 function computeUpDownVolumeRatio(bars, period = 20) {
     if (bars.length < period)
