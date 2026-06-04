@@ -1999,34 +1999,70 @@ function renderPhaseTransitions(data, prefix) {
   }
 
   panel.classList.remove('empty');
+
+  // Split into improving and deteriorating
+  var improving = transitions.filter(function(t) { return t.direction === 'improving'; });
+  var deteriorating = transitions.filter(function(t) { return t.direction === 'deteriorating'; });
+  var other = transitions.filter(function(t) { return t.direction !== 'improving' && t.direction !== 'deteriorating'; });
+
+  // Update count to show split
+  countEl.innerHTML = transitions.length + ' <span style="font-size:10px;font-weight:400;opacity:0.7">(' +
+    (improving.length > 0 ? '<span style="color:#1D9E75">' + improving.length + ' improving</span>' : '') +
+    (improving.length > 0 && deteriorating.length > 0 ? ' / ' : '') +
+    (deteriorating.length > 0 ? '<span style="color:#E24B4A">' + deteriorating.length + ' worsening</span>' : '') +
+    ')</span>';
+
   // Auto-expand if there are critical transitions
   var hasCritical = transitions.some(function(t) { return t.severity === 'critical'; });
-  if (hasCritical) {
+  if (hasCritical || transitions.length > 0) {
     listEl.style.display = 'block';
     var hintEl = document.getElementById(prefix + 'pt-hint');
     if (hintEl) hintEl.textContent = 'click to collapse';
   }
 
-  var html = '';
-  transitions.forEach(function(t) {
+  function renderTransitionRow(t) {
     var dirArrow = t.direction === 'deteriorating' ? '▼' : (t.direction === 'improving' ? '▲' : '→');
-    var biasClass = t.toBias.toLowerCase().includes('buy') ? 'buy' : 'sell';
+    var biasClass = t.toBias.toLowerCase().includes('buy') || t.toBias.toLowerCase().includes('accumulate') ? 'buy' : 'sell';
     if (t.biasFlipped) biasClass += ' flipped';
 
-    html += '<div class="pt-item ' + t.severity + '" onclick="openEtfDetail(\'' + t.symbol + '\')" style="cursor:pointer" title="Click for full history">';
-    html += '<div class="pt-symbol">' + t.symbol + '</div>';
-    html += '<div class="pt-name">' + t.name + '</div>';
-    html += '<div class="pt-arrow">';
-    html += '<span class="pt-phase-from">' + t.fromPhaseShort + '</span>';
-    html += '<span class="pt-direction-arrow ' + t.direction + '">' + dirArrow + '</span>';
-    html += '<span class="pt-phase-to p' + t.toPhase + '">' + t.toPhaseShort + '</span>';
+    var row = '<div class="pt-item ' + t.severity + '" onclick="openEtfDetail(\'' + t.symbol + '\')" style="cursor:pointer" title="Click for full history">';
+    row += '<div class="pt-symbol">' + t.symbol + '</div>';
+    row += '<div class="pt-name">' + t.name + '</div>';
+    row += '<div class="pt-arrow">';
+    row += '<span class="pt-phase-from">' + t.fromPhaseShort + '</span>';
+    row += '<span class="pt-direction-arrow ' + t.direction + '">' + dirArrow + '</span>';
+    row += '<span class="pt-phase-to p' + t.toPhase + '">' + t.toPhaseShort + '</span>';
     if (t.biasFlipped) {
-      html += '<span style="font-size:10px;color:#e879f9;font-weight:800;margin-left:8px">BIAS FLIPPED</span>';
+      row += '<span style="font-size:10px;color:#e879f9;font-weight:800;margin-left:8px">BIAS FLIPPED</span>';
     }
-    html += '</div>';
-    html += '<div class="pt-bias ' + biasClass + '">' + t.toBias + '</div>';
-    html += '</div>';
-  });
+    row += '</div>';
+    row += '<div class="pt-bias ' + biasClass + '">' + t.toBias + '</div>';
+    row += '</div>';
+    return row;
+  }
+
+  var html = '';
+
+  // Deteriorating section first (most urgent)
+  if (deteriorating.length > 0) {
+    html += '<div style="padding:6px 12px;font-size:11px;font-weight:600;color:#E24B4A;background:rgba(226,75,74,0.08);border-bottom:1px solid rgba(226,75,74,0.15)">';
+    html += '▼ WORSENING (' + deteriorating.length + ') — phase moved toward exit/avoid</div>';
+    deteriorating.forEach(function(t) { html += renderTransitionRow(t); });
+  }
+
+  // Improving section
+  if (improving.length > 0) {
+    html += '<div style="padding:6px 12px;font-size:11px;font-weight:600;color:#1D9E75;background:rgba(29,158,117,0.08);border-bottom:1px solid rgba(29,158,117,0.15)">';
+    html += '▲ IMPROVING (' + improving.length + ') — phase moved toward buy/ride</div>';
+    improving.forEach(function(t) { html += renderTransitionRow(t); });
+  }
+
+  // Other (lateral moves)
+  if (other.length > 0) {
+    html += '<div style="padding:6px 12px;font-size:11px;font-weight:600;color:var(--dim);background:var(--card);border-bottom:1px solid var(--border)">';
+    html += '→ LATERAL (' + other.length + ')</div>';
+    other.forEach(function(t) { html += renderTransitionRow(t); });
+  }
 
   listEl.innerHTML = html;
 }
