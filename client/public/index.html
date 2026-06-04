@@ -507,6 +507,10 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       <div class="icon">🔍</div>
       <div>Ticker Analysis</div>
     </div>
+    <div class="nav-item" data-page="watchlist">
+      <div class="icon">📋</div>
+      <div>Watchlist</div>
+    </div>
     <div class="nav-item" data-page="morninglens">
       <div class="icon">☀️</div>
       <div>Morning Brief</div>
@@ -973,6 +977,37 @@ button:disabled{opacity:0.5;cursor:not-allowed}
       </div>
     </div>
 
+    <!-- ══════════ WATCHLIST PAGE ══════════ -->
+    <div class="page" id="page-watchlist">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+        <input type="text" id="wl-input" placeholder="Add ticker (e.g., AAPL, DHI, NVDA)" style="flex:1;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px" onkeydown="if(event.key==='Enter')addToWatchlist()">
+        <button onclick="addToWatchlist()" style="padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap">Add</button>
+        <button onclick="refreshAllWatchlist()" style="padding:8px 14px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--dim);font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap">Refresh All</button>
+      </div>
+      <div id="wl-status" style="font-size:11px;color:var(--dim);margin-bottom:8px"></div>
+      <div class="card" style="overflow-x:auto">
+        <table class="instrument-table" id="wl-table">
+          <thead>
+            <tr>
+              <th style="width:30px"></th>
+              <th>Ticker</th>
+              <th>Price</th>
+              <th>Phase</th>
+              <th>Verdict</th>
+              <th>Archetype</th>
+              <th>Up/Down Vol</th>
+              <th>vs 200d</th>
+              <th>Failed BD</th>
+              <th style="max-width:250px">Druckenmiller Opinion</th>
+            </tr>
+          </thead>
+          <tbody id="wl-tbody">
+            <tr><td colspan="10" style="text-align:center;padding:30px;color:var(--dim)">Add tickers above to build your watchlist</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- ══════════ TICKER ANALYSIS PAGE ══════════ -->
     <div class="page" id="page-ticker">
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
@@ -1332,6 +1367,7 @@ function showPage(page) {
   var titles = {
     commandcenter: 'Command Center',
     ticker: 'Ticker Analysis',
+    watchlist: 'Watchlist',
     foreshadow: 'Foreshadow',
     morninglens: 'Morning Brief',
     chartgrid: 'Chart Grid',
@@ -1357,6 +1393,7 @@ function showPage(page) {
 function loadPageData(page) {
   if (page === 'commandcenter') loadCommandCenter();
   else if (page === 'ticker') {} // no auto-load, user triggers
+  else if (page === 'watchlist') loadWatchlist();
   else if (page === 'foreshadow') loadForeshadow();
   else if (page === 'morninglens') loadMorningLens();
   else if (page === 'chartgrid') loadChartGrid();
@@ -4441,6 +4478,169 @@ function renderFsSortedRows() {
 }
 
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// WATCHLIST
+// ═══════════════════════════════════════════════
+
+var wlData = {};  // cached analysis results keyed by symbol
+
+function getWatchlistTickers() {
+  try { return JSON.parse(localStorage.getItem('wl_tickers') || '[]'); } catch(e) { return []; }
+}
+
+function saveWatchlistTickers(tickers) {
+  try { localStorage.setItem('wl_tickers', JSON.stringify(tickers)); } catch(e) {}
+}
+
+function addToWatchlist() {
+  var input = document.getElementById('wl-input');
+  var sym = (input.value || '').trim().toUpperCase();
+  if (!sym) return;
+  var tickers = getWatchlistTickers();
+  if (tickers.indexOf(sym) !== -1) { input.value = ''; return; } // already in list
+  tickers.push(sym);
+  saveWatchlistTickers(tickers);
+  input.value = '';
+  renderWatchlistTable();
+  fetchWatchlistTicker(sym);
+}
+
+function removeFromWatchlist(sym) {
+  var tickers = getWatchlistTickers().filter(function(t) { return t !== sym; });
+  saveWatchlistTickers(tickers);
+  delete wlData[sym];
+  renderWatchlistTable();
+}
+
+function loadWatchlist() {
+  renderWatchlistTable();
+  // Auto-refresh tickers that don't have cached data
+  var tickers = getWatchlistTickers();
+  tickers.forEach(function(sym) {
+    if (!wlData[sym]) fetchWatchlistTicker(sym);
+  });
+}
+
+function refreshAllWatchlist() {
+  wlData = {};
+  renderWatchlistTable();
+  var tickers = getWatchlistTickers();
+  var status = document.getElementById('wl-status');
+  if (status) status.textContent = 'Refreshing ' + tickers.length + ' tickers...';
+  var idx = 0;
+  function fetchNext() {
+    if (idx >= tickers.length) {
+      if (status) status.textContent = 'All ' + tickers.length + ' tickers refreshed';
+      return;
+    }
+    var sym = tickers[idx];
+    if (status) status.textContent = 'Analyzing ' + sym + ' (' + (idx+1) + '/' + tickers.length + ')...';
+    fetchWatchlistTicker(sym, function() {
+      idx++;
+      setTimeout(fetchNext, 500); // slight delay to avoid hammering the API
+    });
+  }
+  fetchNext();
+}
+
+function fetchWatchlistTicker(sym, callback) {
+  // Mark as loading
+  wlData[sym] = { loading: true };
+  renderWatchlistTable();
+
+  apiCall('/api/lens/ticker/' + encodeURIComponent(sym)).then(function(d) {
+    if (d && !d.error) {
+      wlData[sym] = d;
+    } else {
+      wlData[sym] = { error: d ? d.error : 'No data' };
+    }
+    renderWatchlistTable();
+    if (callback) callback();
+  }).catch(function(err) {
+    wlData[sym] = { error: err.message || 'Failed' };
+    renderWatchlistTable();
+    if (callback) callback();
+  });
+}
+
+function renderWatchlistTable() {
+  var tickers = getWatchlistTickers();
+  var tbody = document.getElementById('wl-tbody');
+  if (!tbody) return;
+
+  if (tickers.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--dim)">Add tickers above to build your watchlist</td></tr>';
+    return;
+  }
+
+  var phColors = { 1: '#0ea5e9', 2: '#1D9E75', 3: '#f97316', 4: '#e879f9', 5: '#E24B4A' };
+  var vColors = { 'STRONG ACCUMULATE': '#1D9E75', 'ACCUMULATE': '#1D9E75', 'ACCUMULATE ON DIPS': '#1D9E75', 'BUY AGGRESSIVELY': '#1D9E75', 'RIDE — ADD ON PULLBACKS': '#1D9E75', 'WATCH — FLOOR BUILDING': '#378ADD', 'WATCH FOR BREAKOUT': '#378ADD', 'WATCH / NIBBLE': '#378ADD', 'HOLD — TIGHTEN STOPS': '#BA7517', 'NEUTRAL — WAIT FOR CLARITY': '#BA7517', 'NEUTRAL / COILED': '#BA7517', 'AVOID': '#f97316', 'STRONG AVOID / SHORT CANDIDATE': '#E24B4A' };
+
+  var html = '';
+  tickers.forEach(function(sym) {
+    var d = wlData[sym];
+
+    if (!d) {
+      html += '<tr><td><button onclick="removeFromWatchlist(\'' + sym + '\')" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:10px">✕</button></td>';
+      html += '<td style="font-weight:700;color:var(--accent)">' + sym + '</td>';
+      html += '<td colspan="8" style="color:var(--dim);font-size:11px">Not yet analyzed</td></tr>';
+      return;
+    }
+
+    if (d.loading) {
+      html += '<tr><td><button onclick="removeFromWatchlist(\'' + sym + '\')" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:10px">✕</button></td>';
+      html += '<td style="font-weight:700;color:var(--accent)">' + sym + '</td>';
+      html += '<td colspan="8" style="color:var(--dim);font-size:11px">Analyzing...</td></tr>';
+      return;
+    }
+
+    if (d.error) {
+      html += '<tr><td><button onclick="removeFromWatchlist(\'' + sym + '\')" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:10px">✕</button></td>';
+      html += '<td style="font-weight:700;color:var(--accent)">' + sym + '</td>';
+      html += '<td colspan="8" style="color:#E24B4A;font-size:11px">' + d.error + '</td></tr>';
+      return;
+    }
+
+    var phase = d.phase || {};
+    var v = d.verdict || {};
+    var a = d.anchors || {};
+    var vd = d.volumeDemand || {};
+    var fb = d.failedBreakdowns || {};
+
+    var pc = phColors[phase.phaseNum] || 'var(--dim)';
+    var vc = vColors[v.verdict] || 'var(--dim)';
+
+    // Truncated narrative for the opinion column
+    var opinion = '';
+    if (d.narrative) {
+      opinion = d.narrative.split(/\n\n+/).pop() || '';  // Last paragraph = the verdict
+      if (opinion.length > 200) opinion = opinion.substring(0, 200) + '...';
+    } else if (v.signal) {
+      opinion = v.signal;
+      if (opinion.length > 200) opinion = opinion.substring(0, 200) + '...';
+    }
+
+    html += '<tr onclick="document.getElementById(\'ticker-input\').value=\'' + sym + '\';showPage(\'ticker\');analyzeTickerFn()" style="cursor:pointer">';
+    html += '<td><button onclick="event.stopPropagation();removeFromWatchlist(\'' + sym + '\')" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:10px">✕</button></td>';
+    html += '<td style="font-weight:700;color:var(--accent)">' + sym + '</td>';
+    html += '<td style="font-size:12px">$' + (d.price ? d.price.toFixed(2) : '—') + '</td>';
+    html += '<td><span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:500;background:' + pc + '18;color:' + pc + '">' + (phase.phaseShort || '—') + '</span></td>';
+    html += '<td style="font-size:11px;font-weight:500;color:' + vc + '">' + (v.verdict || '—') + '</td>';
+    var archLabels = { BROKEN_GROWTH: 'Broken Growth', EVENT_OVERCORRECTION: 'Over-Correction', STRUCTURAL_TURNAROUND: 'Turnaround', CONFIRMED_UPTREND: 'Uptrend', LATE_CYCLE: 'Late Cycle', COILED_SPRING: 'Coiled Spring', CAPITULATION_FORMING: 'Capitulation', BULLISH_TAPE: 'Bullish', BEARISH_TAPE: 'Bearish', NEUTRAL: 'Neutral' };
+    html += '<td style="font-size:10px;color:var(--dim)">' + (archLabels[v.archetype] || v.archetype || '—') + '</td>';
+    var udColor = vd.upDownRatio > 1.3 ? '#1D9E75' : vd.upDownRatio < 0.7 ? '#E24B4A' : 'var(--dim)';
+    html += '<td style="font-size:12px;font-weight:500;color:' + udColor + '">' + (vd.upDownRatio ? vd.upDownRatio.toFixed(2) : '—') + '</td>';
+    var extColor = a.priceVs200d > 0 ? '#1D9E75' : '#E24B4A';
+    html += '<td style="font-size:11px;color:' + extColor + '">' + (a.priceVs200d !== null ? (a.priceVs200d > 0 ? '+' : '') + a.priceVs200d.toFixed(1) + '%' : '—') + '</td>';
+    var fbColor = fb.count >= 2 ? '#1D9E75' : fb.count >= 1 ? '#BA7517' : 'var(--dim)';
+    html += '<td style="font-size:12px;font-weight:500;color:' + fbColor + '">' + (fb.count !== undefined ? fb.count : '—') + '</td>';
+    html += '<td style="font-size:10px;color:var(--dim);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + opinion.replace(/"/g, '&quot;') + '">' + opinion + '</td>';
+    html += '</tr>';
+  });
+
+  tbody.innerHTML = html;
+}
+
 // TICKER ANALYSIS
 // ═══════════════════════════════════════════════
 
