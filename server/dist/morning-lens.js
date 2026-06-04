@@ -1493,48 +1493,32 @@ const SECTOR_ETF_MAP = {
     'default': { primary: 'SPY', secondary: 'RSP', name: 'Broad Market' },
 };
 async function fetchTickerBars(symbol, years = 2) {
-    // Direct Yahoo Finance API — bypasses yahoo-finance2 library which fails on many tickers
+    // Use the same yahoo-finance2 library + validateResult:false that works for ETFs
     try {
-        const endTs = Math.floor(Date.now() / 1000);
-        const startTs = endTs - (years * 365 * 24 * 60 * 60);
-        // Try query2 first (same as yahoo-finance2 library), fall back to query1
-        const params = `period1=${startTs}&period2=${endTs}&interval=1d&includePrePost=false&events=history&lang=en-US`;
-        let response = await fetch(`https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${params}`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DruckEngine/13.0)' } }).catch(() => null);
-        if (!response || !response.ok) {
-            response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${params}`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DruckEngine/13.0)' } }).catch(() => null);
-        }
-        if (!response || !response.ok)
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setFullYear(startDate.getFullYear() - years);
+        const result = await yahooFinance.chart(symbol, {
+            period1: startDate,
+            period2: endDate,
+            interval: '1d',
+        }, { validateResult: false });
+        const quotes = result?.quotes || result || [];
+        if (!quotes || !Array.isArray(quotes) || quotes.length === 0)
             return [];
-        if (!response.ok)
-            return [];
-        const data = await response.json();
-        const result = data?.chart?.result?.[0];
-        if (!result || !result.timestamp)
-            return [];
-        const timestamps = result.timestamp;
-        const quote = result.indicators?.quote?.[0] || {};
-        const closes = quote.close || [];
-        const opens = quote.open || [];
-        const highs = quote.high || [];
-        const lows = quote.low || [];
-        const volumes = quote.volume || [];
-        const bars = [];
-        for (let i = 0; i < timestamps.length; i++) {
-            if (closes[i] === null || closes[i] === undefined)
-                continue;
-            bars.push({
-                date: new Date(timestamps[i] * 1000).toISOString().split('T')[0],
-                open: opens[i] || closes[i],
-                high: highs[i] || closes[i],
-                low: lows[i] || closes[i],
-                close: closes[i],
-                volume: volumes[i] || 0,
-            });
-        }
-        return bars;
+        return quotes
+            .filter((q) => q.close !== null && q.close !== undefined)
+            .map((q) => ({
+            date: new Date(q.date).toISOString().split('T')[0],
+            open: q.open || q.close,
+            high: q.high || q.close,
+            low: q.low || q.close,
+            close: q.close,
+            volume: q.volume || 0,
+        }));
     }
     catch (err) {
-        console.error(`[TICKER] Failed to fetch ${symbol}:`, err?.message);
+        console.error(`[TICKER] yahoo-finance2 failed for ${symbol}:`, err?.message);
         return [];
     }
 }
