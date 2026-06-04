@@ -1270,10 +1270,27 @@ async function refreshMorningLens(): Promise<void> {
 })();
 
 // Auto-refresh every 2 hours for intraday recording
-// (was 4 hours — reduced to capture more intraday snapshots for historical tracking)
 const INTRADAY_REFRESH_MS = 2 * 60 * 60 * 1000; // 2 hours
 setInterval(() => {
   refreshMorningLens().catch(err => console.error('[LENS] Auto-refresh error:', err));
+
+  // Pre-fetch watchlist tickers during the refresh cycle (10s after lens refresh starts)
+  setTimeout(async () => {
+    try {
+      const watchlistItems = getWatchlist();
+      if (watchlistItems.length === 0) return;
+      console.log(`[WATCHLIST] Pre-fetching ${watchlistItems.length} watchlist tickers...`);
+      for (const item of watchlistItems) {
+        try {
+          await fetchTickerBars(item.symbol, 2); // Just warm the cache
+        } catch {}
+        await new Promise(r => setTimeout(r, 1500)); // Rate limit
+      }
+      console.log(`[WATCHLIST] Pre-fetch complete for ${watchlistItems.length} tickers`);
+    } catch (err: any) {
+      console.error('[WATCHLIST] Pre-fetch error:', err?.message);
+    }
+  }, 10000);
 }, INTRADAY_REFRESH_MS);
 
 // ─── ARIA NARRATIVE ───
@@ -1771,82 +1788,116 @@ const SECTOR_ETF_MAP: Record<string, { primary: string; secondary: string; name:
   'default': { primary: 'SPY', secondary: 'RSP', name: 'Broad Market' },
 };
 
-async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCVBar[]> {
-  // Try Yahoo Finance first via library, then fall back to GuruFocus price API
+// ═══ TICKER DATA CACHE — prevents hammering Yahoo/GuruFocus ═══
+const tickerBarCache: Map<string, { bars: OHLCVBar[]; fetchedAt: number }> = new Map();
+const TICKER_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 
-  // Attempt 1: Yahoo Finance (same method as morning lens ETF fetcher)
+// Full analysis result cache — stores the complete ticker analysis output
+const tickerAnalysisCache: Map<string, { data: any; fetchedAt: number }> = new Map();
+
+async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCVBar[]> {
+  // Check cache first — if we have bars less than 2 hours old, use them
+  const cached = tickerBarCache.get(symbol);
+  if (cached && Date.now() - cached.fetchedAt < TICKER_CACHE_TTL && cached.bars.length >= 50) {
+    return cached.bars;
+  }
+
+  // PRIMARY: GuruFocus (never blocks us, reliable, has decades of data)
+  try {
+    const url = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${encodeURIComponent(symbol)}/price`;
+    const response = await fetch(url);
+    if (response.ok) {
+      const priceData: any = await response.json();
+      if (Array.isArray(priceData) && priceData.length >= 50) {
+        const cutoffDate = new Date();
+        cutoffDate.setFullYear(cutoffDate.getFullYear() - years);
+        const cutoffStr = cutoffDate.toISOString().split('T')[0];
+
+        const bars: OHLCVBar[] = [];
+        for (const entry of priceData) {
+          if (!Array.isArray(entry) || entry.length < 2) continue;
+          const rawDate = entry[0] as string;
+          const price = entry[1] as number;
+          if (price === null || price === undefined || price <= 0) continue;
+          const parts = rawDate.split('-');
+          if (parts.length !== 3) continue;
+          const isoDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+          if (isoDate < cutoffStr) continue;
+          bars.push({ date: isoDate, open: price, high: price, low: price, close: price, volume: 0 });
+        }
+
+        if (bars.length >= 50) {
+          console.log(`[TICKER] GuruFocus: ${bars.length} bars for ${symbol}`);
+          tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
+
+          // ENHANCE with Yahoo volume data if available (non-blocking)
+          try {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setFullYear(startDate.getFullYear() - years);
+            const yResult = await Promise.race([
+              yahooFinance.chart(symbol, { period1: startDate, period2: endDate, interval: '1d' as any }, { validateResult: false }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+            ]) as any;
+            const yQuotes = yResult?.quotes || [];
+            if (yQuotes.length >= 50) {
+              // Build date→volume map from Yahoo
+              const volMap: Record<string, { o: number; h: number; l: number; v: number }> = {};
+              for (const q of yQuotes) {
+                if (q.close && q.date) {
+                  const d = new Date(q.date).toISOString().split('T')[0];
+                  volMap[d] = { o: q.open || q.close, h: q.high || q.close, l: q.low || q.close, v: q.volume || 0 };
+                }
+              }
+              // Merge volume into GuruFocus bars
+              for (const bar of bars) {
+                const yData = volMap[bar.date];
+                if (yData) {
+                  bar.open = yData.o;
+                  bar.high = yData.h;
+                  bar.low = yData.l;
+                  bar.volume = yData.v;
+                }
+              }
+              console.log(`[TICKER] Enhanced ${symbol} with Yahoo OHLCV data`);
+              tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
+            }
+          } catch {
+            // Yahoo enhancement failed — GuruFocus close-only data is still good
+          }
+
+          return bars;
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[TICKER] GuruFocus failed for ${symbol}: ${err?.message}`);
+  }
+
+  // FALLBACK: Yahoo Finance only (if GuruFocus fails entirely)
   try {
     const endDate = new Date();
     const startDate = new Date();
     startDate.setFullYear(startDate.getFullYear() - years);
-
     const result = await yahooFinance.chart(symbol, {
-      period1: startDate,
-      period2: endDate,
-      interval: '1d' as any,
+      period1: startDate, period2: endDate, interval: '1d' as any,
     }, { validateResult: false }) as any;
-
-    const quotes = result?.quotes || result || [];
-    if (quotes && Array.isArray(quotes) && quotes.length >= 50) {
-      console.log(`[TICKER] Yahoo returned ${quotes.length} bars for ${symbol}`);
-      return quotes
-        .filter((q: any) => q.close !== null && q.close !== undefined)
+    const quotes = result?.quotes || [];
+    if (quotes.length >= 50) {
+      const bars = quotes
+        .filter((q: any) => q.close !== null)
         .map((q: any) => ({
           date: new Date(q.date).toISOString().split('T')[0],
-          open: q.open || q.close,
-          high: q.high || q.close,
-          low: q.low || q.close,
-          close: q.close,
-          volume: q.volume || 0,
+          open: q.open || q.close, high: q.high || q.close, low: q.low || q.close,
+          close: q.close, volume: q.volume || 0,
         }));
+      tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
+      return bars;
     }
-    console.warn(`[TICKER] Yahoo returned ${quotes?.length || 0} bars for ${symbol}, trying GuruFocus...`);
-  } catch (err: any) {
-    console.warn(`[TICKER] Yahoo failed for ${symbol}: ${err?.message}, trying GuruFocus...`);
-  }
+  } catch {}
 
-  // Attempt 2: GuruFocus price API (reliable backup — has daily prices going back decades)
-  try {
-    const url = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${encodeURIComponent(symbol)}/price`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.error(`[TICKER] GuruFocus also failed for ${symbol}: HTTP ${response.status}`);
-      return [];
-    }
-    const priceData: any = await response.json();
-    if (!Array.isArray(priceData) || priceData.length < 50) {
-      console.error(`[TICKER] GuruFocus returned ${priceData?.length || 0} prices for ${symbol}`);
-      return [];
-    }
-
-    // GuruFocus returns [["MM-DD-YYYY", price], ...] — close-only, no OHLCV
-    // We use close for open/high/low and 0 for volume (sufficient for TA)
-    const cutoffDate = new Date();
-    cutoffDate.setFullYear(cutoffDate.getFullYear() - years);
-    const cutoffStr = cutoffDate.toISOString().split('T')[0];
-
-    const bars: OHLCVBar[] = [];
-    for (const entry of priceData) {
-      if (!Array.isArray(entry) || entry.length < 2) continue;
-      const rawDate = entry[0] as string;  // "MM-DD-YYYY"
-      const price = entry[1] as number;
-      if (price === null || price === undefined || price <= 0) continue;
-
-      // Parse MM-DD-YYYY to YYYY-MM-DD
-      const parts = rawDate.split('-');
-      if (parts.length !== 3) continue;
-      const isoDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
-      if (isoDate < cutoffStr) continue;
-
-      bars.push({ date: isoDate, open: price, high: price, low: price, close: price, volume: 0 });
-    }
-
-    console.log(`[TICKER] GuruFocus returned ${bars.length} price bars for ${symbol} (close-only, no volume)`);
-    return bars;
-  } catch (err: any) {
-    console.error(`[TICKER] Both Yahoo and GuruFocus failed for ${symbol}:`, err?.message);
-    return [];
-  }
+  console.error(`[TICKER] Both sources failed for ${symbol}`);
+  return [];
 }
 
 
@@ -2156,6 +2207,16 @@ function generateVerdict(
 
 router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
   const symbol = decodeURIComponent(req.params.symbol as string).toUpperCase();
+  const forceRefresh = req.query.refresh === 'true';
+
+  // Check analysis cache first (2-hour TTL) — makes repeat requests instant
+  if (!forceRefresh) {
+    const cachedAnalysis = tickerAnalysisCache.get(symbol);
+    if (cachedAnalysis && Date.now() - cachedAnalysis.fetchedAt < TICKER_CACHE_TTL) {
+      console.log(`[TICKER] Serving cached analysis for ${symbol} (${Math.round((Date.now() - cachedAnalysis.fetchedAt) / 60000)}m old)`);
+      return res.json({ ...cachedAnalysis.data, cached: true });
+    }
+  }
 
   try {
     // Fetch stock data + SPY benchmark in parallel
@@ -2230,7 +2291,8 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
 
     const phaseInfo = phaseResult ? phaseDisplayMap[phaseResult.phase.phase] || { num: 0, short: '?' } : null;
 
-    res.json({
+    // Build the response and cache it
+    const responseData: any = {
       symbol,
       price: Math.round(price * 100) / 100,
 
@@ -2387,7 +2449,12 @@ CRITICAL: You only have technical data, not fundamental data. Acknowledge what y
           return arr.slice(-252);
         })() : [],
       },
-    });
+    };
+
+    // Cache the full analysis result for 2 hours
+    tickerAnalysisCache.set(symbol, { data: responseData, fetchedAt: Date.now() });
+
+    res.json(responseData);
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Analysis failed' });
   }
