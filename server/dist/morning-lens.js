@@ -1492,9 +1492,28 @@ const SECTOR_ETF_MAP = {
     'Retail': { primary: 'XRT', secondary: 'XLY', name: 'Retail' },
     'default': { primary: 'SPY', secondary: 'RSP', name: 'Broad Market' },
 };
+// Warm up yahoo-finance2 crumb token by fetching a known symbol
+let yfWarmedUp = false;
+async function warmUpYahoo() {
+    if (yfWarmedUp)
+        return;
+    try {
+        // A simple quote call establishes the crumb/cookie
+        await yahooFinance.chart('SPY', {
+            period1: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+            period2: new Date(),
+            interval: '1d',
+        }, { validateResult: false });
+        yfWarmedUp = true;
+        console.log('[TICKER] Yahoo Finance crumb token warmed up');
+    }
+    catch (err) {
+        console.warn('[TICKER] Yahoo warmup failed:', err?.message);
+    }
+}
 async function fetchTickerBars(symbol, years = 2) {
-    // Use yahoo-finance2 library with retry logic (same as morning lens ETF fetcher)
-    // The library needs a warm crumb token — first call may fail, retries succeed
+    // Ensure yahoo-finance2 crumb token is initialized
+    await warmUpYahoo();
     const maxRetries = 3;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
