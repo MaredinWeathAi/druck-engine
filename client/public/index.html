@@ -660,6 +660,21 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         </div>
       </div>
 
+      <!-- Economic Cycle Clock + Sector Rotation Map -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+        <div class="card" style="padding:16px">
+          <h3 style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+            Economic Cycle
+            <span class="cc-viewall" onclick="showPage('rotation')">Full Radar →</span>
+          </h3>
+          <div id="cc-cycle-clock">Loading...</div>
+        </div>
+        <div class="card" style="padding:16px">
+          <h3 style="margin-bottom:12px">Sector Rotation</h3>
+          <div id="cc-sector-map">Loading...</div>
+        </div>
+      </div>
+
       <!-- Two-column: Aria Brief (left) + Headlines (right) -->
       <div class="cc-top" style="margin-top:16px">
         <div class="cc-left">
@@ -1756,14 +1771,29 @@ function loadIndustrySector(sector) {
 
 // Rotation Radar
 function loadRotation() {
-  apiCall('/api/cycle-position').then(function(data) {
-    // Cycle Clock
+  Promise.all([
+    apiCall('/api/cycle-position'),
+    apiCall('/api/lens/instruments'),
+  ]).then(function(results) {
+    var data = results[0];
+    var instData = results[1];
+
+    // Build a map of ETF symbol → phase data from lens instruments
+    var instPhaseMap = {};
+    if (instData && instData.instruments) {
+      instData.instruments.forEach(function(inst) {
+        if (inst.phaseData) instPhaseMap[inst.symbol] = inst.phaseData;
+      });
+    }
+
+    // ── Cycle Clock ──
     var phases = [
-      { key: 'EARLY_RECOVERY', name: 'Early Recovery', desc: 'ISM bottoming, curve steepening, M2 growing. Financials & Tech lead.' },
-      { key: 'MID_CYCLE', name: 'Mid Cycle', desc: 'ISM above 50, GDP healthy, moderate inflation. Industrials & Materials join.' },
-      { key: 'LATE_CYCLE', name: 'Late Cycle', desc: 'ISM decelerating, capacity maxed, CPI rising. Energy leads, reduce growth.' },
-      { key: 'RECESSION', name: 'Recession', desc: 'ISM below 47, curve inverted, unemployment surging. Staples & Gold only.' }
+      { key: 'EARLY_RECOVERY', name: 'Early Recovery', desc: 'Liquidity expanding, ISM recovering, curve steep.' },
+      { key: 'MID_CYCLE', name: 'Mid Cycle', desc: 'ISM above 50, GDP healthy, inflation contained.' },
+      { key: 'LATE_CYCLE', name: 'Late Cycle', desc: 'Inflation pressures, capacity stretched, curve flattening.' },
+      { key: 'RECESSION', name: 'Recession', desc: 'ISM contracting, liquidity draining, curve inverted.' }
     ];
+    var phColors = { EARLY_RECOVERY: '#0ea5e9', MID_CYCLE: '#1D9E75', LATE_CYCLE: '#f97316', RECESSION: '#E24B4A' };
     var clockHtml = '';
     phases.forEach(function(p, i) {
       var isActive = data.current_phase === p.key;
@@ -1775,61 +1805,66 @@ function loadRotation() {
     });
     document.getElementById('cycle-clock').innerHTML = clockHtml;
 
-    // Sector Rotation
+    // ── Sector Rotation — merge macro recommendations with ACTUAL phase data ──
     var rot = data.sector_rotation;
     var rotHtml = '';
+    var phaseColors = { 1: '#0ea5e9', 2: '#1D9E75', 3: '#f97316', 4: '#e879f9', 5: '#E24B4A' };
 
-    // Map sector names to ETF symbols for phase lookup
-    var rotEtfMap = { 'Financials': 'XLF', 'Technology': 'XLK', 'Healthcare': 'XLV', 'Energy': 'XLE', 'Industrials': 'XLI', 'Materials': 'XLB', 'Consumer Staples': 'XLP', 'Consumer Discretionary': 'XLY', 'Utilities': 'XLU', 'Real Estate': 'XLRE', 'Communication Services': 'XLC', 'Semiconductors': 'SMH', 'Banks': 'KRE', 'Gold': 'GLD', 'Commodities': 'DBC' };
-
-    function renderRotGroup(label, prefix, items) {
+    function renderRotGroup(label, prefix, items, groupColor) {
       var h = '<div class="rotation-group ' + label.toLowerCase() + '"><h4>' + prefix + ' ' + label + '</h4>';
       (items || []).forEach(function(s) {
-        var etfSym = rotEtfMap[s.sector] || '';
-        var phasePill = etfSym ? getPhasePillHtml(etfSym) : '';
-        h += '<div class="rotation-item" ' + (etfSym ? 'onclick="openEtfDetail(\'' + etfSym + '\')" style="cursor:pointer" title="Click for ' + etfSym + ' history"' : '') + '>';
-        h += '<div class="ri-sector">' + s.sector + phasePill + '</div><div class="ri-reason">' + s.reason + '</div><div class="ri-sweet">Sweet spot: ' + s.cycle_sweet_spot + '</div></div>';
+        var etfSym = s.etf || '';
+        var instPhase = instPhaseMap[etfSym];
+        var phasePill = '';
+        if (instPhase) {
+          var pc = phaseColors[instPhase.phaseNum] || 'var(--dim)';
+          phasePill = ' <span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:500;background:' + pc + '18;color:' + pc + ';margin-left:4px">' + instPhase.phaseShort + '</span>';
+        }
+        h += '<div class="rotation-item" ' + (etfSym ? 'onclick="openEtfDetail(\'' + etfSym + '\')" style="cursor:pointer" title="Click for ' + etfSym + ' detail"' : '') + '>';
+        h += '<div class="ri-sector">' + s.sector + ' <span style="font-size:10px;color:var(--dim)">' + etfSym + '</span>' + phasePill + '</div>';
+        h += '<div class="ri-reason">' + s.reason + '</div>';
+        h += '<div class="ri-sweet">Cycle sweet spot: ' + s.cycle_sweet_spot + '</div></div>';
       });
       h += '</div>';
       return h;
     }
 
-    rotHtml += renderRotGroup('Accumulate', '▲', rot.accumulate);
-    rotHtml += renderRotGroup('Hold', '●', rot.hold);
-    rotHtml += renderRotGroup('Reduce', '▼', rot.reduce);
+    rotHtml += renderRotGroup('Accumulate', '▲', rot.accumulate, '#1D9E75');
+    rotHtml += renderRotGroup('Hold', '●', rot.hold, '#BA7517');
+    rotHtml += renderRotGroup('Reduce', '▼', rot.reduce, '#f97316');
+    if (rot.avoid && rot.avoid.length > 0) rotHtml += renderRotGroup('Avoid', '✕', rot.avoid, '#E24B4A');
 
     document.getElementById('rotation-sectors').innerHTML = rotHtml;
 
-    // Timeline
-    var tlHtml = '';
-    (data.rotation_timeline || []).forEach(function(t) {
-      tlHtml += '<div class="timeline-item">';
-      tlHtml += '<div class="timeline-marker"><div class="tm-label">' + t.timeframe + '</div><div class="tm-dot"></div></div>';
-      tlHtml += '<div class="timeline-content"><div class="tc-action">' + t.action + '</div><div class="tc-rationale">' + t.rationale + '</div></div>';
-      tlHtml += '</div>';
-    });
+    // ── Timeline (simplified) ──
+    var tlHtml = '<div style="padding:12px;color:var(--dim);font-size:12px">';
+    tlHtml += '<div style="font-weight:500;color:var(--text);margin-bottom:8px">Current Macro Read</div>';
+    tlHtml += data.phase_description;
+    tlHtml += '</div>';
     document.getElementById('rotation-timeline').innerHTML = tlHtml;
 
-    // Framework Scores
+    // ── Framework Scores — rebuilt with v13 Leading Indicators ──
     var fw = data.druckenmiller_framework;
     var scoreItems = [
-      { label: 'Liquidity', score: fw.liquidity_score, desc: 'Fed balance sheet + M2 growth' },
-      { label: 'Earnings Cycle', score: fw.earnings_cycle_score, desc: 'Forward estimates + revisions' },
-      { label: 'Sentiment', score: fw.sentiment_score, desc: 'Positioning + fund flows' },
-      { label: 'Macro Regime', score: fw.macro_regime_score, desc: 'GDP, inflation, employment' }
+      { label: 'Liquidity', score: fw.liquidity_score, max: 2 },
+      { label: 'Growth', score: fw.growth_score, max: 2 },
+      { label: 'Inflation', score: fw.inflation_score, max: 1 },
+      { label: 'Breadth', score: fw.breadth_score, max: 2 },
+      { label: 'Yield Curve', score: fw.curve_score, max: 1 },
     ];
     var scHtml = '';
     scoreItems.forEach(function(s) {
-      var color = s.score > 0 ? 'var(--green)' : s.score < 0 ? 'var(--red)' : 'var(--accent)';
-      var label = s.score > 0 ? '+' + s.score + ' Bullish' : s.score < 0 ? s.score + ' Bearish' : '0 Neutral';
+      var color = s.score > 0 ? '#1D9E75' : s.score < 0 ? '#E24B4A' : '#BA7517';
+      var label = s.score > 0 ? '+' + s.score : s.score < 0 ? '' + s.score : '0';
       scHtml += '<div class="metric-card">';
       scHtml += '<div class="metric-label">' + s.label + '</div>';
       scHtml += '<div class="metric-value" style="color:' + color + '">' + label + '</div>';
-      scHtml += '<div class="metric-sub">' + s.desc + '</div>';
       scHtml += '</div>';
     });
-    scHtml += '<div style="grid-column:1/-1;text-align:center;padding:12px;font-size:14px;font-weight:700;color:' + (fw.overall_bias === 'RISK-ON' ? 'var(--green)' : fw.overall_bias === 'RISK-OFF' ? 'var(--red)' : 'var(--accent)') + '">';
-    scHtml += 'Overall Bias: ' + fw.overall_bias;
+    var biasColors = { 'RISK-ON': '#1D9E75', 'LEANING BULLISH': '#1D9E75', 'NEUTRAL': '#BA7517', 'LEANING BEARISH': '#f97316', 'RISK-OFF': '#E24B4A' };
+    var bc = biasColors[fw.overall_bias] || 'var(--dim)';
+    scHtml += '<div style="grid-column:1/-1;text-align:center;padding:12px;font-size:14px;font-weight:700;color:' + bc + '">';
+    scHtml += fw.overall_bias + ' (Score: ' + fw.total_score + ')';
     scHtml += '</div>';
     document.getElementById('druck-scores').innerHTML = scHtml;
 
@@ -2505,6 +2540,62 @@ function loadCommandCenter() {
 
       document.getElementById('cc-leading-indicators').innerHTML = liHtml;
     }
+
+    // 8c. Economic Cycle Clock + Sector Rotation Map (from cycle-position API)
+    apiCall('/api/cycle-position').then(function(cp) {
+      if (!cp) return;
+
+      // Cycle Clock
+      var phases = [
+        { key: 'EARLY_RECOVERY', name: 'Early Recovery', short: 'Recovery' },
+        { key: 'MID_CYCLE', name: 'Mid Cycle', short: 'Expansion' },
+        { key: 'LATE_CYCLE', name: 'Late Cycle', short: 'Late Stage' },
+        { key: 'RECESSION', name: 'Recession', short: 'Contraction' },
+      ];
+      var phaseColors = { EARLY_RECOVERY: '#0ea5e9', MID_CYCLE: '#1D9E75', LATE_CYCLE: '#f97316', RECESSION: '#E24B4A' };
+      var clockHtml = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px">';
+      phases.forEach(function(p) {
+        var isActive = cp.current_phase === p.key;
+        var bgColor = isActive ? phaseColors[p.key] + '22' : 'var(--card)';
+        var borderColor = isActive ? phaseColors[p.key] : 'var(--border)';
+        var textColor = isActive ? phaseColors[p.key] : 'var(--dim)';
+        clockHtml += '<div style="padding:8px;border-radius:6px;text-align:center;background:' + bgColor + ';border:1px solid ' + borderColor + '">';
+        clockHtml += '<div style="font-size:11px;font-weight:500;color:' + textColor + '">' + p.short + '</div>';
+        if (isActive) clockHtml += '<div style="font-size:8px;color:' + textColor + ';margin-top:2px">◆ CURRENT</div>';
+        clockHtml += '</div>';
+      });
+      clockHtml += '</div>';
+      clockHtml += '<div style="font-size:11px;color:var(--dim);line-height:1.4">' + cp.phase_description + '</div>';
+
+      // Framework bias
+      var fw = cp.druckenmiller_framework;
+      var biasColors = { 'RISK-ON': '#1D9E75', 'LEANING BULLISH': '#1D9E75', 'NEUTRAL': '#BA7517', 'LEANING BEARISH': '#f97316', 'RISK-OFF': '#E24B4A' };
+      var bc = biasColors[fw.overall_bias] || 'var(--dim)';
+      clockHtml += '<div style="margin-top:8px;padding:6px 10px;border-radius:6px;background:' + bc + '12;border:1px solid ' + bc + '33;display:flex;justify-content:space-between;align-items:center">';
+      clockHtml += '<span style="font-size:12px;font-weight:500;color:' + bc + '">' + fw.overall_bias + '</span>';
+      clockHtml += '<span style="font-size:10px;color:var(--dim)">Score: ' + fw.total_score + '/10</span>';
+      clockHtml += '</div>';
+      document.getElementById('cc-cycle-clock').innerHTML = clockHtml;
+
+      // Sector Rotation Map — group by recommendation
+      var mapHtml = '';
+      var groups = [
+        { label: 'ACCUMULATE', items: cp.sector_rotation.accumulate, color: '#1D9E75' },
+        { label: 'HOLD', items: cp.sector_rotation.hold, color: '#BA7517' },
+        { label: 'REDUCE', items: cp.sector_rotation.reduce, color: '#f97316' },
+      ];
+      groups.forEach(function(g) {
+        if (!g.items || g.items.length === 0) return;
+        mapHtml += '<div style="margin-bottom:8px">';
+        mapHtml += '<div style="font-size:10px;font-weight:500;color:' + g.color + ';margin-bottom:4px">' + g.label + '</div>';
+        mapHtml += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+        g.items.forEach(function(s) {
+          mapHtml += '<span onclick="openEtfDetail(\'' + (s.etf || '') + '\')" style="cursor:pointer;font-size:10px;padding:2px 6px;border-radius:3px;background:' + g.color + '12;color:' + g.color + ';border:1px solid ' + g.color + '33">' + s.sector + '</span>';
+        });
+        mapHtml += '</div></div>';
+      });
+      document.getElementById('cc-sector-map').innerHTML = mapHtml || '<div style="color:var(--dim)">Loading...</div>';
+    }).catch(function(){});
 
     // 9. Leading Groups
     var lgGrid = document.getElementById('cc-leading-groups');

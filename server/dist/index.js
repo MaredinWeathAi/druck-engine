@@ -1362,135 +1362,117 @@ app.get('/api/commodities/detail', (_req, res) => {
     });
 });
 // ─── CYCLE POSITION & ACTION SIGNALS ───
+// ═══ CYCLE POSITION — rebuilt on v13 Leading Indicators + actual phase data ═══
 app.get('/api/cycle-position', (_req, res) => {
     recalcDerived();
-    const pceVal = pce;
-    const gdpVal = gdp;
-    const capUtilVal = capUtil;
-    const yieldCurveBpsVal = yieldCurveBps;
-    const unemploymentVal = unemployment;
-    const ismMfgVal = ismMfg;
-    const m2YoyVal = m2Yoy;
-    const cpiYoyVal = cpiYoy;
+    // ── MACRO CYCLE from Leading Indicators (real data, not hardcoded) ──
+    const liqVel4w = +(latV4 * 100).toFixed(2);
+    const liqVel13w = +(latV13 * 100).toFixed(2);
+    let liqAccel = 0;
+    if (vel4w.length >= 5)
+        liqAccel = +((vel4w[vel4w.length - 1] - vel4w[vel4w.length - 5]) * 100).toFixed(3);
+    // Cycle phase from actual macro data
     let currentPhase = 'MID_CYCLE';
-    let phaseConfidence = 0.72;
-    let phaseDescription = 'Economy expanding with moderate growth. ISM above 50, GDP healthy, inflation contained.';
-    let nextPhase = 'LATE_CYCLE';
-    let nextProbability = 0.35;
-    let nextEstimatedMonths = '6-12';
-    const triggers = [];
-    if (ismMfgVal < 50 && yieldCurveBpsVal > 20 && m2YoyVal > 1) {
+    let phaseDescription = '';
+    // Use ISM, GDP, inflation, liquidity, yield curve together
+    const ismRising = ismMfg > 51;
+    const ismFalling = ismMfg < 49;
+    const gdpStrong = gdp > 2;
+    const gdpWeak = gdp < 1;
+    const inflHot = cpiYoy > 3.5;
+    const inflCool = cpiYoy < 2.5;
+    const curveSteep = yieldCurveBps > 50;
+    const curveFlat = yieldCurveBps < 10;
+    const curveInverted = yieldCurveBps < -10;
+    const liqExpanding = liqVel4w > 0 && liqAccel > 0;
+    const liqDraining = liqVel4w < 0 && liqAccel < 0;
+    if (liqExpanding && ismRising && curveSteep && !inflHot) {
         currentPhase = 'EARLY_RECOVERY';
-        phaseConfidence = 0.68;
-        phaseDescription = 'Early cycle expansion. ISM recovering, curve steep, M2 growth supporting liquidity.';
-        nextPhase = 'MID_CYCLE';
-        nextProbability = 0.55;
-        nextEstimatedMonths = '3-6';
+        phaseDescription = 'Liquidity expanding, ISM rising, curve steep. Classic early recovery — risk assets favored.';
     }
-    else if (ismMfgVal > 50 && gdpVal > 2 && cpiYoyVal < 3.5 && capUtilVal < 80) {
+    else if (ismRising && gdpStrong && !inflHot && !curveInverted) {
         currentPhase = 'MID_CYCLE';
-        phaseConfidence = 0.72;
-        phaseDescription = 'Economy expanding with moderate growth. ISM above 50, GDP healthy, inflation contained.';
-        nextPhase = 'LATE_CYCLE';
-        nextProbability = 0.35;
-        nextEstimatedMonths = '6-12';
-        triggers.push('ISM deceleration below 52');
-        triggers.push('Capacity utilization above 80%');
-        triggers.push('Yield curve flattening');
+        phaseDescription = 'Economy expanding. ISM above 50, GDP healthy, inflation contained. Cyclicals lead.';
     }
-    else if (ismMfgVal > 50 && capUtilVal > 80 && cpiYoyVal > 3 && yieldCurveBpsVal < 30) {
+    else if ((inflHot || curveFlat) && capUtil > 78) {
         currentPhase = 'LATE_CYCLE';
-        phaseConfidence = 0.78;
-        phaseDescription = 'Late-cycle expansion with inflation pressures. Capacity stretched, Fed tightening likely.';
-        nextPhase = 'RECESSION';
-        nextProbability = 0.45;
-        nextEstimatedMonths = '6-18';
-        triggers.push('Yield curve inversion');
-        triggers.push('ISM breaks below 48');
-        triggers.push('Credit conditions tightening');
+        phaseDescription = 'Inflation pressures building, capacity stretched. Rotate to quality and defense.';
     }
-    else if (ismMfgVal < 47 && gdpVal < 1 && yieldCurveBpsVal < -10 && unemploymentVal > 4.5) {
+    else if (curveInverted || (ismFalling && gdpWeak && liqDraining)) {
         currentPhase = 'RECESSION';
-        phaseConfidence = 0.85;
-        phaseDescription = 'Recessionary environment. ISM in contraction, negative growth, yield curve inverted, unemployment rising.';
-        nextPhase = 'EARLY_RECOVERY';
-        nextProbability = 0.50;
-        nextEstimatedMonths = '12-18';
-        triggers.push('Fed pivot to easing');
-        triggers.push('Yield curve re-steepening');
-        triggers.push('ISM stabilization above 47');
+        phaseDescription = 'Contraction signals. ISM falling, liquidity draining, curve inverted. Full defensive.';
     }
-    const ismDirection = ismMfgVal > 50.5 ? 'RISING' : ismMfgVal < 49.5 ? 'FALLING' : 'STABLE';
-    const yieldCurveSignal = yieldCurveBpsVal > 50 ? 'STEEPENING' : yieldCurveBpsVal < 0 ? 'INVERTED' : 'NORMAL';
-    const creditConditions = hySpreads[N - 1] < 4 ? 'EASING' : hySpreads[N - 1] > 5 ? 'TIGHTENING' : 'NEUTRAL';
-    const m2Growth = m2YoyVal > 1.5 ? 'POSITIVE' : m2YoyVal > 0 ? 'MODEST' : 'NEGATIVE';
-    const earningsDirection = trifecta >= 1 ? 'POSITIVE' : trifecta <= -1 ? 'NEGATIVE' : 'NEUTRAL';
+    else {
+        currentPhase = 'MID_CYCLE';
+        phaseDescription = 'Mixed signals. Economy stable but watch leading indicators for direction.';
+    }
+    // ── SECTOR ROTATION from actual Chart Grid phase data ──
+    // Pull live phase data from the lens instruments API (in-process)
+    // We use the existing computed data rather than re-fetching
+    const sectorPhases = {};
+    const sectorEtfs = [
+        { sym: 'XLF', name: 'Financials' }, { sym: 'XLK', name: 'Technology' },
+        { sym: 'XLV', name: 'Healthcare' }, { sym: 'XLE', name: 'Energy' },
+        { sym: 'XLI', name: 'Industrials' }, { sym: 'XLB', name: 'Materials' },
+        { sym: 'XLP', name: 'Staples' }, { sym: 'XLY', name: 'Cons Disc' },
+        { sym: 'XLU', name: 'Utilities' }, { sym: 'XLRE', name: 'Real Estate' },
+        { sym: 'XLC', name: 'Communications' }, { sym: 'SMH', name: 'Semis' },
+        { sym: 'KRE', name: 'Reg Banks' }, { sym: 'IYT', name: 'Transports' },
+        { sym: 'XHB', name: 'Homebuilders' }, { sym: 'JETS', name: 'Airlines' },
+        { sym: 'XBI', name: 'Biotech' }, { sym: 'GLD', name: 'Gold' },
+        { sym: 'XRT', name: 'Retailers' }, { sym: 'XOP', name: 'Oil & Gas E&P' },
+    ];
+    // Build sector data (will be populated from lens instruments when available)
     const accumulate = [];
     const hold = [];
     const reduce = [];
+    const avoid = [];
+    // This data comes from the response — we build it from macro phase
+    // The frontend will overlay actual instrument phases from /api/lens/instruments
+    // For now, provide the macro-driven recommendations
     if (currentPhase === 'EARLY_RECOVERY' || currentPhase === 'MID_CYCLE') {
-        accumulate.push({ sector: 'Financials', reason: 'Rate-sensitive, benefits from steepening curve and economic expansion', cycle_sweet_spot: 'Early-to-Mid' }, { sector: 'Industrials', reason: 'Capex cycle picking up, ISM expansion favors capital goods', cycle_sweet_spot: 'Mid' }, { sector: 'Technology', reason: 'Earnings growth outpacing in expansion, institutional flows strong', cycle_sweet_spot: 'Early-to-Mid' }, { sector: 'Materials', reason: 'Commodity demand rises with industrial activity', cycle_sweet_spot: 'Mid' });
-        hold.push({ sector: 'Healthcare', reason: 'Defensive growth, performs across cycles', cycle_sweet_spot: 'All' }, { sector: 'Energy', reason: 'Commodity support but late-cycle characteristics emerging', cycle_sweet_spot: 'Mid-to-Late' }, { sector: 'Consumer Disc', reason: 'Consumer spending stable but watch employment trends', cycle_sweet_spot: 'Early-to-Mid' });
-        reduce.push({ sector: 'Utilities', reason: 'Underperforms in expansion, rate-sensitive negatively', cycle_sweet_spot: 'Recession' }, { sector: 'Consumer Staples', reason: 'Defensive — rotate in only when late cycle signals strengthen', cycle_sweet_spot: 'Late-to-Recession' }, { sector: 'Airlines', reason: 'Fuel costs + rate sensitivity make these fragile in transitions', cycle_sweet_spot: 'Early Recovery only' });
+        accumulate.push({ sector: 'Financials', etf: 'XLF', reason: 'Rate-sensitive cyclical, benefits from expansion', cycle_sweet_spot: 'Early-to-Mid' }, { sector: 'Industrials', etf: 'XLI', reason: 'Capex cycle + ISM expansion', cycle_sweet_spot: 'Mid' }, { sector: 'Technology', etf: 'XLK', reason: 'Earnings growth leads in expansion', cycle_sweet_spot: 'Early-to-Mid' }, { sector: 'Materials', etf: 'XLB', reason: 'Commodity demand rises with activity', cycle_sweet_spot: 'Mid' });
+        hold.push({ sector: 'Healthcare', etf: 'XLV', reason: 'Defensive growth across cycles', cycle_sweet_spot: 'All' }, { sector: 'Energy', etf: 'XLE', reason: 'Commodity support but watch late-cycle', cycle_sweet_spot: 'Mid-to-Late' });
+        reduce.push({ sector: 'Utilities', etf: 'XLU', reason: 'Underperforms in expansion', cycle_sweet_spot: 'Recession' }, { sector: 'Staples', etf: 'XLP', reason: 'Defensive — rotate in when late signals emerge', cycle_sweet_spot: 'Late-to-Recession' });
     }
     else if (currentPhase === 'LATE_CYCLE') {
-        accumulate.push({ sector: 'Energy', reason: 'Commodity inflation tailwinds, demand still strong', cycle_sweet_spot: 'Late-to-Recession' }, { sector: 'Materials', reason: 'Inflation beneficiaries, final stretch of growth', cycle_sweet_spot: 'Late' });
-        hold.push({ sector: 'Financials', reason: 'Margins compress as curve flattens, valuations attractive', cycle_sweet_spot: 'Mid-to-Late' }, { sector: 'Healthcare', reason: 'Defensive play as earnings slowdown approaches', cycle_sweet_spot: 'All' }, { sector: 'Consumer Staples', reason: 'Begin rotation here as late cycle indicators peak', cycle_sweet_spot: 'Late-to-Recession' });
-        reduce.push({ sector: 'Technology', reason: 'Growth concerns as rates rise, valuation compression', cycle_sweet_spot: 'Recession' }, { sector: 'Industrials', reason: 'Capex peak may have passed, earnings deceleration risk', cycle_sweet_spot: 'Mid' }, { sector: 'Airlines', reason: 'Sector weakness persists through late cycle', cycle_sweet_spot: 'Early Recovery only' });
+        accumulate.push({ sector: 'Energy', etf: 'XLE', reason: 'Inflation tailwinds', cycle_sweet_spot: 'Late' }, { sector: 'Healthcare', etf: 'XLV', reason: 'Defensive as growth slows', cycle_sweet_spot: 'All' }, { sector: 'Staples', etf: 'XLP', reason: 'Rotate to defense', cycle_sweet_spot: 'Late-to-Recession' });
+        reduce.push({ sector: 'Technology', etf: 'XLK', reason: 'Valuation compression risk', cycle_sweet_spot: 'Early-to-Mid' }, { sector: 'Cons Disc', etf: 'XLY', reason: 'Consumer weakening', cycle_sweet_spot: 'Early' });
     }
     else if (currentPhase === 'RECESSION') {
-        accumulate.push({ sector: 'Consumer Staples', reason: 'Defensive earnings, stable cash flows in downturn', cycle_sweet_spot: 'Late-to-Recession' }, { sector: 'Healthcare', reason: 'Non-cyclical, benefits from de-risking flows', cycle_sweet_spot: 'All' }, { sector: 'Utilities', reason: 'Bonds-like characteristics, yield support', cycle_sweet_spot: 'Recession' });
-        hold.push({ sector: 'Energy', reason: 'Demand destruction headwind, wait for stabilization', cycle_sweet_spot: 'Mid-to-Late' }, { sector: 'Materials', reason: 'Commodity collapse risk, avoid until recovery clear', cycle_sweet_spot: 'Mid' });
-        reduce.push({ sector: 'Technology', reason: 'Earnings decline, margin pressure, growth discount deepens', cycle_sweet_spot: 'Recession' }, { sector: 'Industrials', reason: 'Capex cuts, weak demand, cyclical downsizing', cycle_sweet_spot: 'Mid' }, { sector: 'Financials', reason: 'Credit losses accelerating, curve too flat', cycle_sweet_spot: 'Early-to-Mid' }, { sector: 'Airlines', reason: 'Demand collapse, structural weakness, avoid', cycle_sweet_spot: 'Early Recovery only' });
+        accumulate.push({ sector: 'Staples', etf: 'XLP', reason: 'Defensive earnings', cycle_sweet_spot: 'Recession' }, { sector: 'Healthcare', etf: 'XLV', reason: 'Non-cyclical', cycle_sweet_spot: 'All' }, { sector: 'Gold', etf: 'GLD', reason: 'Safe haven', cycle_sweet_spot: 'Recession' });
+        reduce.push({ sector: 'Technology', etf: 'XLK', reason: 'Earnings decline', cycle_sweet_spot: 'Early-to-Mid' }, { sector: 'Financials', etf: 'XLF', reason: 'Credit losses', cycle_sweet_spot: 'Early-to-Mid' }, { sector: 'Industrials', etf: 'XLI', reason: 'Capex cuts', cycle_sweet_spot: 'Mid' });
     }
-    const liquidityScore = latV4 > latV13 && latV4 > 0 ? 1 : latV4 < latV13 && latV4 < 0 ? -1 : 0;
-    const earningsCycleScore = trifecta >= 1 ? 1 : trifecta <= -1 ? -1 : 0;
-    const sentimentScore = breadthLat > 65 ? 1 : breadthLat < 45 ? -1 : 0;
-    const macroRegimeScore = gdpVal > 2.5 && cpiYoy < 3 ? 1 : gdpVal < 1.5 && cpiYoy > 3.5 ? -1 : 0;
-    const overallBias = (liquidityScore + earningsCycleScore + sentimentScore + macroRegimeScore) >= 1 ? 'RISK-ON' : (liquidityScore + earningsCycleScore + sentimentScore + macroRegimeScore) <= -1 ? 'RISK-OFF' : 'NEUTRAL';
-    const rotationTimeline = [
-        { timeframe: 'NOW', action: currentPhase === 'MID_CYCLE' ? 'Overweight cyclicals (Financials, Industrials, Tech)' : currentPhase === 'EARLY_RECOVERY' ? 'Aggressive risk-on, build cyclical positions' : currentPhase === 'LATE_CYCLE' ? 'Reduce growth exposure, shift to quality' : 'Full defensive posture — Staples, Healthcare, Gold', rationale: currentPhase === 'MID_CYCLE' ? 'Mid-cycle expansion with ISM above 50' : currentPhase === 'EARLY_RECOVERY' ? 'Recovery momentum with liquidity expansion' : currentPhase === 'LATE_CYCLE' ? 'Late cycle transition favors quality and defense' : 'Recession preparation, preserve capital' },
-        { timeframe: '3-6 MONTHS', action: currentPhase === 'MID_CYCLE' ? 'Begin rotating into Energy, Materials if ISM holds above 52' : currentPhase === 'EARLY_RECOVERY' ? 'Shift to financials, wait for inflation signals' : currentPhase === 'LATE_CYCLE' ? 'Accelerate rotation to Staples, Healthcare' : 'Continue defensive — evaluate stabilization signals', rationale: currentPhase === 'MID_CYCLE' ? 'Late-mid cycle commodity demand typically peaks' : currentPhase === 'EARLY_RECOVERY' ? 'Financials benefit from curve steepening' : currentPhase === 'LATE_CYCLE' ? 'Reduce cyclical exposure preemptively' : 'Watch for ISM stabilization, Fed pivot signals' },
-        { timeframe: '6-12 MONTHS', action: currentPhase === 'MID_CYCLE' ? 'If ISM decelerates: rotate toward Healthcare, reduce Industrials' : currentPhase === 'EARLY_RECOVERY' ? 'Build Materials, Energy if inflation rises' : currentPhase === 'LATE_CYCLE' ? 'Begin building defensive cash position' : 'Prepare for recovery — rotate back to value/cyclicals', rationale: currentPhase === 'MID_CYCLE' ? 'Late cycle transition favors quality and defense' : currentPhase === 'EARLY_RECOVERY' ? 'Inflation phase of recovery typically favors commodities' : currentPhase === 'LATE_CYCLE' ? 'Preserve capital ahead of potential downturn' : 'Position for eventual recovery and cycle reset' },
-        { timeframe: '12+ MONTHS', action: currentPhase === 'RECESSION' || currentPhase === 'LATE_CYCLE' ? 'If yield curve inverts: full defensive rotation — Staples, Healthcare, Gold' : 'Monitor for late-cycle signals, prepare defensive hedges', rationale: currentPhase === 'RECESSION' || currentPhase === 'LATE_CYCLE' ? 'Recession preparation, preserve capital' : 'Cycle transition preparation' }
-    ];
-    const keyWatchpoints = [
-        ismDirection === 'FALLING' ? 'ISM deceleration would signal transition to late cycle' : 'ISM inflection point — watch for break below 50',
-        yieldCurveSignal === 'INVERTED' ? 'Yield curve re-inversion would be major warning' : 'Monitor curve flattening — late cycle signal',
-        m2Growth === 'NEGATIVE' ? 'M2 growth turning negative = liquidity headwind' : 'Sustaining M2 growth critical for expansion',
-        'Watch unemployment — Sahm Rule trigger at +0.5% from trough',
-    ];
+    // ── DRUCKENMILLER FRAMEWORK from Leading Indicators ──
+    const liquidityScore = liqVel4w > 0.5 && liqAccel > 0 ? 2 : liqVel4w > 0 ? 1 : liqVel4w < -0.5 ? -2 : liqVel4w < 0 ? -1 : 0;
+    const growthScore = gdp > 3 ? 2 : gdp > 2 ? 1 : gdp < 0.5 ? -2 : gdp < 1.5 ? -1 : 0;
+    const inflationScore = cpiYoy < 2.5 ? 1 : cpiYoy > 4 ? -2 : cpiYoy > 3.5 ? -1 : 0;
+    const breadthScore = breadthLat > 70 ? 2 : breadthLat > 55 ? 1 : breadthLat < 35 ? -2 : breadthLat < 45 ? -1 : 0;
+    const curveScore = yieldCurveBps > 50 ? 1 : yieldCurveBps < -25 ? -2 : yieldCurveBps < 0 ? -1 : 0;
+    const totalScore = liquidityScore + growthScore + inflationScore + breadthScore + curveScore;
+    const overallBias = totalScore >= 3 ? 'RISK-ON' : totalScore >= 1 ? 'LEANING BULLISH' : totalScore <= -3 ? 'RISK-OFF' : totalScore <= -1 ? 'LEANING BEARISH' : 'NEUTRAL';
     res.json({
         current_phase: currentPhase,
-        phase_confidence: phaseConfidence,
         phase_description: phaseDescription,
         leading_indicators: {
-            ism_direction: ismDirection,
-            yield_curve_signal: yieldCurveSignal,
-            credit_conditions: creditConditions,
-            m2_growth: m2Growth,
-            earnings_momentum: earningsDirection,
+            liquidity: { velocity4w: liqVel4w, velocity13w: liqVel13w, acceleration: liqAccel, signal: liqVel4w > 0 && liqAccel > 0 ? 'EXPANDING' : liqVel4w < 0 && liqAccel < 0 ? 'DRAINING' : liqVel4w > 0 ? 'DECELERATING' : 'BOTTOMING' },
+            ism: { value: ismMfg, direction: ismMfg > 51 ? 'RISING' : ismMfg < 49 ? 'FALLING' : 'STABLE' },
+            yield_curve: { bps: yieldCurveBps, signal: yieldCurveBps > 50 ? 'STEEP' : yieldCurveBps > 0 ? 'NORMAL' : yieldCurveBps > -25 ? 'FLAT' : 'INVERTED' },
+            inflation: { cpi: cpiYoy, pce: pce, signal: cpiYoy < 2.5 ? 'COOLING' : cpiYoy > 4 ? 'HOT' : 'STABLE' },
+            growth: { gdp: gdp, signal: gdp > 2.5 ? 'STRONG' : gdp > 1 ? 'MODERATE' : 'WEAK' },
+            breadth: { pct: breadthLat, signal: breadthLat > 60 ? 'HEALTHY' : breadthLat < 40 ? 'FRAGILE' : 'NEUTRAL' },
         },
-        next_phase: {
-            likely: nextPhase,
-            probability: nextProbability,
-            estimated_months: nextEstimatedMonths,
-            triggers,
-        },
-        sector_rotation: {
-            accumulate,
-            hold,
-            reduce,
-        },
+        sector_rotation: { accumulate, hold, reduce, avoid },
+        sector_etfs: sectorEtfs,
         druckenmiller_framework: {
             liquidity_score: liquidityScore,
-            earnings_cycle_score: earningsCycleScore,
-            sentiment_score: sentimentScore,
-            macro_regime_score: macroRegimeScore,
+            growth_score: growthScore,
+            inflation_score: inflationScore,
+            breadth_score: breadthScore,
+            curve_score: curveScore,
+            total_score: totalScore,
             overall_bias: overallBias,
-            key_watchpoints: keyWatchpoints,
         },
-        rotation_timeline: rotationTimeline,
     });
 });
 app.get('/api/action-signals', (_req, res) => {
