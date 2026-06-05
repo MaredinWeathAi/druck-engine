@@ -1636,14 +1636,10 @@ async function fetchTickerBars(symbol, years = 2) {
     }
     // PRIMARY: GuruFocus (never blocks us, reliable, has decades of data)
     try {
-        const gfApiKey = GURUFOCUS_API_KEY;
-        console.log(`[TICKER-FETCH] Trying GuruFocus for ${symbol} (key: ${gfApiKey ? gfApiKey.substring(0, 8) + '...' : 'MISSING'})`);
-        const url = `https://api.gurufocus.com/public/user/${gfApiKey}/stock/${encodeURIComponent(symbol)}/price`;
+        const url = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${encodeURIComponent(symbol)}/price`;
         const response = await fetch(url);
-        console.log(`[TICKER-FETCH] GuruFocus response for ${symbol}: status=${response.status}`);
         if (response.ok) {
             const priceData = await response.json();
-            console.log(`[TICKER-FETCH] GuruFocus ${symbol}: got ${Array.isArray(priceData) ? priceData.length : 'non-array'} entries`);
             if (Array.isArray(priceData) && priceData.length >= 50) {
                 const cutoffDate = new Date();
                 cutoffDate.setFullYear(cutoffDate.getFullYear() - years);
