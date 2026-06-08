@@ -15,6 +15,7 @@ import {
   SnapshotRecord, TransitionRecord,
   getWatchlist, addWatchlistTicker, removeWatchlistTicker, updateWatchlistAnalysis, getWatchlistPhaseLog,
   recordPhaseVerdictSnapshot, getPhaseVerdictHistory,
+  getCachedBars, setCachedBars, getBarCacheAge,
   recordForeshadowSnapshot, getForeshadowHistory,
   getDruckenmiller13FHistory,
 } from './history-store';
@@ -413,6 +414,19 @@ async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar
   const isYahooOnly = YAHOO_ONLY_PATTERN.test(symbol);
   const years = period === '5y' ? 5 : period === '2y' ? 2 : 1;
 
+  // ── CHECK PERSISTENT SQLite CACHE (survives deploys) — 6 hour TTL ──
+  try {
+    const ageMin = getBarCacheAge(symbol);
+    if (ageMin !== null && ageMin < 360) {
+      const dbCached = getCachedBars(symbol);
+      if (dbCached && dbCached.bars.length >= 50) {
+        return dbCached.bars.map((b: any) => ({
+          date: new Date(b.date), open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume || 0,
+        }));
+      }
+    }
+  } catch {}
+
   // ── TRY GURUFOCUS FIRST for non-Yahoo-only symbols ──
   if (!isYahooOnly) {
     try {
@@ -465,6 +479,8 @@ async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar
               }
             } catch {} // Yahoo enhancement is best-effort
 
+            // Persist to SQLite for deploy survival
+            try { setCachedBars(symbol, bars.map(b => ({ date: b.date.toISOString().split('T')[0], open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume }))); } catch {}
             return bars;
           }
         }
@@ -1904,11 +1920,24 @@ const TICKER_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 const tickerAnalysisCache: Map<string, { data: any; fetchedAt: number }> = new Map();
 
 async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCVBar[]> {
-  // Check cache first — if we have bars less than 2 hours old, use them
+  // Check in-memory cache first — if we have bars less than 2 hours old, use them
   const cached = tickerBarCache.get(symbol);
   if (cached && Date.now() - cached.fetchedAt < TICKER_CACHE_TTL && cached.bars.length >= 50) {
     return cached.bars;
   }
+
+  // Check PERSISTENT SQLite cache (survives deploys) — use if <6 hours old
+  try {
+    const ageMin = getBarCacheAge(symbol);
+    if (ageMin !== null && ageMin < 360) { // 6 hours
+      const dbCached = getCachedBars(symbol);
+      if (dbCached && dbCached.bars.length >= 50) {
+        // Hydrate into in-memory cache too
+        tickerBarCache.set(symbol, { bars: dbCached.bars, fetchedAt: Date.now() - (ageMin * 60 * 1000) });
+        return dbCached.bars;
+      }
+    }
+  } catch {}
 
   // PRIMARY: GuruFocus (never blocks us, reliable, has decades of data)
   try {
@@ -1937,6 +1966,7 @@ async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCV
         if (bars.length >= 50) {
           console.log(`[TICKER] GuruFocus: ${bars.length} bars for ${symbol}`);
           tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
+          setCachedBars(symbol, bars); // Persist to SQLite for deploy survival
 
           // ENHANCE with Yahoo volume data if available (non-blocking)
           try {
@@ -1969,6 +1999,7 @@ async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCV
               }
               console.log(`[TICKER] Enhanced ${symbol} with Yahoo OHLCV data`);
               tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
+              setCachedBars(symbol, bars); // Persist enhanced version
             }
           } catch {
             // Yahoo enhancement failed — GuruFocus close-only data is still good
@@ -2000,6 +2031,7 @@ async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCV
           close: q.close, volume: q.volume || 0,
         }));
       tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
+      setCachedBars(symbol, bars); // Persist Yahoo-only bars
       return bars;
     }
   } catch {}

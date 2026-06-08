@@ -240,6 +240,19 @@ const YAHOO_ONLY_PATTERN = /[=]F$|^\^TNX$|^\^FVX$|^\^TYX$|^\^IRX$|[=]X$/;
 async function fetchOHLC(symbol, period = '1y') {
     const isYahooOnly = YAHOO_ONLY_PATTERN.test(symbol);
     const years = period === '5y' ? 5 : period === '2y' ? 2 : 1;
+    // ── CHECK PERSISTENT SQLite CACHE (survives deploys) — 6 hour TTL ──
+    try {
+        const ageMin = (0, history_store_1.getBarCacheAge)(symbol);
+        if (ageMin !== null && ageMin < 360) {
+            const dbCached = (0, history_store_1.getCachedBars)(symbol);
+            if (dbCached && dbCached.bars.length >= 50) {
+                return dbCached.bars.map((b) => ({
+                    date: new Date(b.date), open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume || 0,
+                }));
+            }
+        }
+    }
+    catch { }
     // ── TRY GURUFOCUS FIRST for non-Yahoo-only symbols ──
     if (!isYahooOnly) {
         try {
@@ -299,6 +312,11 @@ async function fetchOHLC(symbol, period = '1y') {
                             }
                         }
                         catch { } // Yahoo enhancement is best-effort
+                        // Persist to SQLite for deploy survival
+                        try {
+                            (0, history_store_1.setCachedBars)(symbol, bars.map(b => ({ date: b.date.toISOString().split('T')[0], open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume })));
+                        }
+                        catch { }
                         return bars;
                     }
                 }
@@ -1623,11 +1641,24 @@ const TICKER_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
 // Full analysis result cache — stores the complete ticker analysis output
 const tickerAnalysisCache = new Map();
 async function fetchTickerBars(symbol, years = 2) {
-    // Check cache first — if we have bars less than 2 hours old, use them
+    // Check in-memory cache first — if we have bars less than 2 hours old, use them
     const cached = tickerBarCache.get(symbol);
     if (cached && Date.now() - cached.fetchedAt < TICKER_CACHE_TTL && cached.bars.length >= 50) {
         return cached.bars;
     }
+    // Check PERSISTENT SQLite cache (survives deploys) — use if <6 hours old
+    try {
+        const ageMin = (0, history_store_1.getBarCacheAge)(symbol);
+        if (ageMin !== null && ageMin < 360) { // 6 hours
+            const dbCached = (0, history_store_1.getCachedBars)(symbol);
+            if (dbCached && dbCached.bars.length >= 50) {
+                // Hydrate into in-memory cache too
+                tickerBarCache.set(symbol, { bars: dbCached.bars, fetchedAt: Date.now() - (ageMin * 60 * 1000) });
+                return dbCached.bars;
+            }
+        }
+    }
+    catch { }
     // PRIMARY: GuruFocus (never blocks us, reliable, has decades of data)
     try {
         const url = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${encodeURIComponent(symbol)}/price`;
@@ -1657,6 +1688,7 @@ async function fetchTickerBars(symbol, years = 2) {
                 if (bars.length >= 50) {
                     console.log(`[TICKER] GuruFocus: ${bars.length} bars for ${symbol}`);
                     tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
+                    (0, history_store_1.setCachedBars)(symbol, bars); // Persist to SQLite for deploy survival
                     // ENHANCE with Yahoo volume data if available (non-blocking)
                     try {
                         const endDate = new Date();
@@ -1688,6 +1720,7 @@ async function fetchTickerBars(symbol, years = 2) {
                             }
                             console.log(`[TICKER] Enhanced ${symbol} with Yahoo OHLCV data`);
                             tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
+                            (0, history_store_1.setCachedBars)(symbol, bars); // Persist enhanced version
                         }
                     }
                     catch {
@@ -1719,6 +1752,7 @@ async function fetchTickerBars(symbol, years = 2) {
                 close: q.close, volume: q.volume || 0,
             }));
             tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
+            (0, history_store_1.setCachedBars)(symbol, bars); // Persist Yahoo-only bars
             return bars;
         }
     }

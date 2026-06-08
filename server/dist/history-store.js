@@ -32,6 +32,9 @@ exports.updateTransitionOutcomes = updateTransitionOutcomes;
 exports.computeAccuracyMetrics = computeAccuracyMetrics;
 exports.getDbStats = getDbStats;
 exports.initWatchlistTable = initWatchlistTable;
+exports.getCachedBars = getCachedBars;
+exports.setCachedBars = setCachedBars;
+exports.getBarCacheAge = getBarCacheAge;
 exports.getWatchlist = getWatchlist;
 exports.addWatchlistTicker = addWatchlistTicker;
 exports.removeWatchlistTicker = removeWatchlistTicker;
@@ -630,6 +633,15 @@ function initWatchlistTable() {
         db.exec('ALTER TABLE watchlist ADD COLUMN sizing_detail TEXT');
     }
     catch { }
+    // ── PERSISTENT BAR CACHE — survives deploys so we don't hit GuruFocus every restart ──
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS bar_cache (
+      symbol TEXT PRIMARY KEY,
+      bars_json TEXT NOT NULL,
+      fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+      bar_count INTEGER NOT NULL DEFAULT 0
+    )
+  `);
     // Phase change history log
     db.exec(`
     CREATE TABLE IF NOT EXISTS watchlist_phase_log (
@@ -696,6 +708,36 @@ function initWatchlistTable() {
       notes TEXT
     )
   `);
+}
+// ── PERSISTENT BAR CACHE ──
+function getCachedBars(symbol) {
+    try {
+        const row = db.prepare('SELECT bars_json, fetched_at FROM bar_cache WHERE symbol = ?').get(symbol.toUpperCase());
+        if (!row)
+            return null;
+        return { bars: JSON.parse(row.bars_json), fetchedAt: row.fetched_at };
+    }
+    catch {
+        return null;
+    }
+}
+function setCachedBars(symbol, bars) {
+    try {
+        db.prepare(`
+      INSERT OR REPLACE INTO bar_cache (symbol, bars_json, fetched_at, bar_count)
+      VALUES (?, ?, datetime('now'), ?)
+    `).run(symbol.toUpperCase(), JSON.stringify(bars), bars.length);
+    }
+    catch { }
+}
+function getBarCacheAge(symbol) {
+    try {
+        const row = db.prepare("SELECT (julianday('now') - julianday(fetched_at)) * 24 * 60 as age_minutes FROM bar_cache WHERE symbol = ?").get(symbol.toUpperCase());
+        return row ? row.age_minutes : null;
+    }
+    catch {
+        return null;
+    }
 }
 function getWatchlist() {
     try {

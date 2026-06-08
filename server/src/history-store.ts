@@ -692,6 +692,16 @@ export function initWatchlistTable(): void {
   try { db.exec('ALTER TABLE watchlist ADD COLUMN sizing_conflict_note TEXT'); } catch {}
   try { db.exec('ALTER TABLE watchlist ADD COLUMN sizing_detail TEXT'); } catch {}
 
+  // ── PERSISTENT BAR CACHE — survives deploys so we don't hit GuruFocus every restart ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bar_cache (
+      symbol TEXT PRIMARY KEY,
+      bars_json TEXT NOT NULL,
+      fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+      bar_count INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
   // Phase change history log
   db.exec(`
     CREATE TABLE IF NOT EXISTS watchlist_phase_log (
@@ -761,6 +771,31 @@ export function initWatchlistTable(): void {
       notes TEXT
     )
   `);
+}
+
+// ── PERSISTENT BAR CACHE ──
+export function getCachedBars(symbol: string): { bars: any[]; fetchedAt: string } | null {
+  try {
+    const row = db.prepare('SELECT bars_json, fetched_at FROM bar_cache WHERE symbol = ?').get(symbol.toUpperCase()) as any;
+    if (!row) return null;
+    return { bars: JSON.parse(row.bars_json), fetchedAt: row.fetched_at };
+  } catch { return null; }
+}
+
+export function setCachedBars(symbol: string, bars: any[]): void {
+  try {
+    db.prepare(`
+      INSERT OR REPLACE INTO bar_cache (symbol, bars_json, fetched_at, bar_count)
+      VALUES (?, ?, datetime('now'), ?)
+    `).run(symbol.toUpperCase(), JSON.stringify(bars), bars.length);
+  } catch {}
+}
+
+export function getBarCacheAge(symbol: string): number | null {
+  try {
+    const row = db.prepare("SELECT (julianday('now') - julianday(fetched_at)) * 24 * 60 as age_minutes FROM bar_cache WHERE symbol = ?").get(symbol.toUpperCase()) as any;
+    return row ? row.age_minutes : null;
+  } catch { return null; }
 }
 
 export function getWatchlist(): any[] {

@@ -57,6 +57,12 @@ export declare function updateTransitionOutcomes(): number;
 export declare function computeAccuracyMetrics(algorithmVersion?: string): any;
 export declare function getDbStats(): any;
 export declare function initWatchlistTable(): void;
+export declare function getCachedBars(symbol: string): {
+    bars: any[];
+    fetchedAt: string;
+} | null;
+export declare function setCachedBars(symbol: string, bars: any[]): void;
+export declare function getBarCacheAge(symbol: string): number | null;
 export declare function getWatchlist(): any[];
 export declare function addWatchlistTicker(symbol: string): void;
 export declare function removeWatchlistTicker(symbol: string): void;
