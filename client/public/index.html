@@ -1257,27 +1257,26 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     <!-- ══════════ PARADIGM WATCH PAGE ══════════ -->
     <div class="page" id="page-paradigm">
       <div style="font-size:12px;color:var(--dim);margin-bottom:16px">
-        AI-powered intelligence briefing using the Druckenmiller framework. Synthesizes all 130+ instruments, watchlist analysis, phase distribution, sizing conflicts, and sector rotation into an actionable macro read.
+        Model accuracy tracker — measures how Druck Engine phase classifications, verdicts, and sizing regimes perform against actual market returns and S&P 500.
       </div>
 
-      <!-- Analysis Controls -->
-      <div class="card" style="margin-bottom:16px;padding:16px">
-        <div style="display:flex;gap:8px;align-items:center">
-          <input type="text" id="ai-analysis-prompt" placeholder="Ask a specific question... or leave blank for full briefing" style="flex:1;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
-          <button onclick="runAiAnalysis()" id="ai-analysis-btn" style="padding:8px 16px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap">Run Analysis</button>
-        </div>
-      </div>
+      <!-- Tracking Status Banner -->
+      <div id="mp-status" class="card" style="padding:12px 16px;margin-bottom:16px"></div>
 
-      <!-- Metadata strip -->
-      <div id="ai-meta" style="display:none;margin-bottom:12px"></div>
+      <!-- Section 1: Model Scorecard -->
+      <div id="mp-scorecard" style="margin-bottom:20px"></div>
 
-      <!-- Analysis Output -->
-      <div id="ai-analysis-output" style="margin-bottom:16px">
-        <div style="text-align:center;padding:40px;color:var(--dim)">Click "Run Analysis" to generate a Druckenmiller-style intelligence briefing from all system data.</div>
-      </div>
+      <!-- Section 2: Watchlist Performance -->
+      <div id="mp-watchlist" style="margin-bottom:20px"></div>
 
-      <!-- History of previous analyses -->
-      <div id="ai-analysis-history"></div>
+      <!-- Section 3: Phase Performance vs SPY -->
+      <div id="mp-phases" style="margin-bottom:20px"></div>
+
+      <!-- Section 4: Sizing Regime Accuracy -->
+      <div id="mp-sizing" style="margin-bottom:20px"></div>
+
+      <!-- Section 5: AI Synthesis -->
+      <div id="mp-ai-briefing" style="margin-bottom:20px"></div>
     </div>
 
     <div class="page" id="page-geoevents">
@@ -1429,7 +1428,7 @@ function loadPageData(page) {
   else if (page === 'rotation') loadRotation();
   else if (page === 'intelfeed') loadIntelFeed();
   else if (page === 'guruwatch') loadGuruWatch();
-  else if (page === 'paradigm') { /* AI Analysis - loaded on demand via button */ }
+  else if (page === 'paradigm') loadModelPerformance();
   else if (page === 'geoevents') loadGeoEvents();
   else if (page === 'earningscal') loadEarningsCal();
   else if (page === 'settings') loadSettings();
@@ -5154,110 +5153,213 @@ function analyzeTickerFn() {
 }
 
 // ═══════════════════════════════════════════════
-// AI ANALYSIS — Druckenmiller Intelligence Briefing
+// MODEL PERFORMANCE — Accuracy Tracking Dashboard
 // ═══════════════════════════════════════════════
 
-var aiAnalysisHistory = [];
+function loadModelPerformance() {
+  var statusEl = document.getElementById('mp-status');
+  if (statusEl) statusEl.innerHTML = '<div style="text-align:center;color:var(--dim)">Loading model performance data...</div>';
 
-function runAiAnalysis() {
-  var btn = document.getElementById('ai-analysis-btn');
-  var output = document.getElementById('ai-analysis-output');
-  var meta = document.getElementById('ai-meta');
-  var prompt = (document.getElementById('ai-analysis-prompt').value || '').trim();
+  apiCall('/api/lens/model-performance').then(function(d) {
+    if (!d || d.error) {
+      if (statusEl) statusEl.innerHTML = '<div style="color:#E24B4A">Error: ' + (d ? d.error : 'Failed to load') + '</div>';
+      return;
+    }
+    renderModelPerformance(d);
+  }).catch(function(err) {
+    if (statusEl) statusEl.innerHTML = '<div style="color:#E24B4A">Error loading: ' + err.message + '</div>';
+  });
+}
 
-  btn.textContent = 'Analyzing...';
+function renderModelPerformance(d) {
+  // ─── TRACKING STATUS BANNER ───
+  var statusEl = document.getElementById('mp-status');
+  var days = d.trackingDays || 0;
+  var periods = d.periods || {};
+  var periodBadges = '<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:500;' + (days >= 1 ? 'background:#1D9E7518;color:#1D9E75;border:1px solid #1D9E7544' : 'background:var(--card2);color:var(--dim);border:1px solid var(--border)') + '">Daily</span> ';
+  periodBadges += '<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:500;' + (periods.monthly ? 'background:#1D9E7518;color:#1D9E75;border:1px solid #1D9E7544' : 'background:var(--card2);color:var(--dim);border:1px solid var(--border)') + '">30d</span> ';
+  periodBadges += '<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:500;' + (periods.quarterly ? 'background:#1D9E7518;color:#1D9E75;border:1px solid #1D9E7544' : 'background:var(--card2);color:var(--dim);border:1px solid var(--border)') + '">90d</span> ';
+  periodBadges += '<span style="padding:2px 8px;border-radius:4px;font-size:10px;font-weight:500;' + (periods.annual ? 'background:#1D9E7518;color:#1D9E75;border:1px solid #1D9E7544' : 'background:var(--card2);color:var(--dim);border:1px solid var(--border)') + '">365d</span>';
+
+  statusEl.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center">' +
+    '<div><span style="font-size:14px;font-weight:500;color:var(--text)">Tracking: ' + days + ' day' + (days !== 1 ? 's' : '') + '</span>' +
+    ' <span style="font-size:11px;color:var(--dim)">since ' + (d.trackingStartDate ? new Date(d.trackingStartDate).toLocaleDateString() : 'today') + '</span>' +
+    ' <span style="font-size:11px;color:var(--dim)">| ' + (d.totalHistoryRecords || 0) + ' records</span></div>' +
+    '<div style="display:flex;gap:4px">' + periodBadges + '</div></div>' +
+    (d.spyPrice ? '<div style="font-size:11px;color:var(--dim);margin-top:4px">S&P 500 (SPY): $' + d.spyPrice.toFixed(2) + (d.spyReturnSinceTracking !== null ? ' | Return since tracking: ' + (d.spyReturnSinceTracking > 0 ? '+' : '') + d.spyReturnSinceTracking.toFixed(2) + '%' : '') + '</div>' : '');
+
+  // ─── SECTION 1: MODEL SCORECARD ───
+  var ws = d.watchlistSummary || {};
+  var scoreHtml = '<div style="font-size:13px;font-weight:500;color:var(--accent);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Model scorecard</div>';
+  scoreHtml += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:12px">';
+
+  var hitRate = ws.hitRate !== null && ws.hitRate !== undefined ? ws.hitRate + '%' : '—';
+  var hitColor = ws.hitRate >= 60 ? '#1D9E75' : ws.hitRate >= 40 ? '#BA7517' : ws.hitRate !== null ? '#E24B4A' : 'var(--dim)';
+  scoreHtml += '<div class="card" style="padding:12px;text-align:center"><div style="font-size:10px;color:var(--dim)">Hit rate</div><div style="font-size:22px;font-weight:500;color:' + hitColor + '">' + hitRate + '</div><div style="font-size:9px;color:var(--dim)">' + (ws.correctCalls || 0) + ' correct / ' + (ws.wrongCalls || 0) + ' wrong</div></div>';
+  scoreHtml += '<div class="card" style="padding:12px;text-align:center"><div style="font-size:10px;color:var(--dim)">Avg alpha vs SPY</div><div style="font-size:22px;font-weight:500;color:' + (ws.avgAlpha > 0 ? '#1D9E75' : ws.avgAlpha < 0 ? '#E24B4A' : 'var(--dim)') + '">' + (ws.avgAlpha !== null ? (ws.avgAlpha > 0 ? '+' : '') + ws.avgAlpha.toFixed(1) + '%' : '—') + '</div><div style="font-size:9px;color:var(--dim)">' + ws.totalPositions + ' positions</div></div>';
+  scoreHtml += '<div class="card" style="padding:12px;text-align:center"><div style="font-size:10px;color:var(--dim)">Tracking depth</div><div style="font-size:22px;font-weight:500;color:var(--text)">' + days + 'd</div><div style="font-size:9px;color:var(--dim)">Need 30d+ for significance</div></div>';
+  scoreHtml += '<div class="card" style="padding:12px;text-align:center"><div style="font-size:10px;color:var(--dim)">SPY benchmark</div><div style="font-size:22px;font-weight:500;color:' + (d.spyReturnSinceTracking > 0 ? '#1D9E75' : d.spyReturnSinceTracking < 0 ? '#E24B4A' : 'var(--dim)') + '">' + (d.spyReturnSinceTracking !== null ? (d.spyReturnSinceTracking > 0 ? '+' : '') + d.spyReturnSinceTracking.toFixed(1) + '%' : '—') + '</div><div style="font-size:9px;color:var(--dim)">Since tracking start</div></div>';
+  scoreHtml += '</div>';
+
+  if (days < 30) {
+    scoreHtml += '<div style="padding:10px 14px;border-radius:6px;background:#BA751712;border:1px solid #BA751744;font-size:11px;color:#BA7517;margin-bottom:8px">Insufficient history for statistical significance. Monthly data requires 30+ days, quarterly 90+, annual 365+. Data is accumulating automatically.</div>';
+  }
+  document.getElementById('mp-scorecard').innerHTML = scoreHtml;
+
+  // ─── SECTION 2: WATCHLIST PERFORMANCE ───
+  var wlPerf = d.watchlistPerformance || [];
+  var wlHtml = '<div style="font-size:13px;font-weight:500;color:var(--accent);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Watchlist performance vs S&P 500</div>';
+  if (wlPerf.length === 0) {
+    wlHtml += '<div class="card" style="padding:20px;text-align:center;color:var(--dim)">No watchlist positions to track</div>';
+  } else {
+    wlHtml += '<div style="overflow-x:auto"><table style="width:100%;font-size:11px;border-collapse:collapse">';
+    wlHtml += '<thead><tr style="border-bottom:1px solid var(--border)">';
+    wlHtml += '<th style="text-align:left;padding:6px 8px;color:var(--dim);font-weight:500">Ticker</th>';
+    wlHtml += '<th style="text-align:right;padding:6px 4px;color:var(--dim);font-weight:500">Entry</th>';
+    wlHtml += '<th style="text-align:right;padding:6px 4px;color:var(--dim);font-weight:500">Now</th>';
+    wlHtml += '<th style="text-align:right;padding:6px 4px;color:var(--dim);font-weight:500">Return</th>';
+    wlHtml += '<th style="text-align:right;padding:6px 4px;color:var(--dim);font-weight:500">SPY</th>';
+    wlHtml += '<th style="text-align:right;padding:6px 4px;color:var(--dim);font-weight:500">Alpha</th>';
+    wlHtml += '<th style="text-align:left;padding:6px 8px;color:var(--dim);font-weight:500">Verdict</th>';
+    wlHtml += '<th style="text-align:left;padding:6px 4px;color:var(--dim);font-weight:500">Sizing</th>';
+    wlHtml += '<th style="text-align:center;padding:6px 4px;color:var(--dim);font-weight:500">Days</th>';
+    wlHtml += '<th style="text-align:center;padding:6px 4px;color:var(--dim);font-weight:500">Result</th>';
+    wlHtml += '</tr></thead><tbody>';
+
+    wlPerf.forEach(function(w) {
+      var retColor = w.tickerReturn > 0 ? '#1D9E75' : w.tickerReturn < 0 ? '#E24B4A' : 'var(--dim)';
+      var alphaColor = w.alpha > 0 ? '#1D9E75' : w.alpha < 0 ? '#E24B4A' : 'var(--dim)';
+      var resultColor = w.modelCorrect === 'CORRECT' ? '#1D9E75' : w.modelCorrect === 'WRONG' ? '#E24B4A' : '#BA7517';
+      var resultIcon = w.modelCorrect === 'CORRECT' ? '✓' : w.modelCorrect === 'WRONG' ? '✗' : '~';
+      var sizingShort = { BACK_UP_TRUCK: 'TRUCK', TRIM: 'TRIM', LIQUIDATE: 'EXIT', WAIT_AND_SEE: 'WAIT' };
+
+      wlHtml += '<tr style="border-bottom:0.5px solid var(--border)">';
+      wlHtml += '<td style="padding:6px 8px;font-weight:700;color:var(--accent)">' + w.symbol + '</td>';
+      wlHtml += '<td style="text-align:right;padding:6px 4px">' + (w.entryPrice ? '$' + w.entryPrice.toFixed(2) : '—') + '</td>';
+      wlHtml += '<td style="text-align:right;padding:6px 4px">' + (w.currentPrice ? '$' + w.currentPrice.toFixed(2) : '—') + '</td>';
+      wlHtml += '<td style="text-align:right;padding:6px 4px;font-weight:500;color:' + retColor + '">' + (w.tickerReturn !== null ? (w.tickerReturn > 0 ? '+' : '') + w.tickerReturn.toFixed(1) + '%' : '—') + '</td>';
+      wlHtml += '<td style="text-align:right;padding:6px 4px;color:var(--dim)">' + (w.spyReturn !== null ? (w.spyReturn > 0 ? '+' : '') + w.spyReturn.toFixed(1) + '%' : '—') + '</td>';
+      wlHtml += '<td style="text-align:right;padding:6px 4px;font-weight:700;color:' + alphaColor + '">' + (w.alpha !== null ? (w.alpha > 0 ? '+' : '') + w.alpha.toFixed(1) + '%' : '—') + '</td>';
+      wlHtml += '<td style="padding:6px 8px;font-size:10px;color:var(--dim);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (w.verdict || '—') + '</td>';
+      wlHtml += '<td style="padding:6px 4px"><span style="font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;background:var(--card2);color:var(--dim)">' + (sizingShort[w.sizingRegime] || w.sizingRegime || '—') + '</span></td>';
+      wlHtml += '<td style="text-align:center;padding:6px 4px;font-size:10px;color:var(--dim)">' + (w.daysHeld || '—') + '</td>';
+      wlHtml += '<td style="text-align:center;padding:6px 4px;font-weight:700;color:' + resultColor + '">' + resultIcon + '</td>';
+      wlHtml += '</tr>';
+    });
+    wlHtml += '</tbody></table></div>';
+  }
+  document.getElementById('mp-watchlist').innerHTML = wlHtml;
+
+  // ─── SECTION 3: PHASE PERFORMANCE VS SPY ───
+  var phasePerf = d.phasePerformance || {};
+  var phHtml = '<div style="font-size:13px;font-weight:500;color:var(--accent);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Phase classification accuracy</div>';
+  var phaseOrder = ['P1 Buy', 'P2 Ride', 'P3 Trim', 'P4 Exit', 'P5 Avoid'];
+  var phColors = { 'P1 Buy': '#0ea5e9', 'P2 Ride': '#1D9E75', 'P3 Trim': '#f97316', 'P4 Exit': '#e879f9', 'P5 Avoid': '#E24B4A' };
+  var phExpected = { 'P1 Buy': 'positive', 'P2 Ride': 'positive', 'P3 Trim': 'flat', 'P4 Exit': 'negative', 'P5 Avoid': 'negative' };
+
+  if (Object.keys(phasePerf).length === 0) {
+    phHtml += '<div class="card" style="padding:20px;text-align:center;color:var(--dim)">No phase performance data yet — accumulating records</div>';
+  } else {
+    phHtml += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px">';
+    phaseOrder.forEach(function(phase) {
+      var p = phasePerf[phase];
+      if (!p) return;
+      var pc = phColors[phase] || 'var(--dim)';
+      var expected = phExpected[phase];
+      var correct = (expected === 'positive' && p.avgReturn > 0) || (expected === 'negative' && p.avgReturn < 0) || (expected === 'flat');
+      var retColor = p.avgReturn > 0 ? '#1D9E75' : p.avgReturn < 0 ? '#E24B4A' : 'var(--dim)';
+
+      phHtml += '<div class="card" style="padding:12px;border-top:3px solid ' + pc + '">';
+      phHtml += '<div style="font-size:12px;font-weight:500;color:' + pc + '">' + phase + '</div>';
+      phHtml += '<div style="font-size:18px;font-weight:500;color:' + retColor + ';margin:4px 0">' + (p.avgReturn > 0 ? '+' : '') + p.avgReturn.toFixed(1) + '%</div>';
+      phHtml += '<div style="font-size:9px;color:var(--dim)">' + p.count + ' instruments</div>';
+      if (p.vsSpyAlpha !== null) {
+        phHtml += '<div style="font-size:10px;margin-top:4px;color:' + (p.vsSpyAlpha > 0 ? '#1D9E75' : '#E24B4A') + '">Alpha: ' + (p.vsSpyAlpha > 0 ? '+' : '') + p.vsSpyAlpha.toFixed(1) + '%</div>';
+      }
+      phHtml += '<div style="font-size:9px;margin-top:2px;color:' + (correct ? '#1D9E75' : '#E24B4A') + '">' + (correct ? '✓ Matches expectation' : '✗ Counter to expectation') + '</div>';
+      phHtml += '</div>';
+    });
+    phHtml += '</div>';
+  }
+  document.getElementById('mp-phases').innerHTML = phHtml;
+
+  // ─── SECTION 4: SIZING REGIME ACCURACY ───
+  var sizPerf = d.sizingPerformance || {};
+  var szHtml = '<div style="font-size:13px;font-weight:500;color:var(--accent);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Sizing regime accuracy</div>';
+  var szLabels = { BACK_UP_TRUCK: 'Back Up Truck', TRIM: 'Trim', LIQUIDATE: 'Liquidate', WAIT_AND_SEE: 'Wait & See' };
+  var szColors = { BACK_UP_TRUCK: '#1D9E75', TRIM: '#f97316', LIQUIDATE: '#E24B4A', WAIT_AND_SEE: '#378ADD' };
+  var szDescs = { BACK_UP_TRUCK: 'Max concentration — did stock go up?', TRIM: 'Reduce exposure — did stock decline?', LIQUIDATE: 'Total exit — did stock continue falling?', WAIT_AND_SEE: 'No edge — was staying flat correct?' };
+
+  szHtml += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">';
+  ['BACK_UP_TRUCK', 'TRIM', 'LIQUIDATE', 'WAIT_AND_SEE'].forEach(function(regime) {
+    var s = sizPerf[regime] || { total: 0, profitable: 0 };
+    var hitRate = s.total > 0 ? Math.round(s.profitable / s.total * 100) : null;
+    var color = szColors[regime] || 'var(--dim)';
+
+    szHtml += '<div class="card" style="padding:12px;border-left:3px solid ' + color + '">';
+    szHtml += '<div style="font-size:11px;font-weight:500;color:' + color + '">' + (szLabels[regime] || regime) + '</div>';
+    szHtml += '<div style="font-size:20px;font-weight:500;color:' + (hitRate !== null && hitRate >= 50 ? '#1D9E75' : hitRate !== null ? '#E24B4A' : 'var(--dim)') + ';margin:4px 0">' + (hitRate !== null ? hitRate + '%' : '—') + '</div>';
+    szHtml += '<div style="font-size:9px;color:var(--dim)">' + s.profitable + '/' + s.total + ' correct</div>';
+    szHtml += '<div style="font-size:9px;color:var(--dim);margin-top:2px">' + (szDescs[regime] || '') + '</div>';
+    szHtml += '</div>';
+  });
+  szHtml += '</div>';
+  document.getElementById('mp-sizing').innerHTML = szHtml;
+
+  // ─── SECTION 5: AI SYNTHESIS BRIEFING ───
+  var aiEl = document.getElementById('mp-ai-briefing');
+  aiEl.innerHTML = '<div style="font-size:13px;font-weight:500;color:var(--accent);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">AI intelligence synthesis</div>' +
+    '<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:11px;color:var(--dim)">Druckenmiller-style briefing with model accuracy data</span><button onclick="runAiSynthesis()" id="ai-synth-btn" style="padding:4px 12px;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:11px;cursor:pointer">Generate Briefing</button></div><div id="ai-synth-output" style="font-size:12px;color:var(--dim)">Click "Generate Briefing" to synthesize model performance data into an actionable intelligence report.</div></div>';
+}
+
+function runAiSynthesis() {
+  var btn = document.getElementById('ai-synth-btn');
+  var output = document.getElementById('ai-synth-output');
+
+  btn.textContent = 'Generating...';
   btn.disabled = true;
-  output.innerHTML = '<div style="text-align:center;padding:40px;color:var(--dim)"><div style="font-size:16px;margin-bottom:8px">🧠 Analyzing 130+ instruments...</div><div style="font-size:11px">Synthesizing phases, verdicts, sizing regimes, conflicts, and sector rotation</div></div>';
+  output.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim)">Synthesizing model performance data...</div>';
 
   fetch(API_BASE + '/api/lens/ai-analysis', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt: prompt }),
+    body: JSON.stringify({ prompt: 'Focus on model accuracy: Where are our phase classifications correct vs wrong? Which sizing regime calls have been profitable? Where is the biggest gap between what the model says and what the market did? Be specific with numbers.' }),
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
-    btn.textContent = 'Run Analysis';
+    btn.textContent = 'Generate Briefing';
     btn.disabled = false;
 
     if (d.error) {
-      output.innerHTML = '<div class="card" style="padding:20px;color:#E24B4A">' + d.error + '</div>';
+      output.innerHTML = '<div style="color:#E24B4A">' + d.error + '</div>';
       return;
     }
 
-    // Metadata strip
-    var m = d.metadata || {};
-    var phD = m.phaseDistro || {};
-    meta.style.display = 'flex';
-    meta.style.gap = '8px';
-    meta.style.flexWrap = 'wrap';
-    meta.innerHTML = '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:500;background:#0ea5e918;color:#0ea5e9;border:1px solid #0ea5e944">P1: ' + (phD.P1 || 0) + '</div>' +
-      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:500;background:#1D9E7518;color:#1D9E75;border:1px solid #1D9E7544">P2: ' + (phD.P2 || 0) + '</div>' +
-      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:500;background:#f9731618;color:#f97316;border:1px solid #f9731644">P3: ' + (phD.P3 || 0) + '</div>' +
-      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:500;background:#e879f918;color:#e879f9;border:1px solid #e879f944">P4: ' + (phD.P4 || 0) + '</div>' +
-      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:500;background:#E24B4A18;color:#E24B4A;border:1px solid #E24B4A44">P5: ' + (phD.P5 || 0) + '</div>' +
-      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;background:var(--card);border:1px solid var(--border);color:var(--dim)">' + (m.instrumentsCovered || 0) + ' instruments</div>' +
-      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;background:var(--card);border:1px solid var(--border);color:var(--dim)">' + (m.watchlistSize || 0) + ' watchlist</div>' +
-      (m.conflicts > 0 ? '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:700;background:#E24B4A18;color:#E24B4A;border:1px solid #E24B4A44">⚡ ' + m.conflicts + ' conflict' + (m.conflicts > 1 ? 's' : '') + '</div>' : '') +
-      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;background:var(--card);border:1px solid var(--border);color:var(--dim)">' + (m.historyDepth || 0) + ' days tracked</div>';
-
-    // Render analysis
-    var html = '<div class="card" style="padding:20px;border-left:3px solid var(--accent)">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
-    html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent)">Druckenmiller intelligence briefing</div>';
-    html += '<div style="font-size:10px;color:var(--dim)">' + new Date(m.generatedAt || Date.now()).toLocaleString() + '</div>';
-    html += '</div>';
-
-    // Parse sections from the analysis text
+    // Render analysis with markdown conversion
     var text = d.analysis || '';
-    // Convert markdown-like headers and formatting
-    text = text.replace(/^### (.+)$/gm, '<div style="font-size:14px;font-weight:700;color:var(--accent);margin-top:16px;margin-bottom:6px">$1</div>');
-    text = text.replace(/^## (.+)$/gm, '<div style="font-size:15px;font-weight:700;color:var(--accent);margin-top:20px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">$1</div>');
-    text = text.replace(/^# (.+)$/gm, '<div style="font-size:16px;font-weight:700;color:var(--text);margin-top:20px;margin-bottom:8px">$1</div>');
+    text = text.replace(/^### (.+)$/gm, '<div style="font-size:13px;font-weight:700;color:var(--accent);margin-top:14px;margin-bottom:4px">$1</div>');
+    text = text.replace(/^## (.+)$/gm, '<div style="font-size:14px;font-weight:700;color:var(--accent);margin-top:16px;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid var(--border)">$1</div>');
     text = text.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text)">$1</strong>');
     text = text.replace(/`(.+?)`/g, '<code style="background:var(--card2);padding:1px 4px;border-radius:3px;font-size:11px">$1</code>');
-    // Convert newlines to paragraphs
-    var paras = text.split(/\n\n+/);
-    paras.forEach(function(p) {
+    var html = '';
+    text.split(/\n\n+/).forEach(function(p) {
       if (p.trim()) {
-        // Check if it's already wrapped in a div (from header replacement)
-        if (p.trim().startsWith('<div')) {
-          html += p;
-        } else {
-          html += '<div style="font-size:13px;color:var(--text);margin-bottom:10px;line-height:1.7">' + p.replace(/\n/g, '<br>') + '</div>';
-        }
+        if (p.trim().startsWith('<div')) html += p;
+        else html += '<div style="font-size:12px;color:var(--text);margin-bottom:8px;line-height:1.7">' + p.replace(/\n/g, '<br>') + '</div>';
       }
     });
-
-    html += '</div>';
     output.innerHTML = html;
-
-    // Save to history
-    aiAnalysisHistory.unshift({ time: new Date().toISOString(), prompt: prompt, analysis: d.analysis, metadata: m });
-    if (aiAnalysisHistory.length > 10) aiAnalysisHistory.pop();
-    renderAiHistory();
   })
   .catch(function(err) {
-    btn.textContent = 'Run Analysis';
+    btn.textContent = 'Generate Briefing';
     btn.disabled = false;
-    output.innerHTML = '<div class="card" style="padding:20px;color:#E24B4A">Error: ' + (err.message || 'Failed to connect') + '</div>';
+    output.innerHTML = '<div style="color:#E24B4A">Error: ' + (err.message || 'Failed to connect') + '</div>';
   });
 }
 
-function renderAiHistory() {
-  var container = document.getElementById('ai-analysis-history');
-  if (!container || aiAnalysisHistory.length <= 1) { if (container) container.innerHTML = ''; return; }
-
-  var html = '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:8px;margin-top:20px">Previous analyses</div>';
-  aiAnalysisHistory.slice(1).forEach(function(h, i) {
-    html += '<div class="card" style="padding:10px 14px;margin-bottom:6px;cursor:pointer;opacity:0.7" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
-    html += '<span style="font-size:11px;color:var(--dim)">' + new Date(h.time).toLocaleString() + '</span>';
-    html += '<span style="font-size:10px;color:var(--accent)">' + (h.prompt || 'Full briefing') + '</span>';
-    html += '</div></div>';
-    html += '<div style="display:none;padding:12px;margin-bottom:8px;border-left:2px solid var(--border);font-size:12px;color:var(--text);line-height:1.6;white-space:pre-wrap">' + (h.analysis || '') + '</div>';
-  });
-  container.innerHTML = html;
-}
+// Legacy stubs
+function renderAiHistory() {}
+var aiAnalysisHistory = [];
 
 // LEGACY — keep function stubs to avoid JS errors from old references
 function loadParadigmWatch() {}

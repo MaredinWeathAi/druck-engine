@@ -63,6 +63,9 @@ export declare function getCachedBars(symbol: string): {
 } | null;
 export declare function setCachedBars(symbol: string, bars: any[]): void;
 export declare function getBarCacheAge(symbol: string): number | null;
+export declare function recordModelPerformance(data: any): void;
+export declare function getModelPerformanceHistory(period?: string, limit?: number): any[];
+export declare function setWatchlistEntryPrice(symbol: string, entryPrice: number, spyPrice: number): void;
 export declare function getWatchlist(): any[];
 export declare function addWatchlistTicker(symbol: string): void;
 export declare function removeWatchlistTicker(symbol: string): void;

@@ -2616,11 +2616,20 @@ router.get('/lens/watchlist', (_req, res) => {
         res.json({ count: 0, items: [], error: err?.message });
     }
 });
-router.post('/lens/watchlist/add', (req, res) => {
+router.post('/lens/watchlist/add', async (req, res) => {
     const { symbol } = req.body;
     if (!symbol)
         return res.status(400).json({ error: 'Symbol required' });
     (0, history_store_1.addWatchlistTicker)(symbol);
+    // Record entry price for performance tracking
+    try {
+        const bars = await fetchTickerBars(symbol, 1);
+        const spyBars = await fetchTickerBars('SPY', 1);
+        if (bars.length > 0 && spyBars.length > 0) {
+            (0, history_store_1.setWatchlistEntryPrice)(symbol, bars[bars.length - 1].close, spyBars[spyBars.length - 1].close);
+        }
+    }
+    catch { }
     res.json({ ok: true, symbol: symbol.toUpperCase() });
 });
 router.post('/lens/watchlist/remove', (req, res) => {
@@ -2785,6 +2794,168 @@ FORMAT: Use clear section headers. Write concisely. No filler. No disclaimers.`,
     catch (err) {
         console.error('[AI-ANALYSIS] Error:', err?.message);
         res.status(500).json({ error: err?.message || 'Analysis generation failed' });
+    }
+});
+router.get('/lens/model-performance', async (req, res) => {
+    try {
+        // 1. Phase verdict history — compute forward returns where possible
+        const allHistory = (0, history_store_1.getPhaseVerdictHistory)(undefined, 10000);
+        const now = new Date();
+        const trackingStartDate = allHistory.length > 0 ? allHistory[allHistory.length - 1].recorded_at : null;
+        const trackingDays = trackingStartDate ? Math.floor((now.getTime() - new Date(trackingStartDate).getTime()) / (1000 * 60 * 60 * 24)) : 0;
+        // Group history by symbol to find earliest recorded price per phase
+        const symbolFirstRecord = {};
+        for (const h of allHistory) {
+            if (!h.symbol || !h.price)
+                continue;
+            if (!symbolFirstRecord[h.symbol]) {
+                symbolFirstRecord[h.symbol] = { price: h.price, phase: h.phase_short || '', verdict: h.verdict || '', date: h.recorded_at, archetype: h.archetype || '' };
+            }
+        }
+        // 2. Current instrument prices for comparison
+        const currentPrices = {};
+        if (instrumentSnapshots) {
+            for (const [sym, snap] of instrumentSnapshots.entries()) {
+                const s = snap;
+                if (s.daily?.price)
+                    currentPrices[sym] = s.daily.price;
+            }
+        }
+        // Get SPY price for benchmark
+        const spyPrice = currentPrices['SPY'] || null;
+        const spyFirst = symbolFirstRecord['SPY'];
+        const spyReturn = (spyPrice && spyFirst) ? ((spyPrice / spyFirst.price - 1) * 100) : null;
+        // 3. Compute phase performance vs SPY
+        const phasePerf = {};
+        for (const [sym, first] of Object.entries(symbolFirstRecord)) {
+            const curr = currentPrices[sym];
+            if (!curr || !first.price || first.price <= 0)
+                continue;
+            const ret = (curr / first.price - 1) * 100;
+            const phase = first.phase || 'Unknown';
+            if (!phasePerf[phase])
+                phasePerf[phase] = { returns: [], count: 0 };
+            phasePerf[phase].returns.push(ret);
+            phasePerf[phase].count++;
+        }
+        // Compute averages
+        const phasePerfSummary = {};
+        for (const [phase, data] of Object.entries(phasePerf)) {
+            const avg = data.returns.reduce((a, b) => a + b, 0) / data.returns.length;
+            phasePerfSummary[phase] = {
+                avgReturn: Math.round(avg * 100) / 100,
+                count: data.count,
+                vsSpyAlpha: spyReturn !== null ? Math.round((avg - spyReturn) * 100) / 100 : null,
+            };
+        }
+        // 4. Watchlist performance
+        const watchlist = (0, history_store_1.getWatchlist)();
+        const wlPerformance = watchlist.map((w) => {
+            const entryPrice = w.entry_price || w.price;
+            const entryDate = w.entry_date || w.added_at;
+            const spyAtEntry = w.spy_price_at_entry;
+            // Get current price — try from recent analysis or from instruments
+            const currPrice = currentPrices[w.symbol] || w.price;
+            const tickerReturn = (entryPrice && currPrice) ? ((currPrice / entryPrice - 1) * 100) : null;
+            const spyReturnSince = (spyAtEntry && spyPrice) ? ((spyPrice / spyAtEntry - 1) * 100) : null;
+            const alpha = (tickerReturn !== null && spyReturnSince !== null) ? (tickerReturn - spyReturnSince) : null;
+            // Determine if model was correct
+            let modelCorrect = null;
+            if (tickerReturn !== null && w.verdict) {
+                const bullishVerdict = w.verdict.includes('ACCUMULATE') || w.verdict.includes('BUY') || w.verdict.includes('RIDE');
+                const bearishVerdict = w.verdict.includes('AVOID') || w.verdict.includes('SHORT') || w.verdict.includes('LIQUIDATE');
+                if (bullishVerdict && tickerReturn > 0)
+                    modelCorrect = 'CORRECT';
+                else if (bullishVerdict && tickerReturn < -5)
+                    modelCorrect = 'WRONG';
+                else if (bearishVerdict && tickerReturn < 0)
+                    modelCorrect = 'CORRECT';
+                else if (bearishVerdict && tickerReturn > 5)
+                    modelCorrect = 'WRONG';
+                else
+                    modelCorrect = 'INCONCLUSIVE';
+            }
+            return {
+                symbol: w.symbol,
+                entryPrice: entryPrice ? Math.round(entryPrice * 100) / 100 : null,
+                entryDate,
+                currentPrice: currPrice ? Math.round(currPrice * 100) / 100 : null,
+                tickerReturn: tickerReturn !== null ? Math.round(tickerReturn * 100) / 100 : null,
+                spyReturn: spyReturnSince !== null ? Math.round(spyReturnSince * 100) / 100 : null,
+                alpha: alpha !== null ? Math.round(alpha * 100) / 100 : null,
+                verdict: w.verdict,
+                archetype: w.archetype,
+                sizingRegime: w.sizing_regime,
+                phase: w.phase_short,
+                modelCorrect,
+                daysHeld: entryDate ? Math.floor((now.getTime() - new Date(entryDate).getTime()) / (1000 * 60 * 60 * 24)) : null,
+            };
+        });
+        // Compute watchlist summary
+        const wlWithAlpha = wlPerformance.filter((w) => w.alpha !== null);
+        const avgAlpha = wlWithAlpha.length > 0 ? wlWithAlpha.reduce((a, b) => a + b.alpha, 0) / wlWithAlpha.length : null;
+        const correctCount = wlPerformance.filter((w) => w.modelCorrect === 'CORRECT').length;
+        const wrongCount = wlPerformance.filter((w) => w.modelCorrect === 'WRONG').length;
+        // 5. Historical performance log
+        const perfHistory = (0, history_store_1.getModelPerformanceHistory)(undefined, 50);
+        // 6. Sizing regime accuracy from history
+        const sizingSignals = {
+            BACK_UP_TRUCK: { total: 0, profitable: 0 },
+            TRIM: { total: 0, profitable: 0 },
+            LIQUIDATE: { total: 0, profitable: 0 },
+            WAIT_AND_SEE: { total: 0, profitable: 0 },
+        };
+        // We can only compute this from watchlist data for now
+        for (const w of wlPerformance) {
+            if (w.sizingRegime && w.tickerReturn !== null && sizingSignals[w.sizingRegime]) {
+                sizingSignals[w.sizingRegime].total++;
+                // "Profitable" means different things per regime:
+                // TRUCK/WAIT: ticker went up
+                // TRIM/LIQUIDATE: avoiding further loss (ticker went down = we were right to trim)
+                if (w.sizingRegime === 'BACK_UP_TRUCK' || w.sizingRegime === 'WAIT_AND_SEE') {
+                    if (w.tickerReturn > 0)
+                        sizingSignals[w.sizingRegime].profitable++;
+                }
+                else {
+                    if (w.tickerReturn < 0)
+                        sizingSignals[w.sizingRegime].profitable++;
+                }
+            }
+        }
+        res.json({
+            trackingStartDate,
+            trackingDays,
+            totalHistoryRecords: allHistory.length,
+            sufficientData: trackingDays >= 30,
+            // Current market benchmark
+            spyPrice,
+            spyReturnSinceTracking: spyReturn !== null ? Math.round(spyReturn * 100) / 100 : null,
+            // Phase performance since tracking started
+            phasePerformance: phasePerfSummary,
+            // Watchlist position performance
+            watchlistPerformance: wlPerformance,
+            watchlistSummary: {
+                totalPositions: wlPerformance.length,
+                avgAlpha: avgAlpha !== null ? Math.round(avgAlpha * 100) / 100 : null,
+                correctCalls: correctCount,
+                wrongCalls: wrongCount,
+                inconclusiveCalls: wlPerformance.filter((w) => w.modelCorrect === 'INCONCLUSIVE').length,
+                hitRate: (correctCount + wrongCount) > 0 ? Math.round(correctCount / (correctCount + wrongCount) * 100) : null,
+            },
+            // Sizing regime performance
+            sizingPerformance: sizingSignals,
+            // Historical logs (for trend charts over time)
+            performanceHistory: perfHistory,
+            // Periods tracked
+            periods: {
+                monthly: trackingDays >= 30,
+                quarterly: trackingDays >= 90,
+                annual: trackingDays >= 365,
+            },
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err?.message || 'Performance computation failed' });
     }
 });
 exports.default = router;

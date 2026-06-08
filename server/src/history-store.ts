@@ -692,6 +692,11 @@ export function initWatchlistTable(): void {
   try { db.exec('ALTER TABLE watchlist ADD COLUMN sizing_conflict_note TEXT'); } catch {}
   try { db.exec('ALTER TABLE watchlist ADD COLUMN sizing_detail TEXT'); } catch {}
 
+  // Add entry price columns for performance tracking (migration)
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN entry_price REAL'); } catch {}
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN entry_date TEXT'); } catch {}
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN spy_price_at_entry REAL'); } catch {}
+
   // ── PERSISTENT BAR CACHE — survives deploys so we don't hit GuruFocus every restart ──
   db.exec(`
     CREATE TABLE IF NOT EXISTS bar_cache (
@@ -771,6 +776,36 @@ export function initWatchlistTable(): void {
       notes TEXT
     )
   `);
+
+  // ── MODEL PERFORMANCE LOG — tracks model accuracy over time ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS model_performance_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+      period TEXT NOT NULL,
+      total_instruments INTEGER,
+      phase_distribution TEXT,
+      spy_price REAL,
+      spy_return_30d REAL,
+      spy_return_90d REAL,
+      spy_return_365d REAL,
+      p1_avg_return_30d REAL,
+      p1_avg_return_90d REAL,
+      p1_count INTEGER,
+      p2_avg_return_30d REAL,
+      p2_avg_return_90d REAL,
+      p2_count INTEGER,
+      p5_avg_return_30d REAL,
+      p5_avg_return_90d REAL,
+      p5_count INTEGER,
+      truck_signals INTEGER,
+      truck_hit_rate REAL,
+      trim_signals INTEGER,
+      trim_hit_rate REAL,
+      watchlist_alpha REAL,
+      notes TEXT
+    )
+  `);
 }
 
 // ── PERSISTENT BAR CACHE ──
@@ -796,6 +831,47 @@ export function getBarCacheAge(symbol: string): number | null {
     const row = db.prepare("SELECT (julianday('now') - julianday(fetched_at)) * 24 * 60 as age_minutes FROM bar_cache WHERE symbol = ?").get(symbol.toUpperCase()) as any;
     return row ? row.age_minutes : null;
   } catch { return null; }
+}
+
+export function recordModelPerformance(data: any): void {
+  try {
+    db.prepare(`
+      INSERT INTO model_performance_log (period, total_instruments, phase_distribution, spy_price,
+        spy_return_30d, spy_return_90d, spy_return_365d,
+        p1_avg_return_30d, p1_avg_return_90d, p1_count,
+        p2_avg_return_30d, p2_avg_return_90d, p2_count,
+        p5_avg_return_30d, p5_avg_return_90d, p5_count,
+        truck_signals, truck_hit_rate, trim_signals, trim_hit_rate,
+        watchlist_alpha, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      data.period, data.totalInstruments, JSON.stringify(data.phaseDistribution), data.spyPrice,
+      data.spyReturn30d, data.spyReturn90d, data.spyReturn365d,
+      data.p1AvgReturn30d, data.p1AvgReturn90d, data.p1Count,
+      data.p2AvgReturn30d, data.p2AvgReturn90d, data.p2Count,
+      data.p5AvgReturn30d, data.p5AvgReturn90d, data.p5Count,
+      data.truckSignals, data.truckHitRate, data.trimSignals, data.trimHitRate,
+      data.watchlistAlpha, data.notes || null
+    );
+  } catch (err: any) {
+    console.error('[PERF] Record error:', err?.message);
+  }
+}
+
+export function getModelPerformanceHistory(period?: string, limit: number = 100): any[] {
+  try {
+    if (period) return db.prepare('SELECT * FROM model_performance_log WHERE period = ? ORDER BY recorded_at DESC LIMIT ?').all(period, limit);
+    return db.prepare('SELECT * FROM model_performance_log ORDER BY recorded_at DESC LIMIT ?').all(limit);
+  } catch { return []; }
+}
+
+export function setWatchlistEntryPrice(symbol: string, entryPrice: number, spyPrice: number): void {
+  try {
+    db.prepare(`
+      UPDATE watchlist SET entry_price = COALESCE(entry_price, ?), entry_date = COALESCE(entry_date, datetime('now')), spy_price_at_entry = COALESCE(spy_price_at_entry, ?)
+      WHERE symbol = ? AND entry_price IS NULL
+    `).run(entryPrice, spyPrice, symbol.toUpperCase());
+  } catch {}
 }
 
 export function getWatchlist(): any[] {
