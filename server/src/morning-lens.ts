@@ -2232,15 +2232,23 @@ function classifySizingRegime(params: {
 
     const regime = 'TRIM';
     const verdictSaysBuy = verdict.includes('ACCUMULATE') || verdict.includes('BUY') || verdict.includes('RIDE');
+    const verdictSaysHold = verdict.includes('HOLD') || verdict.includes('TIGHTEN');
+    const conflicts = verdictSaysBuy || (heavyDistribution && verdictSaysHold);
     const rsNote = rsWeakening ? ` RS vs sector declining (${((rsSlope ?? 0) * 100).toFixed(1)}% over 20d) — smart money rotating away.` : '';
+    let conflictNote = '';
+    if (verdictSaysBuy) {
+      conflictNote = `CONFLICT: Verdict says "${verdict}" but institutional volume says TRIM. The Up/Down ratio at ${ud.toFixed(2)} is the early warning — smart money is leaving before the story breaks.`;
+    } else if (heavyDistribution && verdictSaysHold) {
+      conflictNote = `ESCALATION: Verdict says "${verdict}" but Up/Down at ${ud.toFixed(2)} is heavy distribution — "hold" understates the urgency. Consider this an active SELL signal, not a passive hold.`;
+    }
     return {
       regime,
       label: 'Start trimming',
       sizing: heavyDistribution ? 'Shave 40-50% — distribution is heavy' : 'Shave 25-30% on technical bounces',
       conviction: conv,
       reasoning: `Still above 200d but the tape is deteriorating. Up/Down ${ud.toFixed(2)}${mildDistribution ? ' shows distribution building' : ''}.${rsNote}${extended ? ` Extended ${extensionPct?.toFixed(0)}% from 200d — smart money selling into strength.` : ''} Don't wait for the earnings miss — use bounces to harvest.`,
-      conflictsWithVerdict: verdictSaysBuy,
-      conflictNote: verdictSaysBuy ? `CONFLICT: Verdict says "${verdict}" but institutional volume says TRIM. The Up/Down ratio at ${ud.toFixed(2)} is the early warning — smart money is leaving before the story breaks.` : '',
+      conflictsWithVerdict: conflicts,
+      conflictNote,
     };
   }
 
