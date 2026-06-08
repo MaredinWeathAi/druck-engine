@@ -2132,9 +2132,41 @@ function generateVerdict(
   failedBreakdowns: number,
   earningsReactions: { date: string; move: number }[],
   sma50Above200: boolean,
-): { verdict: string; archetype: string; signal: string; reasoning: string[]; matrix: Record<string, string> } {
+): { verdict: string; archetype: string; signal: string; reasoning: string[]; matrix: Record<string, string>; subPhase: string; newsTest: string } {
   const reasoning: string[] = [];
   const matrix: Record<string, string> = {};
+
+  // ── "IS GOOD NEWS / BAD NEWS STILL WORKING?" TEST ──
+  // The single most powerful institutional signal. If good news fails to move
+  // the stock up, institutions are distributing into the good news.
+  // If bad news fails to push it down, institutions are accumulating the fear.
+  let newsTest = 'INSUFFICIENT_DATA';
+  if (earningsReactions.length >= 2) {
+    const last = earningsReactions[earningsReactions.length - 1];
+    const prev = earningsReactions[earningsReactions.length - 2];
+    const lastPositive = last.move > 0;
+    const prevPositive = prev.move > 0;
+    const improving = last.move > prev.move;
+
+    if (lastPositive && improving) {
+      newsTest = 'GOOD_NEWS_WORKING';
+      reasoning.push('News test: Good news IS working — last reaction ' + last.move.toFixed(1) + '% (improving). Institutions are buying the narrative.');
+    } else if (lastPositive && !improving) {
+      newsTest = 'GOOD_NEWS_FADING';
+      reasoning.push('News test: Good news is fading — positive but decelerating (' + last.move.toFixed(1) + '% vs prior ' + prev.move.toFixed(1) + '%). Watch for distribution.');
+    } else if (!lastPositive && !improving) {
+      newsTest = 'BAD_NEWS_WORKING';
+      reasoning.push('News test: Bad news IS working — reactions getting worse (' + last.move.toFixed(1) + '%). Institutions are selling. No floor yet.');
+    } else if (!lastPositive && improving) {
+      newsTest = 'BAD_NEWS_FAILING';
+      reasoning.push('News test: Bad news is FAILING to push lower — reaction improved to ' + last.move.toFixed(1) + '% from ' + prev.move.toFixed(1) + '%. Selling exhaustion forming.');
+    }
+  } else if (earningsReactions.length === 1) {
+    const last = earningsReactions[0];
+    newsTest = last.move > 3 ? 'GOOD_NEWS_WORKING' : last.move < -3 ? 'BAD_NEWS_WORKING' : 'NEUTRAL';
+    reasoning.push('News test: Single reaction ' + last.move.toFixed(1) + '% — need more data for pattern.');
+  }
+  matrix['news_test'] = newsTest;
 
   // ── STEP 4: Tape Confirmation (scored from the data) ──
   // Step 1-3 (Macro, Forward Inflection, Relative Strength) require
@@ -2319,7 +2351,57 @@ function generateVerdict(
     signal = 'No dominant signal. The tape is not confirming either direction. Wait for a structural break before committing capital.';
   }
 
-  return { verdict, archetype, signal, reasoning, matrix };
+  // ── SUB-PHASE DETERMINATION ──
+  // P1 Buy sub-phases: Early Discovery, Selling Exhaustion, Early Accumulation
+  // P2 Ride sub-phases: Early Expansion, Mature Leadership
+  let subPhase = '';
+  const deepBelow40 = pctFrom52wHigh !== null && pctFrom52wHigh < -40;
+  const nearHigh = pctFrom52wHigh !== null && pctFrom52wHigh > -10;
+
+  if (archetype === 'EVENT_OVERCORRECTION' || archetype === 'CAPITULATION_FORMING') {
+    // P1 - Selling Exhaustion: the decline has stopped, pain is priced in
+    subPhase = 'Sell Exhaustion';
+  } else if (archetype === 'STRUCTURAL_TURNAROUND' && below200) {
+    // P1 - Early Accumulation: smart money entering, structure not yet repaired
+    subPhase = 'Early Accum';
+  } else if (archetype === 'COILED_SPRING') {
+    // P1 - at decision point, could be any P1 sub-phase
+    subPhase = 'Coiled Spring';
+  } else if (archetype === 'STRUCTURAL_TURNAROUND' && !below200) {
+    // P2 - Early Expansion: turnaround confirmed, trend just started
+    subPhase = 'Early Expansion';
+  } else if (archetype === 'CONFIRMED_UPTREND' && !nearHigh && accumulating) {
+    // P2 - Narrative Expansion: healthy trend with institutional sponsorship
+    subPhase = 'Expansion';
+  } else if (archetype === 'CONFIRMED_UPTREND' && nearHigh) {
+    // P2 - Mature Leadership: near highs, trend is old
+    subPhase = 'Mature';
+  } else if (archetype === 'LATE_CYCLE') {
+    subPhase = 'Late Cycle';
+  } else if (archetype === 'BROKEN_GROWTH' && newsTest === 'BAD_NEWS_WORKING') {
+    subPhase = 'Distribution';
+  } else if (archetype === 'BROKEN_GROWTH' && deepBelow40) {
+    subPhase = 'Collapse';
+  } else if (archetype === 'BEARISH_TAPE') {
+    subPhase = newsTest === 'BAD_NEWS_FAILING' ? 'Bottoming' : 'Downtrend';
+  } else if (archetype === 'NEUTRAL') {
+    subPhase = 'Neutral';
+  }
+
+  // ── INTEGRATE NEWS TEST INTO VERDICT ──
+  // News test can upgrade or downgrade the verdict
+  if (newsTest === 'BAD_NEWS_FAILING' && (verdict === 'AVOID' || verdict === 'NEUTRAL — WAIT FOR CLARITY')) {
+    verdict = 'WATCH — FLOOR BUILDING';
+    signal += ' Bad news is failing to push lower — selling exhaustion may be forming.';
+    archetype = 'CAPITULATION_FORMING';
+    subPhase = 'Sell Exhaustion';
+  } else if (newsTest === 'GOOD_NEWS_FADING' && (verdict === 'RIDE — ADD ON PULLBACKS' || verdict === 'HOLD — TIGHTEN STOPS')) {
+    verdict = 'HOLD — TIGHTEN STOPS';
+    signal += ' Good news is fading — institutions may be distributing into strength.';
+    subPhase = 'Late Cycle';
+  }
+
+  return { verdict, archetype, signal, reasoning, matrix, subPhase, newsTest };
 }
 
 router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
@@ -2501,6 +2583,8 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
             green_day_vol_ratio: ta.volume?.greenDayVolRatio || null,
             system_verdict: verdict.verdict,
             system_archetype: verdict.archetype,
+            system_sub_phase: verdict.subPhase,
+            news_test: verdict.newsTest,
             atr_pct: ta.atrPct,
             velocity: ta.extensionVelocity,
             days_since_200d_cross: ta.daysSinceCross200d,
