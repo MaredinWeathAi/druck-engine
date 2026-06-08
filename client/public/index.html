@@ -4753,6 +4753,15 @@ function loadWatchlist() {
       }
     });
     renderWatchlistTable();
+
+    // AUTO-HEAL: If we have tickers but most have no analysis, auto-trigger refresh
+    var unanalyzed = wlItems.filter(function(i) { return !i.verdict && !wlData[i.symbol]; }).length;
+    if (wlItems.length > 0 && unanalyzed > wlItems.length * 0.5) {
+      console.log('[WATCHLIST] Auto-heal: ' + unanalyzed + '/' + wlItems.length + ' tickers unanalyzed — triggering auto-refresh');
+      var status = document.getElementById('wl-status');
+      if (status) status.textContent = 'Auto-analyzing ' + unanalyzed + ' tickers...';
+      setTimeout(function() { refreshAllWatchlist(); }, 1000);
+    }
   });
 }
 

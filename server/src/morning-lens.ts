@@ -1346,68 +1346,59 @@ async function refreshMorningLens(): Promise<void> {
       console.error(`[LENS] Startup attempt ${attempt + 1} error: ${err?.message}`);
     }
   }
+
+
+  // On startup: also run watchlist analysis after instruments load
+  setTimeout(() => {
+    runWatchlistMonitor().catch(err => console.error('[WATCHLIST] Startup analysis error:', err));
+  }, 45000); // 45s after startup — instruments should be loaded by then
 })();
+
+// ─── WATCHLIST MONITOR — extracted as a reusable function ───
+// Uses the full ticker analysis endpoint internally for proper verdicts + sizing
+async function runWatchlistMonitor(): Promise<{ analyzed: number; changes: number; errors: number }> {
+  const watchlistItems = getWatchlist();
+  if (watchlistItems.length === 0) return { analyzed: 0, changes: 0, errors: 0 };
+
+  console.log(`[WATCHLIST] Monitoring ${watchlistItems.length} tickers for phase changes...`);
+  let analyzed = 0, changes = 0, errors = 0;
+
+  for (const item of watchlistItems) {
+    try {
+      // Hit the full ticker analysis internally via HTTP to self
+      // This ensures we get verdicts, sizing, sub-phases — everything
+      const port = process.env.PORT || 3000;
+      const url = `http://localhost:${port}/api/lens/ticker/${encodeURIComponent(item.symbol)}`;
+      const resp = await fetch(url);
+      if (!resp.ok) { errors++; continue; }
+      const data: any = await resp.json();
+      if (data.error) { errors++; continue; }
+
+      // updateWatchlistAnalysis is already called inside the ticker endpoint
+      // but we need to check for phase changes here
+      const oldPhaseNum = (item as any).phase_num;
+      const newPhaseNum = data.phase?.phaseNum;
+      if (oldPhaseNum && newPhaseNum && oldPhaseNum !== newPhaseNum) changes++;
+      analyzed++;
+    } catch (err: any) {
+      errors++;
+    }
+    await new Promise(r => setTimeout(r, 3000)); // 3s between tickers to avoid rate limiting
+  }
+
+  console.log(`[WATCHLIST] Monitor complete — ${analyzed} analyzed, ${changes} phase change(s), ${errors} errors`);
+  return { analyzed, changes, errors };
+}
 
 // Auto-refresh every 2 hours for intraday recording
 const INTRADAY_REFRESH_MS = 2 * 60 * 60 * 1000; // 2 hours
 setInterval(() => {
   refreshMorningLens().catch(err => console.error('[LENS] Auto-refresh error:', err));
 
-  // Watchlist monitoring — full re-analysis every refresh cycle to detect phase changes
-  setTimeout(async () => {
-    try {
-      const watchlistItems = getWatchlist();
-      if (watchlistItems.length === 0) return;
-      console.log(`[WATCHLIST] Monitoring ${watchlistItems.length} tickers for phase changes...`);
-      let changes = 0;
-      for (const item of watchlistItems) {
-        try {
-          // Fetch price data (uses cache if fresh, otherwise fetches)
-          const bars = await fetchTickerBars(item.symbol, 2);
-          if (bars.length < 50) continue;
-
-          // Run phase classification
-          const spyBars = await fetchTickerBars('SPY', 2);
-          const spyCloses = spyBars.map((b: OHLCVBar) => b.close);
-          const ta = computeExtendedTA(item.symbol, item.symbol,
-            bars.map((b: OHLCVBar) => ({ date: b.date, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume })),
-            spyCloses);
-          if (!ta) continue;
-
-          const neutralAccel = { rocAccel: null, logAccelSmooth: null, emaAccel: null, trend: 'neutral' as const, recentSignals: [] };
-          const nullFund = { revenueGrowthYoY: null, epsGrowthYoY: null, operatingMargin: null, netMargin: null, roic: null, fcfYield: null, debtToEquity: null, piotroskiFScore: null, currentRatio: null };
-          const nullVal = { peForward: null, evToEbitda: null, pegRatio: null, fcfYield: null, pePctile: null, gfValueMargin: null };
-          const phaseResult = computeFullInflection(item.symbol, item.symbol, bars, spyCloses, neutralAccel, nullFund, nullVal, {});
-
-          if (!phaseResult) continue;
-
-          const phaseDisplayMap: Record<string, { num: number; short: string }> = {
-            SELLING_EXHAUSTION: { num: 1, short: 'P1 Buy' }, NARRATIVE_COLLAPSE: { num: 1, short: 'P1 Buy' },
-            NARRATIVE_EXPANSION: { num: 2, short: 'P2 Ride' }, INSTITUTIONAL_ACCUMULATION: { num: 3, short: 'P3 Trim' },
-            BUYING_EXHAUSTION: { num: 4, short: 'P4 Exit' }, NARRATIVE_REVERSAL: { num: 5, short: 'P5 Avoid' },
-          };
-          const pi = phaseDisplayMap[phaseResult.phase.phase] || { num: 0, short: '?' };
-
-          // Update watchlist — this triggers phase change detection in updateWatchlistAnalysis
-          updateWatchlistAnalysis(item.symbol, {
-            price: bars[bars.length - 1].close,
-            phase: { phaseNum: pi.num, phaseShort: pi.short },
-            verdict: { verdict: '', archetype: '', signal: '', reasoning: [] },
-            anchors: { priceVs200d: ta.priceVsSma200, pctFrom52wHigh: ta.highLow?.pctFromHigh, sma50Above200: ta.sma50Above200 },
-            volumeDemand: { upDownRatio: null },
-            failedBreakdowns: { count: ta.failedBreaks.filter((b: any) => b.type === 'failed_breakdown').length },
-          });
-
-          // Check if phase changed
-          if (item.phase_num && pi.num !== item.phase_num) changes++;
-        } catch {}
-        await new Promise(r => setTimeout(r, 2000));
-      }
-      console.log(`[WATCHLIST] Monitoring complete — ${changes} phase change(s) detected`);
-    } catch (err: any) {
-      console.error('[WATCHLIST] Monitoring error:', err?.message);
-    }
-  }, 30000); // Start 30s after main refresh to let ETFs load first
+  // Run watchlist monitoring 60s after main refresh
+  setTimeout(() => {
+    runWatchlistMonitor().catch(err => console.error('[WATCHLIST] Monitor error:', err));
+  }, 60000);
 }, INTRADAY_REFRESH_MS);
 
 // ─── ARIA NARRATIVE ───
@@ -2860,6 +2851,14 @@ CRITICAL: You only have technical data, not fundamental data. Acknowledge what y
           failedBreakdowns: responseData.failedBreakdowns?.count || 0,
           confidence: pi.confidence || 0,
         });
+      }
+    } catch {}
+
+    // Auto-update watchlist if this symbol is on the watchlist
+    try {
+      const wl = getWatchlist();
+      if (wl.some((w: any) => w.symbol === symbol.toUpperCase())) {
+        updateWatchlistAnalysis(symbol, responseData);
       }
     } catch {}
 
