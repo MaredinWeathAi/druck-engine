@@ -2623,5 +2623,133 @@ router.get('/lens/history/druckenmiller', (_req, res) => {
     const history = (0, history_store_1.getDruckenmiller13FHistory)();
     res.json({ count: history.length, history });
 });
+// ══════════════════════════════════════════════════════════════
+// AI INTELLIGENCE ANALYSIS — Claude-powered macro briefing
+// Replaces Paradigm Watch with a Druckenmiller-style synthesis
+// of ALL system data: phases, verdicts, sizing, conflicts,
+// watchlist, macro regime, sector rotation, and history.
+// ══════════════════════════════════════════════════════════════
+router.post('/lens/ai-analysis', async (req, res) => {
+    const apiKey = process.env.ANTHROPIC_API_KEY || '';
+    if (!apiKey) {
+        res.status(400).json({ error: 'No Anthropic API key configured' });
+        return;
+    }
+    const userPrompt = req.body.prompt || '';
+    try {
+        // ── GATHER ALL SYSTEM DATA ──
+        // 1. Phase distribution across all 130+ instruments
+        const phaseDistro = { P1: 0, P2: 0, P3: 0, P4: 0, P5: 0 };
+        const sectorPhases = {};
+        const extremeExtensions = [];
+        const transitions = [];
+        if (instrumentSnapshots) {
+            for (const [sym, snap] of Object.entries(instrumentSnapshots)) {
+                const s = snap;
+                if (!s.phaseData)
+                    continue;
+                const pn = s.phaseData.phaseNum;
+                const pk = `P${pn}`;
+                phaseDistro[pk] = (phaseDistro[pk] || 0) + 1;
+                const group = s.group || 'Other';
+                if (!sectorPhases[group])
+                    sectorPhases[group] = { p1: [], p2: [], p5: [] };
+                if (pn === 1)
+                    sectorPhases[group].p1.push(sym);
+                else if (pn === 2)
+                    sectorPhases[group].p2.push(sym);
+                else if (pn === 5)
+                    sectorPhases[group].p5.push(sym);
+                const d = s.daily || {};
+                const ext = (d.price && d.ma200) ? ((d.price / d.ma200 - 1) * 100) : 0;
+                if (Math.abs(ext) > 20) {
+                    extremeExtensions.push({ symbol: sym, name: s.name || sym, ext: Math.round(ext * 10) / 10, phase: s.phaseData.phaseShort });
+                }
+            }
+        }
+        // 2. Watchlist with full analysis
+        const watchlist = (0, history_store_1.getWatchlist)();
+        const wlSummary = watchlist.map((w) => ({
+            symbol: w.symbol,
+            price: w.price,
+            phase: w.phase_short,
+            verdict: w.verdict,
+            archetype: w.archetype,
+            sizing: w.sizing_regime,
+            sizingConviction: w.sizing_conviction,
+            sizingConflict: !!w.sizing_conflicts,
+            conflictNote: w.sizing_conflict_note,
+            upDownRatio: w.up_down_ratio,
+            vs200d: w.price_vs_200d,
+            failedBD: w.failed_breakdowns,
+        }));
+        // 3. Phase change log (recent)
+        const phaseLog = (0, history_store_1.getWatchlistPhaseLog)();
+        // 4. Historical accuracy data
+        const historyRecords = (0, history_store_1.getPhaseVerdictHistory)(undefined, 500);
+        const uniqueDates = new Set(historyRecords.map((h) => (h.recorded_at || '').slice(0, 10)));
+        // 5. Leading indicators from the index.ts
+        // (We'll include what we can from the currentSignals)
+        // ── BUILD THE DATA PAYLOAD ──
+        const dataPayload = JSON.stringify({
+            timestamp: new Date().toISOString(),
+            market_phase_distribution: phaseDistro,
+            total_instruments: Object.values(phaseDistro).reduce((a, b) => a + b, 0),
+            sector_phases: sectorPhases,
+            extreme_extensions: extremeExtensions.sort((a, b) => Math.abs(b.ext) - Math.abs(a.ext)).slice(0, 15),
+            watchlist: wlSummary,
+            recent_phase_changes: phaseLog.slice(0, 20),
+            history_depth: { total_records: historyRecords.length, unique_dates: uniqueDates.size },
+            user_question: userPrompt || null,
+        }, null, 0);
+        // ── CALL CLAUDE ──
+        const anthropic = new sdk_1.default({ apiKey });
+        const msg = await anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 2000,
+            system: `You are the AI Intelligence Analyst inside the Druck Engine — a Druckenmiller-style investment analysis platform. You have real-time access to the system's complete dataset: phase classifications (P1 Buy through P5 Avoid) across 130+ ETFs and indexes, a persistent watchlist with per-ticker verdicts and position sizing regimes, sector rotation data, and historical tracking.
+
+YOUR ROLE: Synthesize all data into a Druckenmiller-caliber intelligence briefing. Think like a macro PM — find the patterns the system's individual signals can't see by themselves.
+
+ANALYSIS FRAMEWORK — address each in order:
+1. MARKET REGIME READ: What is the overall market posture? (% in P1/P2 = bullish breadth, % in P4/P5 = bear pressure). Is breadth expanding or contracting?
+2. SECTOR ROTATION: Where is capital flowing? Which sectors are P1→P2 (improving) vs P2→P4 (deteriorating)? What does this imply about the macro cycle?
+3. SIZING CONFLICTS: Highlight any tickers where the verdict and sizing regime disagree — these are the highest-information signals in the system.
+4. WATCHLIST ACTIONS: For each watchlist ticker, give a 1-sentence decision. Be specific: "AAPL: Hold, no edge — wait for UpDn >1.5" not "AAPL looks fine."
+5. BIGGEST RISK: What is the single biggest risk the system might be missing? What assumption could break?
+6. BIGGEST OPPORTUNITY: Where is the highest asymmetry right now — the Druckenmiller "fat pitch"?
+
+RULES:
+- Be brutally honest. Say "I don't know" rather than hedge with "could go either way."
+- Reference specific data points (Up/Down ratios, extension %, phase numbers).
+- Name names — specific tickers, sectors, sizing regimes.
+- If the history depth is <7 days, acknowledge the system can't yet measure its own accuracy.
+- End with a 1-paragraph Druckenmiller-voice summary: what would he do right now with this data?
+- If the user asked a specific question, answer it directly using the data before doing the full briefing.
+
+FORMAT: Use clear section headers. Write concisely. No filler. No disclaimers.`,
+            messages: [{ role: 'user', content: userPrompt
+                        ? `User question: "${userPrompt}"\n\nHere is the complete system dataset:\n${dataPayload}`
+                        : `Generate a full Druckenmiller intelligence briefing from this real-time system data:\n${dataPayload}`
+                }],
+        });
+        const text = msg.content[0]?.type === 'text' ? msg.content[0].text : 'No response generated';
+        res.json({
+            analysis: text,
+            metadata: {
+                generatedAt: new Date().toISOString(),
+                instrumentsCovered: Object.values(phaseDistro).reduce((a, b) => a + b, 0),
+                watchlistSize: wlSummary.length,
+                historyDepth: uniqueDates.size,
+                phaseDistro,
+                conflicts: wlSummary.filter((w) => w.sizingConflict).length,
+            },
+        });
+    }
+    catch (err) {
+        console.error('[AI-ANALYSIS] Error:', err?.message);
+        res.status(500).json({ error: err?.message || 'Analysis generation failed' });
+    }
+});
 exports.default = router;
 //# sourceMappingURL=morning-lens.js.map

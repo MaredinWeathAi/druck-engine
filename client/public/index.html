@@ -560,8 +560,8 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     <!-- Macro Events -->
     <div class="nav-section">Macro Events</div>
     <div class="nav-item" data-page="paradigm">
-      <div class="icon">💡</div>
-      <div>Paradigm Watch</div>
+      <div class="icon">🧠</div>
+      <div>AI Analysis</div>
     </div>
     <div class="nav-item" data-page="geoevents">
       <div class="icon">🌍</div>
@@ -1257,19 +1257,27 @@ button:disabled{opacity:0.5;cursor:not-allowed}
     <!-- ══════════ PARADIGM WATCH PAGE ══════════ -->
     <div class="page" id="page-paradigm">
       <div style="font-size:12px;color:var(--dim);margin-bottom:16px">
-        Track potential paradigm shifts. The system flags when multiple indicators align with the pattern of historical gamechangers (Internet '92-98, Smartphones '07-12, AI '22+). <b>Anti-dismissal tool</b> — designed to make it harder to ignore what might be real.
+        AI-powered intelligence briefing using the Druckenmiller framework. Synthesizes all 130+ instruments, watchlist analysis, phase distribution, sizing conflicts, and sector rotation into an actionable macro read.
       </div>
 
-      <!-- Add Theme -->
+      <!-- Analysis Controls -->
       <div class="card" style="margin-bottom:16px;padding:16px">
         <div style="display:flex;gap:8px;align-items:center">
-          <input type="text" id="pw-theme-input" placeholder="Add a theme to watch (e.g., Quantum Computing, Robotics, Nuclear Fusion)" style="flex:1;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
-          <button onclick="addParadigmTheme()" style="padding:8px 16px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap">Add Theme</button>
+          <input type="text" id="ai-analysis-prompt" placeholder="Ask a specific question... or leave blank for full briefing" style="flex:1;padding:8px 12px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px">
+          <button onclick="runAiAnalysis()" id="ai-analysis-btn" style="padding:8px 16px;border-radius:6px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap">Run Analysis</button>
         </div>
       </div>
 
-      <!-- Theme Cards -->
-      <div id="pw-themes"></div>
+      <!-- Metadata strip -->
+      <div id="ai-meta" style="display:none;margin-bottom:12px"></div>
+
+      <!-- Analysis Output -->
+      <div id="ai-analysis-output" style="margin-bottom:16px">
+        <div style="text-align:center;padding:40px;color:var(--dim)">Click "Run Analysis" to generate a Druckenmiller-style intelligence briefing from all system data.</div>
+      </div>
+
+      <!-- History of previous analyses -->
+      <div id="ai-analysis-history"></div>
     </div>
 
     <div class="page" id="page-geoevents">
@@ -1395,7 +1403,7 @@ function showPage(page) {
     rotation: 'Rotation Radar',
     intelfeed: 'Headline Feed',
     guruwatch: 'Guru Watch',
-    paradigm: 'Paradigm Watch',
+    paradigm: 'AI Analysis',
     geoevents: 'Geopolitical Events',
     earningscal: 'Earnings Calendar',
     settings: 'Settings'
@@ -1421,7 +1429,7 @@ function loadPageData(page) {
   else if (page === 'rotation') loadRotation();
   else if (page === 'intelfeed') loadIntelFeed();
   else if (page === 'guruwatch') loadGuruWatch();
-  else if (page === 'paradigm') loadParadigmWatch();
+  else if (page === 'paradigm') { /* AI Analysis - loaded on demand via button */ }
   else if (page === 'geoevents') loadGeoEvents();
   else if (page === 'earningscal') loadEarningsCal();
   else if (page === 'settings') loadSettings();
@@ -5137,10 +5145,113 @@ function analyzeTickerFn() {
 }
 
 // ═══════════════════════════════════════════════
-// PARADIGM WATCH — Anti-Dismissal Tool
+// AI ANALYSIS — Druckenmiller Intelligence Briefing
 // ═══════════════════════════════════════════════
 
-// Default themes with pre-seeded data
+var aiAnalysisHistory = [];
+
+function runAiAnalysis() {
+  var btn = document.getElementById('ai-analysis-btn');
+  var output = document.getElementById('ai-analysis-output');
+  var meta = document.getElementById('ai-meta');
+  var prompt = (document.getElementById('ai-analysis-prompt').value || '').trim();
+
+  btn.textContent = 'Analyzing...';
+  btn.disabled = true;
+  output.innerHTML = '<div style="text-align:center;padding:40px;color:var(--dim)"><div style="font-size:16px;margin-bottom:8px">🧠 Analyzing 130+ instruments...</div><div style="font-size:11px">Synthesizing phases, verdicts, sizing regimes, conflicts, and sector rotation</div></div>';
+
+  fetch(API_BASE + '/api/lens/ai-analysis', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: prompt }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    btn.textContent = 'Run Analysis';
+    btn.disabled = false;
+
+    if (d.error) {
+      output.innerHTML = '<div class="card" style="padding:20px;color:#E24B4A">' + d.error + '</div>';
+      return;
+    }
+
+    // Metadata strip
+    var m = d.metadata || {};
+    var phD = m.phaseDistro || {};
+    meta.style.display = 'flex';
+    meta.style.gap = '8px';
+    meta.style.flexWrap = 'wrap';
+    meta.innerHTML = '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:500;background:#0ea5e918;color:#0ea5e9;border:1px solid #0ea5e944">P1: ' + (phD.P1 || 0) + '</div>' +
+      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:500;background:#1D9E7518;color:#1D9E75;border:1px solid #1D9E7544">P2: ' + (phD.P2 || 0) + '</div>' +
+      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:500;background:#f9731618;color:#f97316;border:1px solid #f9731644">P3: ' + (phD.P3 || 0) + '</div>' +
+      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:500;background:#e879f918;color:#e879f9;border:1px solid #e879f944">P4: ' + (phD.P4 || 0) + '</div>' +
+      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:500;background:#E24B4A18;color:#E24B4A;border:1px solid #E24B4A44">P5: ' + (phD.P5 || 0) + '</div>' +
+      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;background:var(--card);border:1px solid var(--border);color:var(--dim)">' + (m.instrumentsCovered || 0) + ' instruments</div>' +
+      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;background:var(--card);border:1px solid var(--border);color:var(--dim)">' + (m.watchlistSize || 0) + ' watchlist</div>' +
+      (m.conflicts > 0 ? '<div style="padding:4px 10px;border-radius:4px;font-size:10px;font-weight:700;background:#E24B4A18;color:#E24B4A;border:1px solid #E24B4A44">⚡ ' + m.conflicts + ' conflict' + (m.conflicts > 1 ? 's' : '') + '</div>' : '') +
+      '<div style="padding:4px 10px;border-radius:4px;font-size:10px;background:var(--card);border:1px solid var(--border);color:var(--dim)">' + (m.historyDepth || 0) + ' days tracked</div>';
+
+    // Render analysis
+    var html = '<div class="card" style="padding:20px;border-left:3px solid var(--accent)">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+    html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--accent)">Druckenmiller intelligence briefing</div>';
+    html += '<div style="font-size:10px;color:var(--dim)">' + new Date(m.generatedAt || Date.now()).toLocaleString() + '</div>';
+    html += '</div>';
+
+    // Parse sections from the analysis text
+    var text = d.analysis || '';
+    // Convert markdown-like headers and formatting
+    text = text.replace(/^### (.+)$/gm, '<div style="font-size:14px;font-weight:700;color:var(--accent);margin-top:16px;margin-bottom:6px">$1</div>');
+    text = text.replace(/^## (.+)$/gm, '<div style="font-size:15px;font-weight:700;color:var(--accent);margin-top:20px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--border)">$1</div>');
+    text = text.replace(/^# (.+)$/gm, '<div style="font-size:16px;font-weight:700;color:var(--text);margin-top:20px;margin-bottom:8px">$1</div>');
+    text = text.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text)">$1</strong>');
+    text = text.replace(/`(.+?)`/g, '<code style="background:var(--card2);padding:1px 4px;border-radius:3px;font-size:11px">$1</code>');
+    // Convert newlines to paragraphs
+    var paras = text.split(/\n\n+/);
+    paras.forEach(function(p) {
+      if (p.trim()) {
+        // Check if it's already wrapped in a div (from header replacement)
+        if (p.trim().startsWith('<div')) {
+          html += p;
+        } else {
+          html += '<div style="font-size:13px;color:var(--text);margin-bottom:10px;line-height:1.7">' + p.replace(/\n/g, '<br>') + '</div>';
+        }
+      }
+    });
+
+    html += '</div>';
+    output.innerHTML = html;
+
+    // Save to history
+    aiAnalysisHistory.unshift({ time: new Date().toISOString(), prompt: prompt, analysis: d.analysis, metadata: m });
+    if (aiAnalysisHistory.length > 10) aiAnalysisHistory.pop();
+    renderAiHistory();
+  })
+  .catch(function(err) {
+    btn.textContent = 'Run Analysis';
+    btn.disabled = false;
+    output.innerHTML = '<div class="card" style="padding:20px;color:#E24B4A">Error: ' + (err.message || 'Failed to connect') + '</div>';
+  });
+}
+
+function renderAiHistory() {
+  var container = document.getElementById('ai-analysis-history');
+  if (!container || aiAnalysisHistory.length <= 1) { if (container) container.innerHTML = ''; return; }
+
+  var html = '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:8px;margin-top:20px">Previous analyses</div>';
+  aiAnalysisHistory.slice(1).forEach(function(h, i) {
+    html += '<div class="card" style="padding:10px 14px;margin-bottom:6px;cursor:pointer;opacity:0.7" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    html += '<span style="font-size:11px;color:var(--dim)">' + new Date(h.time).toLocaleString() + '</span>';
+    html += '<span style="font-size:10px;color:var(--accent)">' + (h.prompt || 'Full briefing') + '</span>';
+    html += '</div></div>';
+    html += '<div style="display:none;padding:12px;margin-bottom:8px;border-left:2px solid var(--border);font-size:12px;color:var(--text);line-height:1.6;white-space:pre-wrap">' + (h.analysis || '') + '</div>';
+  });
+  container.innerHTML = html;
+}
+
+// LEGACY — keep function stubs to avoid JS errors from old references
+function loadParadigmWatch() {}
 var PW_DEFAULT_THEMES = [
   {
     id: 'ai',
