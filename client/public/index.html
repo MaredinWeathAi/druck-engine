@@ -1010,6 +1010,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
               <th>Phase</th>
               <th>Verdict</th>
               <th>Archetype</th>
+              <th>Sizing</th>
               <th>Up/Down Vol</th>
               <th>vs 200d</th>
               <th>Failed BD</th>
@@ -1017,7 +1018,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
             </tr>
           </thead>
           <tbody id="wl-tbody">
-            <tr><td colspan="10" style="text-align:center;padding:30px;color:var(--dim)">Add tickers above to build your watchlist</td></tr>
+            <tr><td colspan="11" style="text-align:center;padding:30px;color:var(--dim)">Add tickers above to build your watchlist</td></tr>
           </tbody>
         </table>
       </div>
@@ -4732,6 +4733,7 @@ function loadWatchlist() {
           anchors: { priceVs200d: item.price_vs_200d, pctFrom52wHigh: item.pct_from_52w_high, sma50Above200: !!item.golden_cross },
           volumeDemand: { upDownRatio: item.up_down_ratio },
           failedBreakdowns: { count: item.failed_breakdowns },
+          sizingRegime: item.sizing_regime ? { regime: item.sizing_regime, label: item.sizing_label, conviction: item.sizing_conviction, conflictsWithVerdict: !!item.sizing_conflicts, conflictNote: item.sizing_conflict_note, sizing: item.sizing_detail } : null,
           sectorDetected: item.sector,
           narrative: item.narrative,
           _fromServer: true,
@@ -4821,7 +4823,7 @@ function renderWatchlistTable() {
     if (d.error) {
       html += '<tr><td><button onclick="removeFromWatchlist(\'' + sym + '\')" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:10px">✕</button></td>';
       html += '<td style="font-weight:700;color:var(--accent)">' + sym + '</td>';
-      html += '<td colspan="8" style="color:#E24B4A;font-size:11px">' + d.error + '</td></tr>';
+      html += '<td colspan="9" style="color:#E24B4A;font-size:11px">' + d.error + '</td></tr>';
       return;
     }
 
@@ -4857,6 +4859,13 @@ function renderWatchlistTable() {
     html += '<td style="font-size:11px;font-weight:500;color:' + vc + '">' + (v.verdict || '—') + '</td>';
     var archLabels = { BROKEN_GROWTH: 'Broken Growth', EVENT_OVERCORRECTION: 'Over-Correction', STRUCTURAL_TURNAROUND: 'Turnaround', CONFIRMED_UPTREND: 'Uptrend', LATE_CYCLE: 'Late Cycle', COILED_SPRING: 'Coiled Spring', CAPITULATION_FORMING: 'Capitulation', BULLISH_TAPE: 'Bullish', BEARISH_TAPE: 'Bearish', NEUTRAL: 'Neutral' };
     html += '<td style="font-size:10px;color:var(--dim)">' + (archLabels[v.archetype] || v.archetype || '—') + (v.subPhase ? ' <span style="color:var(--accent);font-weight:500">· ' + v.subPhase + '</span>' : '') + '</td>';
+    // Sizing Regime cell
+    var sr = d.sizingRegime || {};
+    var srColors = { BACK_UP_TRUCK: '#1D9E75', TRIM: '#f97316', LIQUIDATE: '#E24B4A', WAIT_AND_SEE: '#378ADD' };
+    var srShort = { BACK_UP_TRUCK: 'TRUCK', TRIM: 'TRIM', LIQUIDATE: 'EXIT', WAIT_AND_SEE: 'WAIT' };
+    var srCol = srColors[sr.regime] || 'var(--dim)';
+    var conflictBorder = sr.conflictsWithVerdict ? ';box-shadow:0 0 6px rgba(226,75,74,0.6);animation:pulse 2s infinite' : '';
+    html += '<td><span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:9px;font-weight:700;background:' + srCol + '18;color:' + srCol + conflictBorder + '" title="' + (sr.sizing || '').replace(/"/g, '&quot;') + ' | Conv: ' + (sr.conviction || 0) + (sr.conflictsWithVerdict ? ' | ⚡ CONFLICT: ' + (sr.conflictNote || '').replace(/"/g, '&quot;') : '') + '">' + (srShort[sr.regime] || '—') + (sr.conflictsWithVerdict ? ' ⚡' : '') + '</span></td>';
     var udColor = vd.upDownRatio > 1.3 ? '#1D9E75' : vd.upDownRatio < 0.7 ? '#E24B4A' : 'var(--dim)';
     html += '<td style="font-size:12px;font-weight:500;color:' + udColor + '">' + (vd.upDownRatio ? vd.upDownRatio.toFixed(2) : '—') + '</td>';
     var extColor = a.priceVs200d > 0 ? '#1D9E75' : '#E24B4A';
@@ -4922,6 +4931,34 @@ function analyzeTickerFn() {
     var pgPrompt = encodeURIComponent('Analyze ' + sym + ' using the Druckenmiller framework. Current price: $' + d.price.toFixed(2) + '. ' + (d.anchors.priceVs200d > 0 ? 'Above' : 'Below') + ' 200d MA by ' + Math.abs(d.anchors.priceVs200d || 0).toFixed(1) + '%. Up/Down volume ratio: ' + (d.volumeDemand.upDownRatio || 'N/A') + '. Failed breakdowns: ' + (d.failedBreakdowns.count || 0) + '. ' + (d.anchors.sma50Above200 ? 'Golden cross.' : 'Death cross.') + ' Our system verdict: ' + (v.verdict || '') + ' (' + (v.archetype || '') + '). Provide your Druckenmiller-style narrative analysis.');
     html += '<div style="margin-top:8px"><a href="https://chatgpt.com/?q=' + pgPrompt + '" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;border:1px solid var(--accent);padding:4px 10px;border-radius:4px">Compare with PortGenie ↗</a></div>';
     html += '</div>';
+
+    // ═══ POSITION SIZING REGIME ═══
+    if (d.sizingRegime) {
+      var sr = d.sizingRegime;
+      var srColors = { BACK_UP_TRUCK: '#1D9E75', TRIM: '#f97316', LIQUIDATE: '#E24B4A', WAIT_AND_SEE: '#378ADD' };
+      var srIcons = { BACK_UP_TRUCK: '🔥', TRIM: '✂️', LIQUIDATE: '🚨', WAIT_AND_SEE: '⏳' };
+      var src = srColors[sr.regime] || 'var(--dim)';
+      var borderStyle = sr.conflictsWithVerdict ? 'border:2px solid #E24B4A' : 'border:0.5px solid ' + src + '44';
+      html += '<div class="card" style="padding:14px 16px;margin-bottom:12px;' + borderStyle + ';background:' + src + '08">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">';
+      html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:' + src + '">Position sizing regime</div>';
+      // Conviction bar
+      html += '<div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--dim)">Conviction</span>';
+      html += '<div style="width:60px;height:6px;border-radius:3px;background:var(--surface)">';
+      html += '<div style="width:' + sr.conviction + '%;height:100%;border-radius:3px;background:' + src + '"></div>';
+      html += '</div><span style="font-size:10px;color:' + src + '">' + sr.conviction + '</span></div>';
+      html += '</div>';
+      html += '<div style="font-size:18px;font-weight:500;color:' + src + '">' + (srIcons[sr.regime] || '') + ' ' + sr.label.toUpperCase() + '</div>';
+      html += '<div style="font-size:12px;color:var(--dim);margin-top:2px">' + sr.sizing + '</div>';
+      html += '<div style="font-size:11px;color:var(--text);margin-top:6px;line-height:1.5;opacity:0.85">' + sr.reasoning + '</div>';
+      if (sr.conflictsWithVerdict && sr.conflictNote) {
+        html += '<div style="margin-top:8px;padding:8px 12px;border-radius:6px;background:#E24B4A12;border:1px solid #E24B4A44">';
+        html += '<div style="font-size:10px;font-weight:500;text-transform:uppercase;color:#E24B4A;margin-bottom:2px">⚡ Verdict vs Sizing Conflict</div>';
+        html += '<div style="font-size:11px;color:#E24B4A;line-height:1.5">' + sr.conflictNote + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
 
     // ═══ NARRATIVE (Claude/PortGenie analysis) ═══
     if (d.narrative) {

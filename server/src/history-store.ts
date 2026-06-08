@@ -684,6 +684,14 @@ export function initWatchlistTable(): void {
   try { db.exec('ALTER TABLE watchlist ADD COLUMN phase_changed_at TEXT'); } catch {}
   try { db.exec('ALTER TABLE watchlist ADD COLUMN phase_change_direction TEXT'); } catch {}
 
+  // Add sizing regime columns (migration)
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN sizing_regime TEXT'); } catch {}
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN sizing_label TEXT'); } catch {}
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN sizing_conviction INTEGER'); } catch {}
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN sizing_conflicts INTEGER DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN sizing_conflict_note TEXT'); } catch {}
+  try { db.exec('ALTER TABLE watchlist ADD COLUMN sizing_detail TEXT'); } catch {}
+
   // Phase change history log
   db.exec(`
     CREATE TABLE IF NOT EXISTS watchlist_phase_log (
@@ -813,6 +821,7 @@ export function updateWatchlistAnalysis(symbol: string, data: any): void {
       console.log(`[WATCHLIST] ⚡ PHASE CHANGE: ${symbol} ${oldPhaseShort} → ${newPhaseShort} (${changeDirection})`);
     }
 
+    const sr = data.sizingRegime || {};
     db.prepare(`
       UPDATE watchlist SET
         last_analyzed = datetime('now'),
@@ -834,6 +843,12 @@ export function updateWatchlistAnalysis(symbol: string, data: any): void {
         sector = ?,
         narrative = ?,
         reasoning = ?,
+        sizing_regime = ?,
+        sizing_label = ?,
+        sizing_conviction = ?,
+        sizing_conflicts = ?,
+        sizing_conflict_note = ?,
+        sizing_detail = ?,
         full_data = ?
       WHERE symbol = ?
     `).run(
@@ -856,6 +871,12 @@ export function updateWatchlistAnalysis(symbol: string, data: any): void {
       data.sectorDetected || null,
       data.narrative || null,
       JSON.stringify(verdict.reasoning || []),
+      sr.regime || null,
+      sr.label || null,
+      sr.conviction || null,
+      sr.conflictsWithVerdict ? 1 : 0,
+      sr.conflictNote || null,
+      sr.sizing || null,
       JSON.stringify(data),
       symbol.toUpperCase(),
     );

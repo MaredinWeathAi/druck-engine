@@ -2125,6 +2125,161 @@ async function detectSectorETFs(symbol: string): Promise<{ primary: string; seco
   }
 }
 
+// ══════════════════════════════════════════════════════════════
+// DRUCKENMILLER POSITION SIZING REGIME
+// ══════════════════════════════════════════════════════════════
+// 4 regimes based on Druckenmiller's actual sizing framework:
+//   1. WAIT_AND_SEE — Tracking position only. Coiled tape, no edge.
+//   2. BACK_UP_TRUCK — Max concentration. All 3 filters aligned.
+//   3. TRIM — Start harvesting. Smart money leaving.
+//   4. LIQUIDATE — Total exit. Structural decay confirmed.
+//
+// This runs PARALLEL to the verdict. The verdict says WHAT to do,
+// the sizing regime says HOW MUCH capital to deploy.
+// ══════════════════════════════════════════════════════════════
+function classifySizingRegime(params: {
+  upDownRatio: number | null;
+  priceVs200d: number | null;
+  failedBreakdowns: number;
+  sma50Above200: boolean;
+  daysSinceCross200d: number | null;
+  rsSlope: number | null;       // RS momentum: (current / 20d-ago - 1), negative = weakening
+  extensionPct: number | null;  // How far extended from 200d
+  verdict: string;              // Current system verdict for conflict detection
+}): {
+  regime: string;
+  label: string;
+  sizing: string;
+  conviction: number;   // 0-100 conviction score
+  reasoning: string;
+  conflictsWithVerdict: boolean;
+  conflictNote: string;
+} {
+  const { upDownRatio, priceVs200d, failedBreakdowns, sma50Above200,
+          daysSinceCross200d, rsSlope, extensionPct, verdict } = params;
+
+  const ud = upDownRatio ?? 1.0;
+  const ext = priceVs200d ?? 0;
+  const above200 = ext > 0;
+  const recentBreakout = above200 && daysSinceCross200d !== null && daysSinceCross200d <= 60;
+
+  // ── REGIME 4: LIQUIDATE ──
+  // Deep below declining 200d, clean breakdowns, Up/Down <0.65
+  if (!above200 && ext < -15 && ud < 0.65 && failedBreakdowns === 0 && !sma50Above200) {
+    const regime = 'LIQUIDATE';
+    const conflictsWithVerdict = verdict.includes('ACCUMULATE') || verdict.includes('BUY') || verdict.includes('RIDE');
+    return {
+      regime,
+      label: 'Aggressively sell',
+      sizing: 'Total liquidation — exit immediately or short',
+      conviction: Math.min(100, Math.round(70 + Math.abs(ext) * 0.5 + (0.65 - ud) * 50)),
+      reasoning: `Structural bear market. ${Math.abs(ext).toFixed(0)}% below declining 200d, Up/Down ${ud.toFixed(2)} shows institutions dumping, zero failed breakdowns = no floor. Druckenmiller: "never average down into a structural liquidity drain."`,
+      conflictsWithVerdict,
+      conflictNote: conflictsWithVerdict ? `WARNING: Verdict says "${verdict}" but sizing says LIQUIDATE. The Up/Down ratio at ${ud.toFixed(2)} is screaming distribution — trust the tape over the thesis.` : '',
+    };
+  }
+
+  // ── REGIME 2: BACK UP THE TRUCK ──
+  // Failed breakdowns + above 200d (or recent breakout) + Up/Down >1.50
+  if (failedBreakdowns >= 2 && above200 && ud > 1.50) {
+    let conv = 75;
+    if (recentBreakout) conv += 10;          // Fresh breakout = highest conviction
+    if (ud > 1.80) conv += 8;               // Violent accumulation
+    if (failedBreakdowns >= 4) conv += 5;    // Massive floor
+    if (sma50Above200) conv += 2;            // Structure confirmed
+    conv = Math.min(100, conv);
+
+    const regime = 'BACK_UP_TRUCK';
+    const conflictsWithVerdict = verdict.includes('AVOID') || verdict.includes('TIGHTEN') || verdict.includes('NEUTRAL');
+    return {
+      regime,
+      label: 'Back up the truck',
+      sizing: 'Max concentration — top-tier portfolio weight',
+      conviction: conv,
+      reasoning: `${failedBreakdowns} failed breakdowns built a launching pad. ${recentBreakout ? 'FRESH BREAKOUT above 200d — this is the entry.' : 'Above 200d with structure confirmed.'} Up/Down ${ud.toFixed(2)} = institutions violently accumulating.${sma50Above200 ? ' Golden cross confirms.' : ''} Risk is mathematically defined by the failed breakdown lows.`,
+      conflictsWithVerdict,
+      conflictNote: conflictsWithVerdict ? `CONFLICT: Verdict says "${verdict}" but all 3 Druckenmiller filters are aligned for max concentration.` : '',
+    };
+  }
+
+  // Near-truck: has floor + above 200d but volume not quite there yet
+  if (failedBreakdowns >= 2 && above200 && ud > 1.30 && ud <= 1.50) {
+    const regime = 'BACK_UP_TRUCK';
+    return {
+      regime,
+      label: 'Back up the truck',
+      sizing: 'Build to concentrated weight — volume nearly confirmed',
+      conviction: Math.min(85, Math.round(60 + (ud - 1.0) * 40 + failedBreakdowns * 2)),
+      reasoning: `Floor confirmed (${failedBreakdowns} failed breakdowns), above 200d, but Up/Down at ${ud.toFixed(2)} is not yet at the 1.50 institutional stampede threshold. Building toward full conviction — one more quarter of heavy volume confirms.`,
+      conflictsWithVerdict: false,
+      conflictNote: '',
+    };
+  }
+
+  // ── REGIME 3: TRIM ──
+  // Above 200d but distribution starting: Up/Down <0.85, OR RS weakening
+  const rsWeakening = rsSlope !== null && rsSlope < -0.03;  // 3%+ RS degradation over 20d
+  const heavyDistribution = ud < 0.65;
+  const mildDistribution = ud < 0.85;
+  const extended = extensionPct !== null && extensionPct > 15;
+
+  if (above200 && (heavyDistribution || (mildDistribution && rsWeakening) || (mildDistribution && extended))) {
+    let conv = 50;
+    if (heavyDistribution) conv += 25;
+    if (rsWeakening) conv += 15;
+    if (extended) conv += 10;
+    conv = Math.min(95, conv);
+
+    const regime = 'TRIM';
+    const verdictSaysBuy = verdict.includes('ACCUMULATE') || verdict.includes('BUY') || verdict.includes('RIDE');
+    const rsNote = rsWeakening ? ` RS vs sector declining (${((rsSlope ?? 0) * 100).toFixed(1)}% over 20d) — smart money rotating away.` : '';
+    return {
+      regime,
+      label: 'Start trimming',
+      sizing: heavyDistribution ? 'Shave 40-50% — distribution is heavy' : 'Shave 25-30% on technical bounces',
+      conviction: conv,
+      reasoning: `Still above 200d but the tape is deteriorating. Up/Down ${ud.toFixed(2)}${mildDistribution ? ' shows distribution building' : ''}.${rsNote}${extended ? ` Extended ${extensionPct?.toFixed(0)}% from 200d — smart money selling into strength.` : ''} Don't wait for the earnings miss — use bounces to harvest.`,
+      conflictsWithVerdict: verdictSaysBuy,
+      conflictNote: verdictSaysBuy ? `CONFLICT: Verdict says "${verdict}" but institutional volume says TRIM. The Up/Down ratio at ${ud.toFixed(2)} is the early warning — smart money is leaving before the story breaks.` : '',
+    };
+  }
+
+  // Below 200d with distribution but some floor (TSLA-like: not full liquidate but not buy)
+  if (!above200 && mildDistribution && failedBreakdowns >= 1) {
+    return {
+      regime: 'WAIT_AND_SEE',
+      label: 'Wait and see',
+      sizing: 'Tracking position only — or zero',
+      conviction: 30,
+      reasoning: `Below 200d with mild distribution (Up/Down ${ud.toFixed(2)}) but ${failedBreakdowns} failed breakdown(s) show some demand floor. Coiled spring or value trap — impossible to tell yet. Keep a tracking position and wait for volume to confirm direction.`,
+      conflictsWithVerdict: false,
+      conflictNote: '',
+    };
+  }
+
+  // ── REGIME 1: WAIT AND SEE (DEFAULT) ──
+  // Everything else: neutral tape, no strong signal either way
+  const nearEquilibrium = ud >= 0.85 && ud <= 1.15;
+  const near200d = Math.abs(ext) < 10;
+  let conv = 25;
+  if (nearEquilibrium && near200d) conv = 20;  // Classic coil
+  if (!nearEquilibrium && !near200d) conv = 35; // Has some direction but not enough
+
+  return {
+    regime: 'WAIT_AND_SEE',
+    label: 'Wait and see',
+    sizing: near200d && nearEquilibrium
+      ? 'Tracking position only — let the coil resolve'
+      : 'Standard baseline allocation — no edge to exploit',
+    conviction: conv,
+    reasoning: nearEquilibrium && near200d
+      ? `Classic Druckenmiller coiled spring. Price near 200d (${ext > 0 ? '+' : ''}${ext.toFixed(1)}%), volume in equilibrium (Up/Down ${ud.toFixed(2)}). Energy building but no breakout yet. Stand perfectly still until the tape breaks one direction.`
+      : `Mixed signals. Up/Down ${ud.toFixed(2)}, extension ${ext > 0 ? '+' : ''}${ext.toFixed(1)}% from 200d. Not enough conviction for aggressive sizing in either direction. Hold baseline and wait for clarity.`,
+    conflictsWithVerdict: false,
+    conflictNote: '',
+  };
+}
+
 function generateVerdict(
   upDownRatio: number | null,
   priceVs200d: number | null,
@@ -2478,6 +2633,28 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
       failedBreakdownCount, earningsReactions, ta.sma50Above200,
     );
 
+    // RS slope for sizing regime: compare current RS to 20 days ago
+    let rsSlope: number | null = null;
+    if (rs1.ratios && rs1.ratios.length >= 20) {
+      const current = rs1.ratios[rs1.ratios.length - 1];
+      const ago20 = rs1.ratios[rs1.ratios.length - 20];
+      if (current && ago20 && ago20 !== 0) {
+        rsSlope = (current / ago20) - 1;  // positive = strengthening, negative = weakening
+      }
+    }
+
+    // Druckenmiller Position Sizing Regime
+    const sizingRegime = classifySizingRegime({
+      upDownRatio,
+      priceVs200d: ta.priceVsSma200,
+      failedBreakdowns: failedBreakdownCount,
+      sma50Above200: ta.sma50Above200,
+      daysSinceCross200d: ta.daysSinceCross200d,
+      rsSlope,
+      extensionPct: ta.priceVsSma200,
+      verdict: verdict.verdict,
+    });
+
     // Phase mapping for display
     const phaseDisplayMap: Record<string, { num: number; short: string }> = {
       SELLING_EXHAUSTION: { num: 1, short: 'P1 Buy' },
@@ -2556,6 +2733,10 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
 
       // Verdict (Druckenmiller 4-Step Matrix)
       verdict,
+
+      // Position Sizing Regime
+      sizingRegime,
+
       sectorDetected: sectorName,
 
       // Narrative (generated async by Claude API using PortGenie framework)
@@ -2585,6 +2766,9 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
             system_archetype: verdict.archetype,
             system_sub_phase: verdict.subPhase,
             news_test: verdict.newsTest,
+            sizing_regime: sizingRegime.regime,
+            sizing_conviction: sizingRegime.conviction,
+            sizing_conflicts: sizingRegime.conflictsWithVerdict,
             atr_pct: ta.atrPct,
             velocity: ta.extensionVelocity,
             days_since_200d_cross: ta.daysSinceCross200d,

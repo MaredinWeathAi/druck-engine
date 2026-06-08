@@ -605,6 +605,31 @@ function initWatchlistTable() {
         db.exec('ALTER TABLE watchlist ADD COLUMN phase_change_direction TEXT');
     }
     catch { }
+    // Add sizing regime columns (migration)
+    try {
+        db.exec('ALTER TABLE watchlist ADD COLUMN sizing_regime TEXT');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE watchlist ADD COLUMN sizing_label TEXT');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE watchlist ADD COLUMN sizing_conviction INTEGER');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE watchlist ADD COLUMN sizing_conflicts INTEGER DEFAULT 0');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE watchlist ADD COLUMN sizing_conflict_note TEXT');
+    }
+    catch { }
+    try {
+        db.exec('ALTER TABLE watchlist ADD COLUMN sizing_detail TEXT');
+    }
+    catch { }
     // Phase change history log
     db.exec(`
     CREATE TABLE IF NOT EXISTS watchlist_phase_log (
@@ -729,6 +754,7 @@ function updateWatchlistAnalysis(symbol, data) {
       `).run(symbol.toUpperCase(), oldPhaseNum, oldPhaseShort, newPhaseNum, newPhaseShort, changeDirection, data.price || null, verdict.verdict || null);
             console.log(`[WATCHLIST] ⚡ PHASE CHANGE: ${symbol} ${oldPhaseShort} → ${newPhaseShort} (${changeDirection})`);
         }
+        const sr = data.sizingRegime || {};
         db.prepare(`
       UPDATE watchlist SET
         last_analyzed = datetime('now'),
@@ -750,6 +776,12 @@ function updateWatchlistAnalysis(symbol, data) {
         sector = ?,
         narrative = ?,
         reasoning = ?,
+        sizing_regime = ?,
+        sizing_label = ?,
+        sizing_conviction = ?,
+        sizing_conflicts = ?,
+        sizing_conflict_note = ?,
+        sizing_detail = ?,
         full_data = ?
       WHERE symbol = ?
     `).run(data.price || null, newPhaseNum, newPhaseShort, oldPhaseNum, // prev_phase_num
@@ -757,7 +789,7 @@ function updateWatchlistAnalysis(symbol, data) {
         phaseChanged ? 1 : 0, // phase_changed_at condition
         phaseChanged ? 1 : 0, // phase_change_direction condition
         changeDirection || null, // phase_change_direction value
-        verdict.verdict || null, verdict.archetype || null, verdict.signal || null, vd.upDownRatio || null, anchors.priceVs200d || null, anchors.pctFrom52wHigh || null, fb.count || 0, anchors.sma50Above200 ? 1 : 0, data.sectorDetected || null, data.narrative || null, JSON.stringify(verdict.reasoning || []), JSON.stringify(data), symbol.toUpperCase());
+        verdict.verdict || null, verdict.archetype || null, verdict.signal || null, vd.upDownRatio || null, anchors.priceVs200d || null, anchors.pctFrom52wHigh || null, fb.count || 0, anchors.sma50Above200 ? 1 : 0, data.sectorDetected || null, data.narrative || null, JSON.stringify(verdict.reasoning || []), sr.regime || null, sr.label || null, sr.conviction || null, sr.conflictsWithVerdict ? 1 : 0, sr.conflictNote || null, sr.sizing || null, JSON.stringify(data), symbol.toUpperCase());
     }
     catch (err) {
         console.error('[WATCHLIST] Update error:', err?.message);
