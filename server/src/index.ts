@@ -1673,6 +1673,7 @@ app.post('/api/settings/key', (req, res) => {
     return res.status(400).json({ error: 'Invalid API key format' });
   }
   anthropicApiKey = api_key;
+  process.env.ANTHROPIC_API_KEY = api_key; // Share with morning-lens module
   setGeoEventKeys(api_key, GURUFOCUS_API_KEY);
   res.json({ status: 'ok', masked: '••••' + api_key.slice(-8) });
 });
