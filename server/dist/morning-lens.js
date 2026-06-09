@@ -2971,4 +2971,26 @@ router.get('/lens/model-performance', async (req, res) => {
     }
 });
 exports.default = router;
+// TEMPORARY DEBUG ENDPOINT — remove after fixing
+router.get('/lens/llm-test', async (_req, res) => {
+    const envKey = process.env.ANTHROPIC_API_KEY || '';
+    const prefix = envKey ? envKey.slice(0, 10) + '...' : 'EMPTY';
+    const isAnthropic = envKey.startsWith('sk-ant');
+    let result = '';
+    let error = '';
+    try {
+        const text = await callLLM({ system: 'Reply with exactly: WORKING', userMessage: 'Test', maxTokens: 20 });
+        result = text || 'NULL_RETURNED';
+    }
+    catch (err) {
+        error = err?.message || 'unknown';
+    }
+    res.json({
+        keyPrefix: prefix,
+        keyLength: envKey.length,
+        provider: envKey ? (isAnthropic ? 'anthropic' : 'openai') : 'none',
+        result,
+        error: error || null,
+    });
+});
 //# sourceMappingURL=morning-lens.js.map
