@@ -8,6 +8,43 @@
 import { Router, Request, Response } from 'express';
 import YahooFinance from 'yahoo-finance2';
 import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+
+// ── LLM PROVIDER ABSTRACTION ──
+// Auto-detects Anthropic vs OpenAI key and routes accordingly
+async function callLLM(opts: { system: string; userMessage: string; maxTokens: number }): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey) return null;
+
+  try {
+    if (apiKey.startsWith('sk-ant')) {
+      // Anthropic
+      const anthropic = new Anthropic({ apiKey });
+      const msg = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: opts.maxTokens,
+        system: opts.system,
+        messages: [{ role: 'user', content: opts.userMessage }],
+      });
+      return msg.content[0]?.type === 'text' ? msg.content[0].text : null;
+    } else {
+      // OpenAI
+      const openai = new OpenAI({ apiKey });
+      const resp = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        max_tokens: opts.maxTokens,
+        messages: [
+          { role: 'system', content: opts.system },
+          { role: 'user', content: opts.userMessage },
+        ],
+      });
+      return resp.choices[0]?.message?.content || null;
+    }
+  } catch (err: any) {
+    console.error('[LLM] API error:', err?.message);
+    return null;
+  }
+}
 import { computeFullInflection, computeExtendedTA, InflectionPhase, OHLCVBar } from './inflection-engine';
 import {
   recordSnapshotBatch, recordTransitionBatch,
@@ -1420,12 +1457,10 @@ setInterval(() => {
 
 // ─── ARIA NARRATIVE ───
 
-async function generateAriaNarrative(apiKey: string): Promise<string> {
+async function generateAriaNarrative(): Promise<string> {
   if (!currentSignals) return 'Signal data not yet available. Please wait for the first data refresh.';
 
   try {
-    const anthropic = new Anthropic({ apiKey });
-
     // Build enriched instrument data with phase information
     const enrichedInstruments = Object.fromEntries(
       Array.from(instrumentSnapshots.entries()).map(([k, v]) => [k, {
@@ -1462,9 +1497,7 @@ async function generateAriaNarrative(apiKey: string): Promise<string> {
       instruments: enrichedInstruments,
     };
 
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1200,
+    const text = await callLLM({
       system: `You are Aria, Marcelo's AI research partner at Maredin Wealth Advisors. You write his morning macro brief in his voice: direct, no fluff, no hedging, no bullet lists unless absolutely needed. 400-600 words.
 
 STRUCTURE (follow this order):
@@ -1491,16 +1524,11 @@ STRUCTURE (follow this order):
 5. TODAY'S WATCH: One specific thing to monitor.
 
 End with a portfolio implication sentence for Maredin's book. Use only the attached JSON state — do not invent data not in it. If a field is null or stale, say so.`,
-      messages: [
-        { role: 'user', content: `Generate this morning's brief from the following signal state:\n\n${JSON.stringify(signalPayload, null, 2)}` },
-      ],
+      userMessage: `Generate this morning's brief from the following signal state:\n\n${JSON.stringify(signalPayload, null, 2)}`,
+      maxTokens: 1200,
     });
 
-    const text = response.content
-      .filter((b: any) => b.type === 'text')
-      .map((b: any) => b.text)
-      .join('');
-
+    if (!text) return 'Narrative unavailable: no API key configured or LLM returned empty response.';
     ariaLatestNarrative = text;
     ariaTimestamp = new Date().toISOString();
     return text;
@@ -1829,17 +1857,7 @@ router.get('/lens/narrative', async (req: Request, res: Response) => {
     }
   }
 
-  // Need API key
-  const apiKey = process.env.ANTHROPIC_API_KEY || '';
-  if (!apiKey) {
-    return res.json({
-      narrative: 'Aria narrative unavailable — no Anthropic API key configured. Set ANTHROPIC_API_KEY in environment.',
-      timestamp: new Date().toISOString(),
-      cached: false,
-    });
-  }
-
-  const text = await generateAriaNarrative(apiKey);
+  const text = await generateAriaNarrative();
   res.json({ narrative: text, timestamp: ariaTimestamp, cached: false });
 });
 
@@ -2771,12 +2789,9 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
 
       sectorDetected: sectorName,
 
-      // Narrative (generated async by Claude API using PortGenie framework)
+      // Narrative (generated async by LLM using PortGenie framework)
       narrative: await (async () => {
-        const apiKey = process.env.ANTHROPIC_API_KEY || '';
-        if (!apiKey) return null;
         try {
-          const anthropic = new Anthropic({ apiKey });
           const dataPayload = JSON.stringify({
             symbol, price: Math.round(price * 100) / 100,
             ma50: ta.sma50, ma200: ta.sma200,
@@ -2806,9 +2821,7 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
             days_since_200d_cross: ta.daysSinceCross200d,
           });
 
-          const msg = await anthropic.messages.create({
-            model: 'claude-3-5-sonnet-20241022',
-            max_tokens: 800,
+          return await callLLM({
             system: `You are the Druck Engine narrative analyst. You use the Druckenmiller Trade Cycle phase system and the PortGenie expectations framework to analyze stocks.
 
 CORE PRINCIPLE: Markets are expectation-discounting mechanisms. Price moves when Reality ≠ Expectations. You identify inflection points where narrative, expectations, positioning, and fundamentals diverge from price.
@@ -2831,13 +2844,11 @@ DRUCKENMILLER RULES: "Liquidity drives markets, not earnings." Never fight the t
 OUTPUT FORMAT: Write 2-3 concise paragraphs. First paragraph: the macro/narrative read — what story is the market pricing for this stock and is it right? Second paragraph: the tape evidence — what the technicals confirm or deny, referencing the phase (P1-P5) explicitly. Third paragraph: the verdict — what Druckenmiller would do, stated in his voice. Be direct, confident, specific. No hedging. No "could go either way." Take a position. End with the phase classification: "This is a P[X] [Buy/Ride/Trim/Exit/Avoid] setup."
 
 CRITICAL: You only have technical data, not fundamental data. Acknowledge what you can see and what you can't. Note that forward estimate revisions and institutional ownership changes are not available — flag this as a blind spot when relevant.`,
-            messages: [{ role: 'user', content: `Analyze this stock using the PortGenie/Druckenmiller framework. Here is the complete technical dataset:\n\n${dataPayload}` }],
+            userMessage: `Analyze this stock using the PortGenie/Druckenmiller framework. Here is the complete technical dataset:\n\n${dataPayload}`,
+            maxTokens: 800,
           });
-
-          const text = msg.content[0]?.type === 'text' ? msg.content[0].text : null;
-          return text;
         } catch (err: any) {
-          console.error('[NARRATIVE] Claude API error:', err?.message);
+          console.error('[NARRATIVE] LLM API error:', err?.message);
           return null;
         }
       })(),
@@ -2974,12 +2985,6 @@ router.get('/lens/history/druckenmiller', (_req: Request, res: Response) => {
 // watchlist, macro regime, sector rotation, and history.
 // ══════════════════════════════════════════════════════════════
 router.post('/lens/ai-analysis', async (req: Request, res: Response) => {
-  const apiKey = process.env.ANTHROPIC_API_KEY || '';
-  if (!apiKey) {
-    res.status(400).json({ error: 'No Anthropic API key configured' });
-    return;
-  }
-
   const userPrompt = req.body.prompt || '';
 
   try {
@@ -3052,11 +3057,8 @@ router.post('/lens/ai-analysis', async (req: Request, res: Response) => {
       user_question: userPrompt || null,
     }, null, 0);
 
-    // ── CALL CLAUDE ──
-    const anthropic = new Anthropic({ apiKey });
-    const msg = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 2000,
+    // ── CALL LLM ──
+    const text = await callLLM({
       system: `You are the AI Intelligence Analyst inside the Druck Engine — a Druckenmiller-style investment analysis platform. You have real-time access to the system's complete dataset: phase classifications (P1 Buy through P5 Avoid) across 130+ ETFs and indexes, a persistent watchlist with per-ticker verdicts and position sizing regimes, sector rotation data, and historical tracking.
 
 YOUR ROLE: Synthesize all data into a Druckenmiller-caliber intelligence briefing. Think like a macro PM — find the patterns the system's individual signals can't see by themselves.
@@ -3078,13 +3080,11 @@ RULES:
 - If the user asked a specific question, answer it directly using the data before doing the full briefing.
 
 FORMAT: Use clear section headers. Write concisely. No filler. No disclaimers.`,
-      messages: [{ role: 'user', content: userPrompt
+      userMessage: userPrompt
         ? `User question: "${userPrompt}"\n\nHere is the complete system dataset:\n${dataPayload}`
-        : `Generate a full Druckenmiller intelligence briefing from this real-time system data:\n${dataPayload}`
-      }],
-    });
-
-    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : 'No response generated';
+        : `Generate a full Druckenmiller intelligence briefing from this real-time system data:\n${dataPayload}`,
+      maxTokens: 2000,
+    }) || 'No response generated';
 
     res.json({
       analysis: text,
