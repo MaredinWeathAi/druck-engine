@@ -31,8 +31,8 @@ async function callLLM(opts: { system: string; userMessage: string; maxTokens: n
       return msg.content[0]?.type === 'text' ? msg.content[0].text : null;
     } else {
       // OpenAI
-      const openai = new OpenAI({ apiKey });
-      console.log('[LLM] Calling OpenAI gpt-4o...');
+      const openai = new OpenAI({ apiKey, timeout: 25000 });
+      console.log('[LLM] Calling OpenAI gpt-4o with key prefix:', apiKey.slice(0, 10));
       const resp = await openai.chat.completions.create({
         model: 'gpt-4o',
         max_tokens: opts.maxTokens,
@@ -3280,26 +3280,33 @@ router.get('/lens/model-performance', async (req: Request, res: Response) => {
 export default router;
 export { INSTRUMENTS, refreshMorningLens };
 
-// TEMPORARY DEBUG ENDPOINT — remove after fixing
+// DEBUG ENDPOINT — reports LLM config without making an actual API call
 router.get('/lens/llm-test', async (_req: Request, res: Response) => {
   const envKey = process.env.ANTHROPIC_API_KEY || '';
   const prefix = envKey ? envKey.slice(0, 10) + '...' : 'EMPTY';
   const isAnthropic = envKey.startsWith('sk-ant');
-  
-  let result = '';
+
+  // Quick test: just try to initialize the client, don't make a call
+  let clientOk = false;
   let error = '';
   try {
-    const text = await callLLM({ system: 'Reply with exactly: WORKING', userMessage: 'Test', maxTokens: 20 });
-    result = text || 'NULL_RETURNED';
+    if (isAnthropic) {
+      new Anthropic({ apiKey: envKey });
+      clientOk = true;
+    } else if (envKey) {
+      new OpenAI({ apiKey: envKey, timeout: 5000 });
+      clientOk = true;
+    }
   } catch (err: any) {
     error = err?.message || 'unknown';
   }
-  
+
   res.json({
     keyPrefix: prefix,
     keyLength: envKey.length,
     provider: envKey ? (isAnthropic ? 'anthropic' : 'openai') : 'none',
-    result,
+    clientInitOk: clientOk,
+    result: clientOk ? 'Client initialized — key format OK' : 'Client failed to initialize',
     error: error || null,
   });
 });
