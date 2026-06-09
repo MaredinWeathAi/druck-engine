@@ -26,9 +26,8 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 // ─── API KEY MANAGEMENT ───
-// Load API key: env var → SQLite persistent store → empty
-let anthropicApiKey = process.env.ANTHROPIC_API_KEY || getSetting('anthropic_api_key') || '';
-if (anthropicApiKey) process.env.ANTHROPIC_API_KEY = anthropicApiKey; // Share with morning-lens
+// API key loaded after initDatabase() — see server startup section
+let anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
 const FRED_API_KEY = process.env.FRED_API_KEY || '';
 const GURUFOCUS_API_KEY = process.env.GURUFOCUS_API_KEY || '026d8ee9d10c778c6656d672b5ff1e71:544e1fff1953fece457d6152f3239e74';
 
@@ -752,6 +751,16 @@ async function refreshLiveData() {
 try {
   initDatabase();
   console.log('[STARTUP] Historical database initialized');
+
+  // Load persisted API key from SQLite (survives deploys)
+  if (!anthropicApiKey) {
+    const savedKey = getSetting('anthropic_api_key');
+    if (savedKey) {
+      anthropicApiKey = savedKey;
+      process.env.ANTHROPIC_API_KEY = savedKey;
+      console.log('[STARTUP] Loaded Anthropic API key from persistent storage');
+    }
+  }
 } catch (err: any) {
   console.error('[STARTUP] Failed to init database:', err?.message);
 }
