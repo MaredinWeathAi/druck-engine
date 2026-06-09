@@ -21,8 +21,10 @@ async function callLLM(opts) {
     const apiKey = process.env.ANTHROPIC_API_KEY || '';
     if (!apiKey)
         return null;
+    const isAnthropic = apiKey.startsWith('sk-ant');
+    console.log(`[LLM] Key prefix: ${apiKey.slice(0, 7)}... | Provider: ${isAnthropic ? 'Anthropic' : 'OpenAI'}`);
     try {
-        if (apiKey.startsWith('sk-ant')) {
+        if (isAnthropic) {
             // Anthropic
             const anthropic = new sdk_1.default({ apiKey });
             const msg = await anthropic.messages.create({
