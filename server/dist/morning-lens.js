@@ -1215,7 +1215,7 @@ async function generateAriaNarrative(apiKey) {
             instruments: enrichedInstruments,
         };
         const response = await anthropic.messages.create({
-            model: 'claude-3-5-sonnet-20241022',
+            model: 'claude-3-5-sonnet-latest',
             max_tokens: 1200,
             system: `You are Aria, Marcelo's AI research partner at Maredin Wealth Advisors. You write his morning macro brief in his voice: direct, no fluff, no hedging, no bullet lists unless absolutely needed. 400-600 words.
 
@@ -2509,7 +2509,7 @@ router.get('/lens/ticker/:symbol', async (req, res) => {
                         days_since_200d_cross: ta.daysSinceCross200d,
                     });
                     const msg = await anthropic.messages.create({
-                        model: 'claude-3-5-sonnet-20241022',
+                        model: 'claude-3-5-sonnet-latest',
                         max_tokens: 800,
                         system: `You are the Druck Engine narrative analyst. You use the Druckenmiller Trade Cycle phase system and the PortGenie expectations framework to analyze stocks.
 
@@ -2750,7 +2750,7 @@ router.post('/lens/ai-analysis', async (req, res) => {
         // ── CALL CLAUDE ──
         const anthropic = new sdk_1.default({ apiKey });
         const msg = await anthropic.messages.create({
-            model: 'claude-3-5-sonnet-20241022',
+            model: 'claude-3-5-sonnet-latest',
             max_tokens: 2000,
             system: `You are the AI Intelligence Analyst inside the Druck Engine — a Druckenmiller-style investment analysis platform. You have real-time access to the system's complete dataset: phase classifications (P1 Buy through P5 Avoid) across 130+ ETFs and indexes, a persistent watchlist with per-ticker verdicts and position sizing regimes, sector rotation data, and historical tracking.
 
