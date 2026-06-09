@@ -32,6 +32,7 @@ async function callLLM(opts: { system: string; userMessage: string; maxTokens: n
     } else {
       // OpenAI
       const openai = new OpenAI({ apiKey });
+      console.log('[LLM] Calling OpenAI gpt-4o...');
       const resp = await openai.chat.completions.create({
         model: 'gpt-4o',
         max_tokens: opts.maxTokens,
@@ -40,7 +41,9 @@ async function callLLM(opts: { system: string; userMessage: string; maxTokens: n
           { role: 'user', content: opts.userMessage },
         ],
       });
-      return resp.choices[0]?.message?.content || null;
+      const result = resp.choices?.[0]?.message?.content;
+      console.log('[LLM] OpenAI response length:', result?.length || 0);
+      return result || '[OpenAI returned empty response]';
     }
   } catch (err: any) {
     console.error('[LLM] API error:', err?.message, err?.status, err?.code);
