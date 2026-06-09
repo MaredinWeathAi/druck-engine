@@ -5306,13 +5306,70 @@ function renderModelPerformance(d) {
   szHtml += '</div>';
   document.getElementById('mp-sizing').innerHTML = szHtml;
 
-  // ─── SECTION 5: AI SYNTHESIS BRIEFING ───
+  // ─── SECTION 5: AUTOMATED INSIGHTS (no API needed) ───
   var aiEl = document.getElementById('mp-ai-briefing');
-  aiEl.innerHTML = '<div style="font-size:13px;font-weight:500;color:var(--accent);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">AI intelligence synthesis</div>' +
-    '<div class="card" style="padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span style="font-size:11px;color:var(--dim)">Druckenmiller-style briefing with model accuracy data</span><button onclick="runAiSynthesis()" id="ai-synth-btn" style="padding:4px 12px;border-radius:4px;border:1px solid var(--accent);background:transparent;color:var(--accent);font-size:11px;cursor:pointer">Generate Briefing</button></div><div id="ai-synth-output" style="font-size:12px;color:var(--dim)">Click "Generate Briefing" to synthesize model performance data into an actionable intelligence report.</div></div>';
+  var insights = [];
+  var ws = d.watchlistSummary || {};
+  var wlPerf = d.watchlistPerformance || [];
+  var phasePerf = d.phasePerformance || {};
+  var sizPerf = d.sizingPerformance || {};
+  var days = d.trackingDays || 0;
+
+  // Generate data-driven insights automatically
+  if (ws.hitRate !== null && ws.hitRate !== undefined) {
+    if (ws.hitRate >= 60) insights.push({ type: 'positive', text: 'Model hit rate at ' + ws.hitRate + '% — the system is calling direction correctly on the majority of watchlist positions.' });
+    else if (ws.hitRate < 40) insights.push({ type: 'negative', text: 'Model hit rate at ' + ws.hitRate + '% — below coin-flip accuracy. The system may be miscalibrated for current market conditions.' });
+  }
+  if (ws.avgAlpha !== null) {
+    if (ws.avgAlpha > 2) insights.push({ type: 'positive', text: 'Watchlist is generating +' + ws.avgAlpha.toFixed(1) + '% alpha vs S&P 500. The model is adding value above passive indexing.' });
+    else if (ws.avgAlpha < -2) insights.push({ type: 'negative', text: 'Watchlist is underperforming S&P 500 by ' + Math.abs(ws.avgAlpha).toFixed(1) + '%. Consider whether active positions are justified vs holding SPY.' });
+  }
+
+  // Phase accuracy insights
+  var p1 = phasePerf['P1 Buy'];
+  var p5 = phasePerf['P5 Avoid'];
+  if (p1 && p1.avgReturn > 0) insights.push({ type: 'positive', text: 'P1 Buy classifications averaging +' + p1.avgReturn.toFixed(1) + '% return (' + p1.count + ' instruments). The buy signal is working.' });
+  if (p1 && p1.avgReturn < -5) insights.push({ type: 'negative', text: 'P1 Buy classifications averaging ' + p1.avgReturn.toFixed(1) + '% — stocks we said to buy are going down. Structural problem.' });
+  if (p5 && p5.avgReturn < 0) insights.push({ type: 'positive', text: 'P5 Avoid classifications averaging ' + p5.avgReturn.toFixed(1) + '% return. The avoid signal is correctly identifying losers.' });
+  if (p5 && p5.avgReturn > 5) insights.push({ type: 'negative', text: 'P5 Avoid stocks averaging +' + p5.avgReturn.toFixed(1) + '% — we told you to avoid stocks that are rallying. Missing opportunities.' });
+
+  // Sizing conflicts
+  var conflictTickers = wlPerf.filter(function(w) { return w.sizingRegime === 'TRIM' || w.sizingRegime === 'LIQUIDATE'; });
+  if (conflictTickers.length > 0) {
+    insights.push({ type: 'warning', text: conflictTickers.length + ' watchlist position' + (conflictTickers.length > 1 ? 's' : '') + ' flagged for trimming/exit: ' + conflictTickers.map(function(w) { return w.symbol; }).join(', ') + '. Review these immediately.' });
+  }
+
+  // Best and worst performers
+  var sorted = wlPerf.filter(function(w) { return w.tickerReturn !== null; }).sort(function(a, b) { return b.tickerReturn - a.tickerReturn; });
+  if (sorted.length >= 2) {
+    var best = sorted[0];
+    var worst = sorted[sorted.length - 1];
+    if (best.tickerReturn > 0) insights.push({ type: 'info', text: 'Best performer: ' + best.symbol + ' at ' + (best.tickerReturn > 0 ? '+' : '') + best.tickerReturn.toFixed(1) + '% (model said: ' + (best.verdict || '?') + ')' });
+    if (worst.tickerReturn < 0) insights.push({ type: 'info', text: 'Worst performer: ' + worst.symbol + ' at ' + worst.tickerReturn.toFixed(1) + '% (model said: ' + (worst.verdict || '?') + ')' });
+  }
+
+  // Tracking depth warning
+  if (days < 30) {
+    insights.push({ type: 'warning', text: 'Only ' + days + ' day' + (days !== 1 ? 's' : '') + ' of tracking data. Statistical significance requires 30+ days minimum. Monthly, quarterly, and annual accuracy will populate automatically as data accumulates.' });
+  }
+
+  var iColors = { positive: '#1D9E75', negative: '#E24B4A', warning: '#BA7517', info: 'var(--accent)' };
+  var iIcons = { positive: '✓', negative: '✗', warning: '⚠', info: '→' };
+
+  var iHtml = '<div style="font-size:13px;font-weight:500;color:var(--accent);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">Automated insights</div>';
+  if (insights.length === 0) {
+    iHtml += '<div class="card" style="padding:16px;color:var(--dim);font-size:12px">No actionable insights yet — waiting for data to accumulate.</div>';
+  } else {
+    insights.forEach(function(ins) {
+      var c = iColors[ins.type] || 'var(--dim)';
+      iHtml += '<div style="padding:8px 12px;margin-bottom:6px;border-radius:6px;background:' + c + '08;border-left:3px solid ' + c + ';font-size:12px;color:var(--text);line-height:1.5"><span style="color:' + c + ';font-weight:700;margin-right:6px">' + (iIcons[ins.type] || '') + '</span>' + ins.text + '</div>';
+    });
+  }
+  aiEl.innerHTML = iHtml;
 }
 
-function runAiSynthesis() {
+function runAiSynthesis() { /* deprecated — insights are now automated without API */ }
+function _legacyRunAiSynthesis() {
   var btn = document.getElementById('ai-synth-btn');
   var output = document.getElementById('ai-synth-output');
 
