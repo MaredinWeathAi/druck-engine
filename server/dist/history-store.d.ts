@@ -1,4 +1,6 @@
 export declare function initDatabase(): void;
+export declare function getSetting(key: string): string | null;
+export declare function setSetting(key: string, value: string): void;
 export declare function getActiveAlgorithmVersion(): string;
 export declare function getAllAlgorithmVersions(): any[];
 export interface AlgorithmUpdateRequest {

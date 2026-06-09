@@ -15,6 +15,7 @@ import {
   getSymbolTransitions, getRecentTransitions, getLatestSnapshots,
   computeAccuracyMetrics, getActiveAlgorithmVersion, getAllAlgorithmVersions,
   getPendingUpdateRequests, requestAlgorithmUpdate, approveAlgorithmUpdate,
+  getSetting, setSetting,
 } from './history-store';
 // mtrp-client bridge removed — Market Intel lives entirely in Druck Engine
 
@@ -25,7 +26,9 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 // ─── API KEY MANAGEMENT ───
-let anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
+// Load API key: env var → SQLite persistent store → empty
+let anthropicApiKey = process.env.ANTHROPIC_API_KEY || getSetting('anthropic_api_key') || '';
+if (anthropicApiKey) process.env.ANTHROPIC_API_KEY = anthropicApiKey; // Share with morning-lens
 const FRED_API_KEY = process.env.FRED_API_KEY || '';
 const GURUFOCUS_API_KEY = process.env.GURUFOCUS_API_KEY || '026d8ee9d10c778c6656d672b5ff1e71:544e1fff1953fece457d6152f3239e74';
 
@@ -1674,6 +1677,7 @@ app.post('/api/settings/key', (req, res) => {
   }
   anthropicApiKey = api_key;
   process.env.ANTHROPIC_API_KEY = api_key; // Share with morning-lens module
+  setSetting('anthropic_api_key', api_key); // Persist to SQLite — survives deploys forever
   setGeoEventKeys(api_key, GURUFOCUS_API_KEY);
   res.json({ status: 'ok', masked: '••••' + api_key.slice(-8) });
 });

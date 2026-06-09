@@ -55,7 +55,10 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 app.use((0, cors_1.default)());
 app.use(express_1.default.json({ limit: '50mb' }));
 // ─── API KEY MANAGEMENT ───
-let anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
+// Load API key: env var → SQLite persistent store → empty
+let anthropicApiKey = process.env.ANTHROPIC_API_KEY || (0, history_store_1.getSetting)('anthropic_api_key') || '';
+if (anthropicApiKey)
+    process.env.ANTHROPIC_API_KEY = anthropicApiKey; // Share with morning-lens
 const FRED_API_KEY = process.env.FRED_API_KEY || '';
 const GURUFOCUS_API_KEY = process.env.GURUFOCUS_API_KEY || '026d8ee9d10c778c6656d672b5ff1e71:544e1fff1953fece457d6152f3239e74';
 const cache = new Map();
@@ -1573,6 +1576,7 @@ app.post('/api/settings/key', (req, res) => {
     }
     anthropicApiKey = api_key;
     process.env.ANTHROPIC_API_KEY = api_key; // Share with morning-lens module
+    (0, history_store_1.setSetting)('anthropic_api_key', api_key); // Persist to SQLite — survives deploys forever
     (0, geo_events_1.setGeoEventKeys)(api_key, GURUFOCUS_API_KEY);
     res.json({ status: 'ok', masked: '••••' + api_key.slice(-8) });
 });

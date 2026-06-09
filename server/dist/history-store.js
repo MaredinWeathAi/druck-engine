@@ -13,6 +13,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initDatabase = initDatabase;
+exports.getSetting = getSetting;
+exports.setSetting = setSetting;
 exports.getActiveAlgorithmVersion = getActiveAlgorithmVersion;
 exports.getAllAlgorithmVersions = getAllAlgorithmVersions;
 exports.requestAlgorithmUpdate = requestAlgorithmUpdate;
@@ -63,6 +65,14 @@ function initDatabase() {
     db = new better_sqlite3_1.default(DB_PATH, { verbose: undefined });
     db.pragma('journal_mode = WAL');
     db.pragma('synchronous = NORMAL');
+    // ── App Settings (persists API keys etc across deploys) ──
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
     // ── Algorithm Versions ──
     // Tracks which version of the classification logic was active at each point in time.
     // CRITICAL: Never auto-update. Only insert new versions after user approval.
@@ -221,6 +231,23 @@ function initDatabase() {
     )
   `);
     console.log(`[HISTORY] Database initialized at ${DB_PATH}`);
+}
+// ─── ALGORITHM VERSION MANAGEMENT ───
+// ─── APP SETTINGS (persistent key-value store) ───
+function getSetting(key) {
+    try {
+        const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key);
+        return row?.value || null;
+    }
+    catch {
+        return null;
+    }
+}
+function setSetting(key, value) {
+    try {
+        db.prepare('INSERT OR REPLACE INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime(\'now\'))').run(key, value);
+    }
+    catch { }
 }
 // ─── ALGORITHM VERSION MANAGEMENT ───
 function getActiveAlgorithmVersion() {
