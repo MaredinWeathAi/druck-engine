@@ -50,8 +50,8 @@ async function callLLM(opts) {
         }
     }
     catch (err) {
-        console.error('[LLM] API error:', err?.message);
-        return null;
+        console.error('[LLM] API error:', err?.message, err?.status, err?.code);
+        return `[LLM Error: ${err?.message || 'Unknown error'}]`;
     }
 }
 const inflection_engine_1 = require("./inflection-engine");

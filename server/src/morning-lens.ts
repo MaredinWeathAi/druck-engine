@@ -43,8 +43,8 @@ async function callLLM(opts: { system: string; userMessage: string; maxTokens: n
       return resp.choices[0]?.message?.content || null;
     }
   } catch (err: any) {
-    console.error('[LLM] API error:', err?.message);
-    return null;
+    console.error('[LLM] API error:', err?.message, err?.status, err?.code);
+    return `[LLM Error: ${err?.message || 'Unknown error'}]`;
   }
 }
 import { computeFullInflection, computeExtendedTA, InflectionPhase, OHLCVBar } from './inflection-engine';
