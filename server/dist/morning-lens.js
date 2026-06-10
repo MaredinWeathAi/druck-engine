@@ -2971,6 +2971,26 @@ router.get('/lens/model-performance', async (req, res) => {
     }
 });
 exports.default = router;
+// BAR DATA INJECTION — allows pushing bar data from external source when GuruFocus is rate-limited
+router.post('/lens/inject-bars', (req, res) => {
+    const { symbol, bars } = req.body;
+    if (!symbol || !bars || !Array.isArray(bars) || bars.length < 10) {
+        return res.status(400).json({ error: 'Need symbol and bars array (min 10 bars)' });
+    }
+    try {
+        (0, history_store_1.setCachedBars)(symbol.toUpperCase(), bars);
+        // Also populate in-memory cache
+        const ohlcvBars = bars.map((b) => ({
+            date: b.date || b[0], open: b.open || b[1] || b.close, high: b.high || b[1] || b.close,
+            low: b.low || b[1] || b.close, close: b.close || b[1], volume: b.volume || 0,
+        }));
+        tickerBarCache.set(symbol.toUpperCase(), { bars: ohlcvBars, fetchedAt: Date.now() });
+        res.json({ ok: true, symbol: symbol.toUpperCase(), barsStored: bars.length });
+    }
+    catch (err) {
+        res.status(500).json({ error: err?.message });
+    }
+});
 // DEBUG ENDPOINT — reports LLM config without making an actual API call
 router.get('/lens/llm-test', async (_req, res) => {
     const envKey = process.env.ANTHROPIC_API_KEY || '';
