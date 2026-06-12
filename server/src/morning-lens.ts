@@ -2134,10 +2134,13 @@ async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCV
 
 // ═══ RULE-BASED DRUCKENMILLER NARRATIVE — fallback when LLM is unavailable ═══
 function generateRuleBasedNarrative(d: any): string {
-  const phase = d.system_verdict?.match(/P(\d)/)?.[1] || '?';
+  const phaseNum = d.phase_num || 0;
+  const phase = phaseNum > 0 ? String(phaseNum) : '?';
   const phaseNames: Record<string, string> = { '1': 'Buy', '2': 'Ride', '3': 'Trim', '4': 'Exit', '5': 'Avoid' };
   const phaseName = phaseNames[phase] || 'Unknown';
-  const archetype = d.system_archetype || 'Unknown';
+  const rawArchetype = d.system_archetype || 'Unknown';
+  // Normalize archetype: BROKEN_GROWTH → Broken Growth for matching & display
+  const archetype = rawArchetype.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
   const ext200 = d.extension_from_200d != null ? (d.extension_from_200d > 0 ? `+${d.extension_from_200d.toFixed(1)}%` : `${d.extension_from_200d.toFixed(1)}%`) : 'N/A';
   const rsiLabel = d.rsi != null ? (d.rsi > 70 ? 'overbought' : d.rsi < 30 ? 'oversold' : 'neutral') : 'unknown';
   const highDist = d.pct_from_52w_high != null ? `${d.pct_from_52w_high.toFixed(1)}%` : 'N/A';
@@ -2149,7 +2152,10 @@ function generateRuleBasedNarrative(d: any): string {
 
   // Paragraph 1: Narrative read
   let p1 = `${d.symbol} at $${d.price} is classified as "${archetype}" — `;
-  if (archetype.includes('Broken Growth')) {
+  if (archetype.includes('Broken Growth') && phase === '1') {
+    p1 += `the growth narrative shattered, but selling pressure is exhausting. At ${highDist} from highs with RSI ${rsiLabel} (${d.rsi || 'N/A'}), `;
+    p1 += `this is a broken stock approaching maximum pessimism. The question is whether it's a value trap or a capitulation opportunity.`;
+  } else if (archetype.includes('Broken Growth')) {
     p1 += `the market has lost confidence in the growth narrative. Sitting ${highDist} from 52-week highs signals persistent distribution. `;
     p1 += `The tape is telling you the old story is over; institutions are repricing expectations lower.`;
   } else if (archetype.includes('Capitulation') || archetype.includes('Exhaustion') || phase === '1') {
@@ -2158,9 +2164,15 @@ function generateRuleBasedNarrative(d: any): string {
   } else if (archetype.includes('Uptrend') || archetype.includes('Expansion') || phase === '2') {
     p1 += `the trend is healthy and confirmed. Trading with a ${crossType}, momentum is intact. `;
     p1 += `The market is rewarding the current narrative — ride until the tape says otherwise.`;
-  } else if (archetype.includes('Late Cycle') || phase === '3') {
+  } else if (archetype.includes('Late Cycle') || archetype.includes('Extended') || phase === '3') {
     p1 += `momentum is fading after an extended run. Extension from 200d at ${ext200} with MACD ${macdTrend} `;
     p1 += `suggests the easy money has been made. Tighten stops and take profits into strength.`;
+  } else if (archetype.includes('Topping') || archetype.includes('Reversal') || phase === '4') {
+    p1 += `structure is breaking down. The narrative that drove the rally is being questioned. `;
+    p1 += `Institutions are exiting, not buying dips. Protect capital first, ask questions later.`;
+  } else if (archetype.includes('Downtrend') || archetype.includes('Bear') || phase === '5') {
+    p1 += `confirmed downtrend with no signs of a bottom. Falling knife territory. `;
+    p1 += `The crowd is still hoping for a bounce — Druckenmiller knows hope is not a strategy.`;
   } else {
     p1 += `trading at ${ext200} from 200d. The current setup carries ${archetype.toLowerCase()} characteristics `;
     p1 += `with RSI at ${d.rsi || 'N/A'} (${rsiLabel}) and MACD histogram ${macdTrend}.`;
@@ -3080,6 +3092,8 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
           atr_pct: ta.atrPct,
           velocity: ta.extensionVelocity,
           days_since_200d_cross: ta.daysSinceCross200d,
+          phase_num: phaseInfo?.num || 0,
+          phase_short: phaseInfo?.short || '?',
         };
 
         // Try LLM first, then fall back to rule-based narrative
