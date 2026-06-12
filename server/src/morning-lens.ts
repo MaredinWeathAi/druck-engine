@@ -12,11 +12,34 @@ import OpenAI from 'openai';
 
 // ── LLM PROVIDER ABSTRACTION ──
 // Auto-detects Anthropic vs OpenAI key and routes accordingly
+// Tracks consecutive failures to avoid hammering a broken API
+let llmConsecutiveFailures = 0;
+const LLM_MAX_FAILURES = 3; // After 3 failures, skip LLM entirely
+let llmLastFailureTime = 0;
+const LLM_RETRY_INTERVAL = 3600000; // Retry LLM after 1 hour
+
+function isLLMDisabled(): boolean {
+  if (llmConsecutiveFailures < LLM_MAX_FAILURES) return false;
+  // After max failures, check if enough time has passed to retry
+  if (Date.now() - llmLastFailureTime > LLM_RETRY_INTERVAL) {
+    console.log('[LLM] Retry interval passed, resetting failure count');
+    llmConsecutiveFailures = 0;
+    return false;
+  }
+  return true;
+}
+
 async function callLLM(opts: { system: string; userMessage: string; maxTokens: number }): Promise<string | null> {
+  // Check if LLM is disabled due to repeated failures
+  if (isLLMDisabled()) {
+    console.log(`[LLM] Skipping — ${llmConsecutiveFailures} consecutive failures, retry in ${Math.round((LLM_RETRY_INTERVAL - (Date.now() - llmLastFailureTime)) / 60000)}m`);
+    return null;
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY || '';
   if (!apiKey) return null;
   const isAnthropic = apiKey.startsWith('sk-ant');
-  console.log(`[LLM] Key prefix: ${apiKey.slice(0, 7)}... | Provider: ${isAnthropic ? 'Anthropic' : 'OpenAI'}`);
+  console.log(`[LLM] Key prefix: ${apiKey.slice(0, 7)}... | Provider: ${isAnthropic ? 'Anthropic' : 'OpenAI'} | Failures: ${llmConsecutiveFailures}`);
 
   try {
     if (isAnthropic) {
@@ -28,11 +51,12 @@ async function callLLM(opts: { system: string; userMessage: string; maxTokens: n
         system: opts.system,
         messages: [{ role: 'user', content: opts.userMessage }],
       });
+      llmConsecutiveFailures = 0; // Reset on success
       return msg.content[0]?.type === 'text' ? msg.content[0].text : null;
     } else {
       // OpenAI
       const openai = new OpenAI({ apiKey, timeout: 25000 });
-      console.log('[LLM] Calling OpenAI gpt-4o with key prefix:', apiKey.slice(0, 10));
+      console.log('[LLM] Calling OpenAI gpt-4o...');
       const resp = await openai.chat.completions.create({
         model: 'gpt-4o',
         max_tokens: opts.maxTokens,
@@ -43,11 +67,14 @@ async function callLLM(opts: { system: string; userMessage: string; maxTokens: n
       });
       const result = resp.choices?.[0]?.message?.content;
       console.log('[LLM] OpenAI response length:', result?.length || 0);
+      llmConsecutiveFailures = 0; // Reset on success
       return result || '[OpenAI returned empty response]';
     }
   } catch (err: any) {
-    console.error('[LLM] API error:', err?.message, err?.status, err?.code);
-    return `[LLM Error: ${err?.message || 'Unknown error'}]`;
+    llmConsecutiveFailures++;
+    llmLastFailureTime = Date.now();
+    console.error(`[LLM] API error (failure #${llmConsecutiveFailures}):`, err?.message?.slice(0, 100));
+    return null; // Return null instead of error string — forces rule-based fallback
   }
 }
 import { computeFullInflection, computeExtendedTA, InflectionPhase, OHLCVBar } from './inflection-engine';
@@ -1414,6 +1441,34 @@ async function refreshMorningLens(): Promise<void> {
       console.error('[WATCHLIST] Startup analysis error:', err?.message);
     }
   }, 30000); // 30s after startup — instruments should be loaded by then
+
+  // ═══ TRICKLE WARMER — gradually re-warm Yahoo data to avoid IP blocking ═══
+  // Warms 2 watchlist tickers every 5 minutes to keep volume data fresh
+  let trickleIndex = 0;
+  setInterval(async () => {
+    const watchlistItems = getWatchlist();
+    if (watchlistItems.length === 0) return;
+
+    // Pick next 2 tickers to warm
+    const tickersToWarm: string[] = [];
+    for (let i = 0; i < 2 && watchlistItems.length > 0; i++) {
+      const idx = trickleIndex % watchlistItems.length;
+      tickersToWarm.push(watchlistItems[idx].symbol);
+      trickleIndex++;
+    }
+
+    for (const sym of tickersToWarm) {
+      try {
+        const bars = await fetchTickerBars(sym, 2);
+        const hasVolume = bars.some(b => b.volume > 0);
+        console.log(`[TRICKLE] ${sym}: ${bars.length} bars, volume: ${hasVolume ? 'YES' : 'NO'}`);
+        // Small delay between fetches
+        await new Promise(r => setTimeout(r, 3000));
+      } catch (err: any) {
+        console.log(`[TRICKLE] ${sym} failed: ${err?.message?.slice(0, 40)}`);
+      }
+    }
+  }, 300000); // Every 5 minutes
 })();
 
 // ─── WATCHLIST MONITOR — extracted as a reusable function ───
@@ -3027,7 +3082,8 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
           days_since_200d_cross: ta.daysSinceCross200d,
         };
 
-        // Try LLM first
+        // Try LLM first, then fall back to rule-based narrative
+        console.log(`[NARRATIVE] Generating for ${symbol} — LLM disabled: ${isLLMDisabled()}`);
         try {
           const llmResult = await callLLM({
             system: `You are the Druck Engine narrative analyst. You use the Druckenmiller Trade Cycle phase system and the PortGenie expectations framework to analyze stocks.
@@ -3055,14 +3111,20 @@ CRITICAL: You only have technical data, not fundamental data. Acknowledge what y
             userMessage: `Analyze this stock using the PortGenie/Druckenmiller framework. Here is the complete technical dataset:\n\n${JSON.stringify(dataObj)}`,
             maxTokens: 800,
           });
-          // If LLM returned an error message, fall through to rule-based
-          if (llmResult && !llmResult.startsWith('[LLM Error')) return llmResult;
+          // LLM succeeded — use it (callLLM now returns null on any error)
+          if (llmResult && llmResult.length > 50 && !llmResult.startsWith('[')) {
+            console.log(`[NARRATIVE] LLM success for ${symbol} (${llmResult.length} chars)`);
+            return llmResult;
+          }
+          console.log(`[NARRATIVE] LLM returned null/invalid for ${symbol}, using rule-based`);
         } catch (err: any) {
-          console.error('[NARRATIVE] LLM error, using rule-based fallback:', err?.message?.slice(0, 60));
+          console.error(`[NARRATIVE] Exception for ${symbol}, using rule-based:`, err?.message?.slice(0, 60));
         }
 
         // ═══ RULE-BASED FALLBACK — generates Druckenmiller-style opinion from data ═══
-        return generateRuleBasedNarrative(dataObj);
+        const ruleNarrative = generateRuleBasedNarrative(dataObj);
+        console.log(`[NARRATIVE] Rule-based generated for ${symbol} (${ruleNarrative.length} chars)`);
+        return ruleNarrative;
       })(),
 
       // Price history for charting
