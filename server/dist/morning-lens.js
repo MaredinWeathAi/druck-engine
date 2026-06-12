@@ -281,12 +281,11 @@ const LENS_CACHE_MS = 4 * 60 * 60 * 1000; // 4 hours
 // Yahoo-only symbols: futures (=F), yields (^TNX, ^FVX, ^TYX, ^IRX), FX (=X)
 const YAHOO_ONLY_PATTERN = /[=]F$|^\^TNX$|^\^FVX$|^\^TYX$|^\^IRX$|[=]X$/;
 async function fetchOHLC(symbol, period = '1y') {
-    const isYahooOnly = YAHOO_ONLY_PATTERN.test(symbol);
     const years = period === '5y' ? 5 : period === '2y' ? 2 : 1;
-    // ── CHECK PERSISTENT SQLite CACHE (survives deploys) — 6 hour TTL ──
+    // ── CHECK PERSISTENT SQLite CACHE (survives deploys) — 7 day TTL ──
     try {
         const ageMin = (0, history_store_1.getBarCacheAge)(symbol);
-        if (ageMin !== null && ageMin < 360) {
+        if (ageMin !== null && ageMin < 10080) { // 7 days
             const dbCached = (0, history_store_1.getCachedBars)(symbol);
             if (dbCached && dbCached.bars.length >= 50) {
                 return dbCached.bars.map((b) => ({
@@ -296,103 +295,29 @@ async function fetchOHLC(symbol, period = '1y') {
         }
     }
     catch { }
-    // ── TRY GURUFOCUS FIRST for non-Yahoo-only symbols ──
-    if (!isYahooOnly) {
-        try {
-            const gfUrl = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${encodeURIComponent(symbol)}/price`;
-            const gfResponse = await fetch(gfUrl);
-            if (gfResponse.ok) {
-                const gfData = await gfResponse.json();
-                if (Array.isArray(gfData) && gfData.length >= 50) {
-                    const cutoffDate = new Date();
-                    cutoffDate.setFullYear(cutoffDate.getFullYear() - years);
-                    const cutoffStr = cutoffDate.toISOString().split('T')[0];
-                    const bars = [];
-                    for (const entry of gfData) {
-                        if (!Array.isArray(entry) || entry.length < 2)
-                            continue;
-                        const rawDate = entry[0];
-                        const price = entry[1];
-                        if (!price || price <= 0)
-                            continue;
-                        const parts = rawDate.split('-');
-                        if (parts.length !== 3)
-                            continue;
-                        const isoDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
-                        if (isoDate < cutoffStr)
-                            continue;
-                        bars.push({ date: new Date(isoDate), open: price, high: price, low: price, close: price, volume: 0 });
-                    }
-                    if (bars.length >= 50) {
-                        // Try to enhance with Yahoo OHLCV (non-blocking, 6s timeout)
-                        try {
-                            const endDate = new Date();
-                            const startDate = new Date();
-                            startDate.setFullYear(startDate.getFullYear() - years);
-                            const yResult = await Promise.race([
-                                yahooFinance.chart(symbol, { period1: startDate, period2: endDate, interval: '1d' }, { validateResult: false }),
-                                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000)),
-                            ]);
-                            const yQuotes = yResult?.quotes || [];
-                            if (yQuotes.length >= 50) {
-                                const volMap = {};
-                                for (const q of yQuotes) {
-                                    if (q.close && q.date) {
-                                        const d = new Date(q.date).toISOString().split('T')[0];
-                                        volMap[d] = { o: q.open || q.close, h: q.high || q.close, l: q.low || q.close, v: q.volume || 0 };
-                                    }
-                                }
-                                for (const bar of bars) {
-                                    const key = bar.date.toISOString().split('T')[0];
-                                    const yData = volMap[key];
-                                    if (yData) {
-                                        bar.open = yData.o;
-                                        bar.high = yData.h;
-                                        bar.low = yData.l;
-                                        bar.volume = yData.v;
-                                    }
-                                }
-                            }
-                        }
-                        catch { } // Yahoo enhancement is best-effort
-                        // Persist to SQLite for deploy survival
-                        try {
-                            (0, history_store_1.setCachedBars)(symbol, bars.map(b => ({ date: b.date.toISOString().split('T')[0], open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume })));
-                        }
-                        catch { }
-                        return bars;
-                    }
-                }
-            }
-        }
-        catch (err) {
-            console.warn(`[GF] GuruFocus failed for ${symbol}: ${err?.message}`);
-        }
-    }
-    // ── FALLBACK TO YAHOO (primary for futures/yields/FX, fallback for everything else) ──
+    // ── PRIMARY: Yahoo Finance (has real OHLCV with volume) ──
     const maxRetries = 4;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             const endDate = new Date();
             const startDate = new Date();
             startDate.setFullYear(startDate.getFullYear() - years);
-            const result = await yahooFinance.chart(symbol, {
-                period1: startDate,
-                period2: endDate,
-                interval: '1d',
-            }, { validateResult: false });
+            const result = await Promise.race([
+                yahooFinance.chart(symbol, {
+                    period1: startDate, period2: endDate, interval: '1d',
+                }, { validateResult: false }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Yahoo timeout')), 15000)),
+            ]);
             const quotes = result?.quotes || result || [];
             if (!quotes || !Array.isArray(quotes) || quotes.length === 0) {
                 if (attempt < maxRetries) {
                     const delayMs = attempt * 4000;
-                    console.warn(`[YF] No data for ${symbol} (attempt ${attempt}/${maxRetries}), retrying in ${delayMs / 1000}s...`);
                     await new Promise(r => setTimeout(r, delayMs));
                     continue;
                 }
-                console.warn(`[YF] No data for ${symbol} after ${maxRetries} attempts`);
-                return [];
+                break;
             }
-            return quotes
+            const bars = quotes
                 .filter((q) => q.close != null && q.close > 0)
                 .map((q) => ({
                 date: new Date(q.date),
@@ -402,24 +327,82 @@ async function fetchOHLC(symbol, period = '1y') {
                 close: q.close,
                 volume: q.volume || 0,
             }));
+            if (bars.length >= 50) {
+                // Persist to SQLite for deploy survival
+                try {
+                    (0, history_store_1.setCachedBars)(symbol, bars.map((b) => ({
+                        date: b.date.toISOString().split('T')[0], open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume,
+                    })));
+                }
+                catch { }
+                return bars;
+            }
         }
         catch (err) {
             const msg = err?.message || 'Unknown';
-            // Rate-limit or validation errors — wait longer before retry
             const isRateLimit = msg.includes('Too Many') || msg.includes('429') || msg.includes('throttle');
             const isValidation = msg.includes('validation') || msg.includes('schema') || msg.includes('Failed Yahoo');
             const delayMs = isRateLimit ? attempt * 8000 : (isValidation ? attempt * 2000 : attempt * 4000);
             if (attempt < maxRetries) {
-                if (!isValidation) { // Don't spam logs for known validation issues
+                if (!isValidation) {
                     console.warn(`[YF] Error fetching ${symbol} (attempt ${attempt}/${maxRetries}): ${msg.slice(0, 80)}, retrying in ${delayMs / 1000}s...`);
                 }
                 await new Promise(r => setTimeout(r, delayMs));
                 continue;
             }
-            console.error(`[YF] Failed ${symbol} after ${maxRetries} attempts: ${msg.slice(0, 100)}`);
-            return [];
+            break;
         }
     }
+    // ── FALLBACK: GuruFocus (close-only, no volume — but better than nothing) ──
+    try {
+        const gfUrl = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${encodeURIComponent(symbol)}/price`;
+        const gfResponse = await fetch(gfUrl);
+        if (gfResponse.ok) {
+            const gfData = await gfResponse.json();
+            if (Array.isArray(gfData) && gfData.length >= 50) {
+                const cutoffDate = new Date();
+                cutoffDate.setFullYear(cutoffDate.getFullYear() - years);
+                const cutoffStr = cutoffDate.toISOString().split('T')[0];
+                const bars = [];
+                for (const entry of gfData) {
+                    if (!Array.isArray(entry) || entry.length < 2)
+                        continue;
+                    const rawDate = entry[0];
+                    const price = entry[1];
+                    if (!price || price <= 0)
+                        continue;
+                    const parts = rawDate.split('-');
+                    if (parts.length !== 3)
+                        continue;
+                    const isoDate = `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+                    if (isoDate < cutoffStr)
+                        continue;
+                    bars.push({ date: new Date(isoDate), open: price, high: price, low: price, close: price, volume: 0 });
+                }
+                if (bars.length >= 50) {
+                    try {
+                        (0, history_store_1.setCachedBars)(symbol, bars.map(b => ({ date: b.date.toISOString().split('T')[0], open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume })));
+                    }
+                    catch { }
+                    return bars;
+                }
+            }
+        }
+    }
+    catch { }
+    // LAST RESORT: serve stale cache regardless of age — old data beats no data
+    try {
+        const dbCached = (0, history_store_1.getCachedBars)(symbol);
+        if (dbCached && dbCached.bars.length >= 50) {
+            const ageMin = (0, history_store_1.getBarCacheAge)(symbol);
+            console.warn(`[OHLC] Serving STALE cache for ${symbol} (${Math.round((ageMin || 0) / 60)}h old) — live fetch failed`);
+            return dbCached.bars.map((b) => ({
+                date: new Date(b.date), open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume || 0,
+            }));
+        }
+    }
+    catch { }
+    console.error(`[OHLC] All sources failed for ${symbol} — no cache available`);
     return [];
 }
 // ─── TECHNICAL ANALYSIS ENGINE ───
@@ -1165,10 +1148,25 @@ async function refreshMorningLens() {
             console.error(`[LENS] Startup attempt ${attempt + 1} error: ${err?.message}`);
         }
     }
-    // On startup: also run watchlist analysis after instruments load
-    setTimeout(() => {
-        runWatchlistMonitor().catch(err => console.error('[WATCHLIST] Startup analysis error:', err));
-    }, 45000); // 45s after startup — instruments should be loaded by then
+    // On startup: warm caches first (gets Yahoo OHLCV data with real volume),
+    // then run watchlist analysis with the fresh cached data
+    setTimeout(async () => {
+        try {
+            console.log('[STARTUP] Starting cache warm (Yahoo OHLCV with volume)...');
+            const warmResult = await warmAllCaches();
+            console.log(`[STARTUP] Cache warm done: ${warmResult.success} success, ${warmResult.failed} failed, ${warmResult.skipped} skipped`);
+        }
+        catch (err) {
+            console.error('[STARTUP] Cache warm error:', err?.message);
+        }
+        // Now run watchlist analysis with fresh cached data
+        try {
+            await runWatchlistMonitor();
+        }
+        catch (err) {
+            console.error('[WATCHLIST] Startup analysis error:', err?.message);
+        }
+    }, 30000); // 30s after startup — instruments should be loaded by then
 })();
 // ─── WATCHLIST MONITOR — extracted as a reusable function ───
 // Uses the full ticker analysis endpoint internally for proper verdicts + sizing
@@ -1665,29 +1663,91 @@ const SECTOR_ETF_MAP = {
 };
 // ═══ TICKER DATA CACHE — prevents hammering Yahoo/GuruFocus ═══
 const tickerBarCache = new Map();
-const TICKER_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
+const TICKER_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours — generous TTL since daily bars don't change retroactively
 // Full analysis result cache — stores the complete ticker analysis output
 const tickerAnalysisCache = new Map();
 async function fetchTickerBars(symbol, years = 2) {
-    // Check in-memory cache first — if we have bars less than 2 hours old, use them
+    // Check in-memory cache first — if we have bars less than 24h old, use them
     const cached = tickerBarCache.get(symbol);
     if (cached && Date.now() - cached.fetchedAt < TICKER_CACHE_TTL && cached.bars.length >= 50) {
-        return cached.bars;
+        // But verify bars have volume data — reject volume-less cache
+        const hasVolume = cached.bars.some(b => b.volume > 0);
+        if (hasVolume)
+            return cached.bars;
+        // Volume-less cache — fall through to re-fetch with Yahoo
+        console.log(`[TICKER] In-memory cache for ${symbol} has no volume data — re-fetching`);
     }
-    // Check PERSISTENT SQLite cache (survives deploys) — use if <6 hours old
+    // Check PERSISTENT SQLite cache (survives deploys) — use if <7 days old AND has volume
     try {
         const ageMin = (0, history_store_1.getBarCacheAge)(symbol);
-        if (ageMin !== null && ageMin < 360) { // 6 hours
+        if (ageMin !== null && ageMin < 10080) { // 7 days (10080 minutes)
             const dbCached = (0, history_store_1.getCachedBars)(symbol);
             if (dbCached && dbCached.bars.length >= 50) {
-                // Hydrate into in-memory cache too
-                tickerBarCache.set(symbol, { bars: dbCached.bars, fetchedAt: Date.now() - (ageMin * 60 * 1000) });
-                return dbCached.bars;
+                const hasVolume = dbCached.bars.some((b) => (b.volume || 0) > 0);
+                if (hasVolume) {
+                    tickerBarCache.set(symbol, { bars: dbCached.bars, fetchedAt: Date.now() - (ageMin * 60 * 1000) });
+                    return dbCached.bars;
+                }
+                // Cache exists but has no volume — fall through to re-fetch
+                console.log(`[TICKER] SQLite cache for ${symbol} has no volume data — re-fetching from Yahoo`);
             }
         }
     }
     catch { }
-    // PRIMARY: GuruFocus (never blocks us, reliable, has decades of data)
+    // ═══ PRIMARY: Yahoo Finance (has real OHLCV data with volume) ═══
+    const yahooRetries = 3;
+    for (let attempt = 1; attempt <= yahooRetries; attempt++) {
+        try {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setFullYear(startDate.getFullYear() - years);
+            const result = await Promise.race([
+                yahooFinance.chart(symbol, {
+                    period1: startDate, period2: endDate, interval: '1d',
+                }, { validateResult: false }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Yahoo timeout')), 15000)),
+            ]);
+            const quotes = result?.quotes || [];
+            if (quotes.length >= 50) {
+                const bars = quotes
+                    .filter((q) => q.close != null && q.close > 0)
+                    .map((q) => ({
+                    date: new Date(q.date).toISOString().split('T')[0],
+                    open: q.open || q.close,
+                    high: q.high || q.close,
+                    low: q.low || q.close,
+                    close: q.close,
+                    volume: q.volume || 0,
+                }));
+                if (bars.length >= 50) {
+                    const volBars = bars.filter(b => b.volume > 0).length;
+                    console.log(`[TICKER] Yahoo: ${bars.length} bars for ${symbol} (${volBars} with volume)`);
+                    tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
+                    (0, history_store_1.setCachedBars)(symbol, bars);
+                    return bars;
+                }
+            }
+            // Empty result — retry
+            if (attempt < yahooRetries) {
+                const delay = attempt * 3000;
+                console.warn(`[TICKER] Yahoo empty for ${symbol} (attempt ${attempt}/${yahooRetries}), retry in ${delay / 1000}s`);
+                await new Promise(r => setTimeout(r, delay));
+            }
+        }
+        catch (err) {
+            const msg = err?.message || 'Unknown';
+            if (attempt < yahooRetries) {
+                const isRate = msg.includes('429') || msg.includes('Too Many') || msg.includes('throttle');
+                const delay = isRate ? attempt * 6000 : attempt * 3000;
+                console.warn(`[TICKER] Yahoo error for ${symbol} (attempt ${attempt}/${yahooRetries}): ${msg.slice(0, 60)}, retry in ${delay / 1000}s`);
+                await new Promise(r => setTimeout(r, delay));
+            }
+            else {
+                console.warn(`[TICKER] Yahoo failed for ${symbol} after ${yahooRetries} attempts: ${msg.slice(0, 80)}`);
+            }
+        }
+    }
+    // ═══ FALLBACK: GuruFocus (close-only data, volume=0, but better than nothing) ═══
     try {
         const url = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${encodeURIComponent(symbol)}/price`;
         const response = await fetch(url);
@@ -1714,79 +1774,119 @@ async function fetchTickerBars(symbol, years = 2) {
                     bars.push({ date: isoDate, open: price, high: price, low: price, close: price, volume: 0 });
                 }
                 if (bars.length >= 50) {
-                    console.log(`[TICKER] GuruFocus: ${bars.length} bars for ${symbol}`);
+                    console.log(`[TICKER] GuruFocus fallback: ${bars.length} bars for ${symbol} (NO volume)`);
                     tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
-                    (0, history_store_1.setCachedBars)(symbol, bars); // Persist to SQLite for deploy survival
-                    // ENHANCE with Yahoo volume data if available (non-blocking)
-                    try {
-                        const endDate = new Date();
-                        const startDate = new Date();
-                        startDate.setFullYear(startDate.getFullYear() - years);
-                        const yResult = await Promise.race([
-                            yahooFinance.chart(symbol, { period1: startDate, period2: endDate, interval: '1d' }, { validateResult: false }),
-                            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
-                        ]);
-                        const yQuotes = yResult?.quotes || [];
-                        if (yQuotes.length >= 50) {
-                            // Build date→volume map from Yahoo
-                            const volMap = {};
-                            for (const q of yQuotes) {
-                                if (q.close && q.date) {
-                                    const d = new Date(q.date).toISOString().split('T')[0];
-                                    volMap[d] = { o: q.open || q.close, h: q.high || q.close, l: q.low || q.close, v: q.volume || 0 };
-                                }
-                            }
-                            // Merge volume into GuruFocus bars
-                            for (const bar of bars) {
-                                const yData = volMap[bar.date];
-                                if (yData) {
-                                    bar.open = yData.o;
-                                    bar.high = yData.h;
-                                    bar.low = yData.l;
-                                    bar.volume = yData.v;
-                                }
-                            }
-                            console.log(`[TICKER] Enhanced ${symbol} with Yahoo OHLCV data`);
-                            tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
-                            (0, history_store_1.setCachedBars)(symbol, bars); // Persist enhanced version
-                        }
-                    }
-                    catch {
-                        // Yahoo enhancement failed — GuruFocus close-only data is still good
-                    }
+                    (0, history_store_1.setCachedBars)(symbol, bars);
                     return bars;
                 }
             }
         }
     }
     catch (err) {
-        console.warn(`[TICKER] GuruFocus failed for ${symbol}: ${err?.message}`);
+        console.warn(`[TICKER] GuruFocus also failed for ${symbol}: ${err?.message}`);
     }
-    // FALLBACK: Yahoo Finance only (if GuruFocus fails entirely)
+    // ═══ LAST RESORT: serve stale cache regardless of age — old data beats no data ═══
     try {
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setFullYear(startDate.getFullYear() - years);
-        const result = await yahooFinance.chart(symbol, {
-            period1: startDate, period2: endDate, interval: '1d',
-        }, { validateResult: false });
-        const quotes = result?.quotes || [];
-        if (quotes.length >= 50) {
-            const bars = quotes
-                .filter((q) => q.close !== null)
-                .map((q) => ({
-                date: new Date(q.date).toISOString().split('T')[0],
-                open: q.open || q.close, high: q.high || q.close, low: q.low || q.close,
-                close: q.close, volume: q.volume || 0,
-            }));
-            tickerBarCache.set(symbol, { bars, fetchedAt: Date.now() });
-            (0, history_store_1.setCachedBars)(symbol, bars); // Persist Yahoo-only bars
-            return bars;
+        const dbCached = (0, history_store_1.getCachedBars)(symbol);
+        if (dbCached && dbCached.bars.length >= 50) {
+            const ageMin = (0, history_store_1.getBarCacheAge)(symbol);
+            console.warn(`[TICKER] Serving STALE cache for ${symbol} (${Math.round((ageMin || 0) / 60)}h old) — all live sources failed`);
+            tickerBarCache.set(symbol, { bars: dbCached.bars, fetchedAt: Date.now() - (24 * 60 * 60 * 1000) });
+            return dbCached.bars;
         }
     }
     catch { }
-    console.error(`[TICKER] Both sources failed for ${symbol}`);
+    console.error(`[TICKER] All sources failed for ${symbol} — no cache available`);
     return [];
+}
+// ═══ STARTUP CACHE WARMER — proactively fetch Yahoo data for all tickers ═══
+// This runs once on startup to pre-populate the cache before any user requests
+let cacheWarmingInProgress = false;
+async function warmAllCaches() {
+    if (cacheWarmingInProgress) {
+        console.log('[WARM] Cache warming already in progress — skipping');
+        return { success: 0, failed: 0, skipped: 0, total: 0 };
+    }
+    cacheWarmingInProgress = true;
+    // Collect all unique symbols that need data
+    const allSymbols = new Set();
+    // 1. All instrument registry symbols
+    for (const inst of INSTRUMENTS) {
+        allSymbols.add(inst.symbol);
+    }
+    // 2. All watchlist tickers
+    try {
+        const watchlistItems = (0, history_store_1.getWatchlist)();
+        for (const item of watchlistItems) {
+            allSymbols.add(item.symbol);
+        }
+    }
+    catch { }
+    // 3. Common benchmark (SPY for relative strength)
+    allSymbols.add('SPY');
+    const symbols = Array.from(allSymbols);
+    console.log(`[WARM] Starting cache warm for ${symbols.length} symbols...`);
+    let success = 0, failed = 0, skipped = 0;
+    for (let i = 0; i < symbols.length; i++) {
+        const sym = symbols[i];
+        // Skip if already cached with volume data (fresh enough)
+        try {
+            const ageMin = (0, history_store_1.getBarCacheAge)(sym);
+            if (ageMin !== null && ageMin < 10080) { // <7 days
+                const dbCached = (0, history_store_1.getCachedBars)(sym);
+                if (dbCached && dbCached.bars.length >= 50) {
+                    const hasVolume = dbCached.bars.some((b) => (b.volume || 0) > 0);
+                    if (hasVolume) {
+                        skipped++;
+                        continue;
+                    }
+                }
+            }
+        }
+        catch { }
+        // Fetch from Yahoo with generous timeout
+        try {
+            const endDate = new Date();
+            const startDate = new Date();
+            startDate.setFullYear(startDate.getFullYear() - 2);
+            const result = await Promise.race([
+                yahooFinance.chart(sym, {
+                    period1: startDate, period2: endDate, interval: '1d',
+                }, { validateResult: false }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 20000)),
+            ]);
+            const quotes = result?.quotes || [];
+            if (quotes.length >= 50) {
+                const bars = quotes
+                    .filter((q) => q.close != null && q.close > 0)
+                    .map((q) => ({
+                    date: new Date(q.date).toISOString().split('T')[0],
+                    open: q.open || q.close, high: q.high || q.close, low: q.low || q.close,
+                    close: q.close, volume: q.volume || 0,
+                }));
+                tickerBarCache.set(sym, { bars, fetchedAt: Date.now() });
+                (0, history_store_1.setCachedBars)(sym, bars);
+                const volCount = bars.filter(b => b.volume > 0).length;
+                success++;
+                if ((i + 1) % 10 === 0 || i === symbols.length - 1) {
+                    console.log(`[WARM] Progress: ${i + 1}/${symbols.length} — ${sym}: ${bars.length} bars (${volCount} with vol)`);
+                }
+            }
+            else {
+                console.warn(`[WARM] Yahoo empty for ${sym}`);
+                failed++;
+            }
+        }
+        catch (err) {
+            console.warn(`[WARM] Failed ${sym}: ${(err?.message || '').slice(0, 60)}`);
+            failed++;
+        }
+        // Rate limit: 1.5s between requests to avoid Yahoo banning us
+        await new Promise(r => setTimeout(r, 1500));
+    }
+    console.log(`[WARM] ✓ Cache warm complete: ${success} success, ${failed} failed, ${skipped} skipped (already cached) out of ${symbols.length} total`);
+    cacheWarmingInProgress = false;
+    return { success, failed, skipped, total: symbols.length };
 }
 function computeUpDownVolumeRatio(bars, period = 20) {
     if (bars.length < period)
@@ -2971,6 +3071,67 @@ router.get('/lens/model-performance', async (req, res) => {
     }
 });
 exports.default = router;
+// CACHE WARMING — manually trigger Yahoo OHLCV fetch for all tickers
+router.post('/lens/warm-cache', async (_req, res) => {
+    try {
+        if (cacheWarmingInProgress) {
+            return res.json({ ok: false, message: 'Cache warming already in progress' });
+        }
+        const result = await warmAllCaches();
+        res.json({ ok: true, ...result });
+    }
+    catch (err) {
+        res.status(500).json({ error: err?.message });
+    }
+});
+router.get('/lens/cache-status', (_req, res) => {
+    try {
+        const allSymbols = new Set();
+        for (const inst of INSTRUMENTS)
+            allSymbols.add(inst.symbol);
+        try {
+            const watchlistItems = (0, history_store_1.getWatchlist)();
+            for (const item of watchlistItems)
+                allSymbols.add(item.symbol);
+        }
+        catch { }
+        const statuses = [];
+        for (const sym of allSymbols) {
+            const dbCached = (0, history_store_1.getCachedBars)(sym);
+            const ageMin = (0, history_store_1.getBarCacheAge)(sym);
+            if (dbCached && dbCached.bars.length > 0) {
+                const hasVolume = dbCached.bars.some((b) => (b.volume || 0) > 0);
+                statuses.push({
+                    symbol: sym,
+                    cached: true,
+                    bars: dbCached.bars.length,
+                    hasVolume,
+                    ageHours: ageMin !== null ? Math.round(ageMin / 60 * 10) / 10 : null,
+                });
+            }
+            else {
+                statuses.push({ symbol: sym, cached: false, bars: 0, hasVolume: false, ageHours: null });
+            }
+        }
+        const totalCached = statuses.filter(s => s.cached).length;
+        const withVolume = statuses.filter(s => s.hasVolume).length;
+        const missing = statuses.filter(s => !s.cached);
+        res.json({
+            total: statuses.length,
+            cached: totalCached,
+            withVolume,
+            noVolume: totalCached - withVolume,
+            missing: missing.length,
+            warming: cacheWarmingInProgress,
+            missingSymbols: missing.map(s => s.symbol),
+            noVolumeSymbols: statuses.filter(s => s.cached && !s.hasVolume).map(s => s.symbol),
+            details: statuses.sort((a, b) => a.symbol.localeCompare(b.symbol)),
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err?.message });
+    }
+});
 // BAR DATA INJECTION — allows pushing bar data from external source when GuruFocus is rate-limited
 router.post('/lens/inject-bars', (req, res) => {
     const { symbol, bars } = req.body;
