@@ -457,10 +457,10 @@ async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar
   const isYahooOnly = YAHOO_ONLY_PATTERN.test(symbol);
   const years = period === '5y' ? 5 : period === '2y' ? 2 : 1;
 
-  // ── CHECK PERSISTENT SQLite CACHE (survives deploys) — 6 hour TTL ──
+  // ── CHECK PERSISTENT SQLite CACHE (survives deploys) — 7 day TTL ──
   try {
     const ageMin = getBarCacheAge(symbol);
-    if (ageMin !== null && ageMin < 360) {
+    if (ageMin !== null && ageMin < 10080) { // 7 days
       const dbCached = getCachedBars(symbol);
       if (dbCached && dbCached.bars.length >= 50) {
         return dbCached.bars.map((b: any) => ({
@@ -556,7 +556,7 @@ async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar
           continue;
         }
         console.warn(`[YF] No data for ${symbol} after ${maxRetries} attempts`);
-        return [];
+        break; // Fall through to stale cache check
       }
 
       return quotes
@@ -584,9 +584,23 @@ async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar
         continue;
       }
       console.error(`[YF] Failed ${symbol} after ${maxRetries} attempts: ${msg.slice(0, 100)}`);
-      return [];
+      break; // Fall through to stale cache check
     }
   }
+
+  // LAST RESORT: serve stale cache regardless of age — old data beats no data
+  try {
+    const dbCached = getCachedBars(symbol);
+    if (dbCached && dbCached.bars.length >= 50) {
+      const ageMin = getBarCacheAge(symbol);
+      console.warn(`[OHLC] Serving STALE cache for ${symbol} (${Math.round((ageMin || 0) / 60)}h old) — live fetch failed`);
+      return dbCached.bars.map((b: any) => ({
+        date: new Date(b.date), open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume || 0,
+      }));
+    }
+  } catch {}
+
+  console.error(`[OHLC] All sources failed for ${symbol} — no cache available`);
   return [];
 }
 
@@ -1938,7 +1952,7 @@ const SECTOR_ETF_MAP: Record<string, { primary: string; secondary: string; name:
 
 // ═══ TICKER DATA CACHE — prevents hammering Yahoo/GuruFocus ═══
 const tickerBarCache: Map<string, { bars: OHLCVBar[]; fetchedAt: number }> = new Map();
-const TICKER_CACHE_TTL = 2 * 60 * 60 * 1000; // 2 hours
+const TICKER_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours — generous TTL since daily bars don't change retroactively
 
 // Full analysis result cache — stores the complete ticker analysis output
 const tickerAnalysisCache: Map<string, { data: any; fetchedAt: number }> = new Map();
@@ -1950,10 +1964,10 @@ async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCV
     return cached.bars;
   }
 
-  // Check PERSISTENT SQLite cache (survives deploys) — use if <6 hours old
+  // Check PERSISTENT SQLite cache (survives deploys) — use if <7 days old
   try {
     const ageMin = getBarCacheAge(symbol);
-    if (ageMin !== null && ageMin < 360) { // 6 hours
+    if (ageMin !== null && ageMin < 10080) { // 7 days (10080 minutes)
       const dbCached = getCachedBars(symbol);
       if (dbCached && dbCached.bars.length >= 50) {
         // Hydrate into in-memory cache too
@@ -2060,7 +2074,18 @@ async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCV
     }
   } catch {}
 
-  console.error(`[TICKER] Both sources failed for ${symbol}`);
+  // LAST RESORT: serve stale cache regardless of age — old data beats no data
+  try {
+    const dbCached = getCachedBars(symbol);
+    if (dbCached && dbCached.bars.length >= 50) {
+      const ageMin = getBarCacheAge(symbol);
+      console.warn(`[TICKER] Serving STALE cache for ${symbol} (${Math.round((ageMin || 0) / 60)}h old) — both live sources failed`);
+      tickerBarCache.set(symbol, { bars: dbCached.bars, fetchedAt: Date.now() - (24 * 60 * 60 * 1000) }); // Mark as old but usable
+      return dbCached.bars;
+    }
+  } catch {}
+
+  console.error(`[TICKER] All sources failed for ${symbol} — no cache available`);
   return [];
 }
 
