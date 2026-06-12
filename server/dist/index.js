@@ -742,12 +742,16 @@ app.get('/api/health', (_req, res) => {
     recalcDerived();
     res.json({
         status: 'ok',
-        version: '13.0.0',
+        version: '14.0.0',
+        build: '2026-06-13T00:00:00Z',
+        BUILD_CANARY: 'FORCE_REBUILD_2026_06_13',
         name: 'Druck Engine — Structural Regime Intelligence',
         timestamp: new Date().toISOString(),
         fred_key: !!FRED_API_KEY,
         data_source: dataSource,
         last_refresh: new Date(lastDataRefresh).toISOString(),
+        llm_provider: (process.env.ANTHROPIC_API_KEY || '').startsWith('sk-ant') ? 'anthropic' : 'openai',
+        llm_key_set: !!(process.env.ANTHROPIC_API_KEY),
     });
 });
 app.get('/api/data-status', (_req, res) => {

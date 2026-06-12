@@ -779,8 +779,9 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '13.1.0',
-    build: '2026-06-12T23:00:00Z',
+    version: '14.0.0',
+    build: '2026-06-13T00:00:00Z',
+    BUILD_CANARY: 'FORCE_REBUILD_2026_06_13',
     name: 'Druck Engine — Structural Regime Intelligence',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,

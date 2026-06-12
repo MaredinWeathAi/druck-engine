@@ -17,28 +17,50 @@ const sdk_1 = __importDefault(require("@anthropic-ai/sdk"));
 const openai_1 = __importDefault(require("openai"));
 // ── LLM PROVIDER ABSTRACTION ──
 // Auto-detects Anthropic vs OpenAI key and routes accordingly
+// Tracks consecutive failures to avoid hammering a broken API
+let llmConsecutiveFailures = 0;
+const LLM_MAX_FAILURES = 3; // After 3 failures, skip LLM entirely
+let llmLastFailureTime = 0;
+const LLM_RETRY_INTERVAL = 3600000; // Retry LLM after 1 hour
+function isLLMDisabled() {
+    if (llmConsecutiveFailures < LLM_MAX_FAILURES)
+        return false;
+    // After max failures, check if enough time has passed to retry
+    if (Date.now() - llmLastFailureTime > LLM_RETRY_INTERVAL) {
+        console.log('[LLM] Retry interval passed, resetting failure count');
+        llmConsecutiveFailures = 0;
+        return false;
+    }
+    return true;
+}
 async function callLLM(opts) {
+    // Check if LLM is disabled due to repeated failures
+    if (isLLMDisabled()) {
+        console.log(`[LLM] Skipping — ${llmConsecutiveFailures} consecutive failures, retry in ${Math.round((LLM_RETRY_INTERVAL - (Date.now() - llmLastFailureTime)) / 60000)}m`);
+        return null;
+    }
     const apiKey = process.env.ANTHROPIC_API_KEY || '';
     if (!apiKey)
         return null;
     const isAnthropic = apiKey.startsWith('sk-ant');
-    console.log(`[LLM] Key prefix: ${apiKey.slice(0, 7)}... | Provider: ${isAnthropic ? 'Anthropic' : 'OpenAI'}`);
+    console.log(`[LLM] Key prefix: ${apiKey.slice(0, 7)}... | Provider: ${isAnthropic ? 'Anthropic' : 'OpenAI'} | Failures: ${llmConsecutiveFailures}`);
     try {
         if (isAnthropic) {
             // Anthropic
             const anthropic = new sdk_1.default({ apiKey });
             const msg = await anthropic.messages.create({
-                model: 'claude-3-5-sonnet-20241022',
+                model: 'claude-sonnet-4-5-20250514',
                 max_tokens: opts.maxTokens,
                 system: opts.system,
                 messages: [{ role: 'user', content: opts.userMessage }],
             });
+            llmConsecutiveFailures = 0; // Reset on success
             return msg.content[0]?.type === 'text' ? msg.content[0].text : null;
         }
         else {
             // OpenAI
             const openai = new openai_1.default({ apiKey, timeout: 25000 });
-            console.log('[LLM] Calling OpenAI gpt-4o with key prefix:', apiKey.slice(0, 10));
+            console.log('[LLM] Calling OpenAI gpt-4o...');
             const resp = await openai.chat.completions.create({
                 model: 'gpt-4o',
                 max_tokens: opts.maxTokens,
@@ -49,12 +71,15 @@ async function callLLM(opts) {
             });
             const result = resp.choices?.[0]?.message?.content;
             console.log('[LLM] OpenAI response length:', result?.length || 0);
+            llmConsecutiveFailures = 0; // Reset on success
             return result || '[OpenAI returned empty response]';
         }
     }
     catch (err) {
-        console.error('[LLM] API error:', err?.message, err?.status, err?.code);
-        return `[LLM Error: ${err?.message || 'Unknown error'}]`;
+        llmConsecutiveFailures++;
+        llmLastFailureTime = Date.now();
+        console.error(`[LLM] API error (failure #${llmConsecutiveFailures}):`, err?.message?.slice(0, 100));
+        return null; // Return null instead of error string — forces rule-based fallback
     }
 }
 const inflection_engine_1 = require("./inflection-engine");
@@ -1167,6 +1192,33 @@ async function refreshMorningLens() {
             console.error('[WATCHLIST] Startup analysis error:', err?.message);
         }
     }, 30000); // 30s after startup — instruments should be loaded by then
+    // ═══ TRICKLE WARMER — gradually re-warm Yahoo data to avoid IP blocking ═══
+    // Warms 2 watchlist tickers every 5 minutes to keep volume data fresh
+    let trickleIndex = 0;
+    setInterval(async () => {
+        const watchlistItems = (0, history_store_1.getWatchlist)();
+        if (watchlistItems.length === 0)
+            return;
+        // Pick next 2 tickers to warm
+        const tickersToWarm = [];
+        for (let i = 0; i < 2 && watchlistItems.length > 0; i++) {
+            const idx = trickleIndex % watchlistItems.length;
+            tickersToWarm.push(watchlistItems[idx].symbol);
+            trickleIndex++;
+        }
+        for (const sym of tickersToWarm) {
+            try {
+                const bars = await fetchTickerBars(sym, 2);
+                const hasVolume = bars.some(b => b.volume > 0);
+                console.log(`[TRICKLE] ${sym}: ${bars.length} bars, volume: ${hasVolume ? 'YES' : 'NO'}`);
+                // Small delay between fetches
+                await new Promise(r => setTimeout(r, 3000));
+            }
+            catch (err) {
+                console.log(`[TRICKLE] ${sym} failed: ${err?.message?.slice(0, 40)}`);
+            }
+        }
+    }, 300000); // Every 5 minutes
 })();
 // ─── WATCHLIST MONITOR — extracted as a reusable function ───
 // Uses the full ticker analysis endpoint internally for proper verdicts + sizing
@@ -1799,6 +1851,80 @@ async function fetchTickerBars(symbol, years = 2) {
     console.error(`[TICKER] All sources failed for ${symbol} — no cache available`);
     return [];
 }
+// ═══ RULE-BASED DRUCKENMILLER NARRATIVE — fallback when LLM is unavailable ═══
+function generateRuleBasedNarrative(d) {
+    const phase = d.system_verdict?.match(/P(\d)/)?.[1] || '?';
+    const phaseNames = { '1': 'Buy', '2': 'Ride', '3': 'Trim', '4': 'Exit', '5': 'Avoid' };
+    const phaseName = phaseNames[phase] || 'Unknown';
+    const archetype = d.system_archetype || 'Unknown';
+    const ext200 = d.extension_from_200d != null ? (d.extension_from_200d > 0 ? `+${d.extension_from_200d.toFixed(1)}%` : `${d.extension_from_200d.toFixed(1)}%`) : 'N/A';
+    const rsiLabel = d.rsi != null ? (d.rsi > 70 ? 'overbought' : d.rsi < 30 ? 'oversold' : 'neutral') : 'unknown';
+    const highDist = d.pct_from_52w_high != null ? `${d.pct_from_52w_high.toFixed(1)}%` : 'N/A';
+    const udv = d.up_down_volume_ratio != null ? d.up_down_volume_ratio.toFixed(2) : 'N/A';
+    const macdTrend = d.macd_slope != null ? (d.macd_slope > 0 ? 'improving' : 'deteriorating') : 'flat';
+    const crossType = d.golden_cross ? 'golden cross (bullish structure)' : 'death cross (bearish structure)';
+    const rs = d.relative_strength_vs_spy != null ? (d.relative_strength_vs_spy > 1 ? 'outperforming SPY' : 'underperforming SPY') : '';
+    const failedBDs = d.failed_breakdowns || 0;
+    // Paragraph 1: Narrative read
+    let p1 = `${d.symbol} at $${d.price} is classified as "${archetype}" — `;
+    if (archetype.includes('Broken Growth')) {
+        p1 += `the market has lost confidence in the growth narrative. Sitting ${highDist} from 52-week highs signals persistent distribution. `;
+        p1 += `The tape is telling you the old story is over; institutions are repricing expectations lower.`;
+    }
+    else if (archetype.includes('Capitulation') || archetype.includes('Exhaustion') || phase === '1') {
+        p1 += `selling appears exhausted. At ${highDist} from highs with RSI ${rsiLabel} (${d.rsi || 'N/A'}), `;
+        p1 += `the pain trade may be largely complete. Watch for volume confirmation of a base forming.`;
+    }
+    else if (archetype.includes('Uptrend') || archetype.includes('Expansion') || phase === '2') {
+        p1 += `the trend is healthy and confirmed. Trading with a ${crossType}, momentum is intact. `;
+        p1 += `The market is rewarding the current narrative — ride until the tape says otherwise.`;
+    }
+    else if (archetype.includes('Late Cycle') || phase === '3') {
+        p1 += `momentum is fading after an extended run. Extension from 200d at ${ext200} with MACD ${macdTrend} `;
+        p1 += `suggests the easy money has been made. Tighten stops and take profits into strength.`;
+    }
+    else {
+        p1 += `trading at ${ext200} from 200d. The current setup carries ${archetype.toLowerCase()} characteristics `;
+        p1 += `with RSI at ${d.rsi || 'N/A'} (${rsiLabel}) and MACD histogram ${macdTrend}.`;
+    }
+    // Paragraph 2: Tape evidence
+    let p2 = `Tape evidence: ${crossType}, ${ext200} from the 200d, `;
+    p2 += `Up/Down Volume Ratio at ${udv}${d.up_down_volume_ratio != null && d.up_down_volume_ratio < 0.7 ? ' (sellers dominating)' : d.up_down_volume_ratio != null && d.up_down_volume_ratio > 1.3 ? ' (buyers dominating)' : ''}, `;
+    p2 += `RSI ${d.rsi || 'N/A'} (${rsiLabel}), MACD ${macdTrend}. `;
+    if (rs)
+        p2 += `Relative strength ${rs}. `;
+    if (failedBDs > 0)
+        p2 += `${failedBDs} failed breakdown(s) detected — historically bullish pattern. `;
+    p2 += `This confirms a P${phase} ${phaseName} classification.`;
+    // Paragraph 3: Verdict
+    let p3 = '';
+    const sizing = d.sizing_regime || 'WAIT_AND_SEE';
+    if (phase === '1') {
+        p3 = `Druckenmiller would be building a position here. Pain is priced in, the crowd is running scared, and that's exactly when you accumulate. `;
+        p3 += `Size according to conviction — ${sizing === 'BACK_UP_TRUCK' ? 'this is a back-up-the-truck setup' : 'start with a pilot position and add on confirmation'}. `;
+    }
+    else if (phase === '2') {
+        p3 = `Druckenmiller stays long. The trend is your friend until it bends. Hold positions, add on dips to the 50d, `;
+        p3 += `and keep your stop below the 200d. Don't overthink a working position.`;
+    }
+    else if (phase === '3') {
+        p3 = `Druckenmiller starts lightening up here. When the easy money is behind you, protect your gains. `;
+        p3 += `Take 30-50% off the table into strength, tighten stops on the rest. The risk/reward is no longer asymmetric.`;
+    }
+    else if (phase === '4') {
+        p3 = `Druckenmiller is out. Structure is breaking or already broken. The time for heroics is over. `;
+        p3 += `Sell remaining positions and move to the sidelines. Wait for the dust to settle before re-engaging.`;
+    }
+    else if (phase === '5') {
+        p3 = `Druckenmiller avoids this name entirely. Confirmed downtrend, no reason to catch a falling knife. `;
+        p3 += `Wait for a P1 Buy signal — base formation, volume shift, failed breakdown — before even looking at this again.`;
+    }
+    else {
+        p3 = `The setup is ambiguous. Wait for clearer signals before committing capital.`;
+    }
+    p3 += ` This is a P${phase} ${phaseName} setup.`;
+    return `${p1}\n\n${p2}\n\n${p3}`;
+}
 // ═══ STARTUP CACHE WARMER — proactively fetch Yahoo data for all tickers ═══
 // This runs once on startup to pre-populate the cache before any user requests
 let cacheWarmingInProgress = false;
@@ -1808,27 +1934,43 @@ async function warmAllCaches() {
         return { success: 0, failed: 0, skipped: 0, total: 0 };
     }
     cacheWarmingInProgress = true;
-    // Collect all unique symbols that need data
-    const allSymbols = new Set();
-    // 1. All instrument registry symbols
-    for (const inst of INSTRUMENTS) {
-        allSymbols.add(inst.symbol);
-    }
-    // 2. All watchlist tickers
+    // Collect symbols in PRIORITY ORDER: watchlist first, then SPY, then instruments
+    const watchlistSyms = [];
+    const instrumentSyms = [];
+    const seen = new Set();
+    // 1. Watchlist tickers — HIGHEST PRIORITY (user-facing data)
     try {
         const watchlistItems = (0, history_store_1.getWatchlist)();
         for (const item of watchlistItems) {
-            allSymbols.add(item.symbol);
+            const sym = item.symbol;
+            if (!seen.has(sym)) {
+                watchlistSyms.push(sym);
+                seen.add(sym);
+            }
         }
     }
     catch { }
-    // 3. Common benchmark (SPY for relative strength)
-    allSymbols.add('SPY');
-    const symbols = Array.from(allSymbols);
-    console.log(`[WARM] Starting cache warm for ${symbols.length} symbols...`);
+    // 2. SPY benchmark
+    if (!seen.has('SPY')) {
+        watchlistSyms.push('SPY');
+        seen.add('SPY');
+    }
+    // 3. Instrument registry — lower priority
+    for (const inst of INSTRUMENTS) {
+        if (!seen.has(inst.symbol)) {
+            instrumentSyms.push(inst.symbol);
+            seen.add(inst.symbol);
+        }
+    }
+    const allSymbols = [...watchlistSyms, ...instrumentSyms];
+    console.log(`[WARM] Starting cache warm: ${watchlistSyms.length} watchlist (priority) + ${instrumentSyms.length} instruments = ${allSymbols.length} total`);
     let success = 0, failed = 0, skipped = 0;
-    for (let i = 0; i < symbols.length; i++) {
-        const sym = symbols[i];
+    let consecutiveFails = 0;
+    const BASE_DELAY = 4000; // 4s between requests (Yahoo rate-limits at ~5 req/min from cloud IPs)
+    const MAX_DELAY = 30000; // 30s max backoff
+    for (let i = 0; i < allSymbols.length; i++) {
+        const sym = allSymbols[i];
+        const isPriority = i < watchlistSyms.length;
         // Skip if already cached with volume data (fresh enough)
         try {
             const ageMin = (0, history_store_1.getBarCacheAge)(sym);
@@ -1868,25 +2010,41 @@ async function warmAllCaches() {
                 (0, history_store_1.setCachedBars)(sym, bars);
                 const volCount = bars.filter(b => b.volume > 0).length;
                 success++;
-                if ((i + 1) % 10 === 0 || i === symbols.length - 1) {
-                    console.log(`[WARM] Progress: ${i + 1}/${symbols.length} — ${sym}: ${bars.length} bars (${volCount} with vol)`);
+                consecutiveFails = 0; // Reset on success
+                if ((i + 1) % 5 === 0 || i === allSymbols.length - 1 || isPriority) {
+                    console.log(`[WARM] ${isPriority ? '★' : '·'} ${i + 1}/${allSymbols.length} — ${sym}: ${bars.length} bars (${volCount} with vol)`);
                 }
             }
             else {
                 console.warn(`[WARM] Yahoo empty for ${sym}`);
                 failed++;
+                consecutiveFails++;
             }
         }
         catch (err) {
-            console.warn(`[WARM] Failed ${sym}: ${(err?.message || '').slice(0, 60)}`);
+            const msg = (err?.message || '').slice(0, 80);
+            console.warn(`[WARM] Failed ${sym}: ${msg}`);
             failed++;
+            consecutiveFails++;
         }
-        // Rate limit: 1.5s between requests to avoid Yahoo banning us
-        await new Promise(r => setTimeout(r, 1500));
+        // Adaptive rate limiting: slow down when Yahoo is blocking us
+        let delay = BASE_DELAY;
+        if (consecutiveFails >= 5) {
+            // Heavy rate limiting — back off exponentially
+            delay = Math.min(MAX_DELAY, BASE_DELAY * Math.pow(1.5, consecutiveFails - 4));
+            console.log(`[WARM] ${consecutiveFails} consecutive failures — backing off to ${Math.round(delay / 1000)}s`);
+        }
+        // If non-priority and lots of failures, skip remaining instruments to save time
+        if (!isPriority && consecutiveFails >= 15) {
+            console.warn(`[WARM] 15+ consecutive failures on instruments — aborting remaining ${allSymbols.length - i - 1} symbols`);
+            failed += allSymbols.length - i - 1;
+            break;
+        }
+        await new Promise(r => setTimeout(r, delay));
     }
-    console.log(`[WARM] ✓ Cache warm complete: ${success} success, ${failed} failed, ${skipped} skipped (already cached) out of ${symbols.length} total`);
+    console.log(`[WARM] ✓ Cache warm complete: ${success} success, ${failed} failed, ${skipped} skipped out of ${allSymbols.length} total`);
     cacheWarmingInProgress = false;
-    return { success, failed, skipped, total: symbols.length };
+    return { success, failed, skipped, total: allSymbols.length };
 }
 function computeUpDownVolumeRatio(bars, period = 20) {
     if (bars.length < period)
@@ -2601,38 +2759,40 @@ router.get('/lens/ticker/:symbol', async (req, res) => {
             // Position Sizing Regime
             sizingRegime,
             sectorDetected: sectorName,
-            // Narrative (generated async by LLM using PortGenie framework)
+            // Narrative (LLM with rule-based fallback when LLM is unavailable)
             narrative: await (async () => {
+                const dataObj = {
+                    symbol, price: Math.round(price * 100) / 100,
+                    ma50: ta.sma50, ma200: ta.sma200,
+                    extension_from_200d: ta.priceVsSma200,
+                    golden_cross: ta.sma50Above200,
+                    rsi: ta.rsi14 ? Math.round(ta.rsi14) : null,
+                    macd_histogram: ta.macd?.histogram,
+                    macd_slope: ta.macdHistSlope,
+                    up_down_volume_ratio: upDownRatio,
+                    failed_breakdowns: failedBreakdownCount,
+                    earnings_reactions: earningsReactions.map(e => e.move),
+                    pct_from_52w_high: pctFrom52wHigh,
+                    sector: sectorName,
+                    sector_etf_primary: primaryETF,
+                    sector_etf_secondary: secondaryETF,
+                    relative_strength_vs_spy: ta.rsVsSpy20d,
+                    green_day_vol_ratio: ta.volume?.greenDayVolRatio || null,
+                    system_verdict: verdict.verdict,
+                    system_archetype: verdict.archetype,
+                    system_sub_phase: verdict.subPhase,
+                    news_test: verdict.newsTest,
+                    sizing_regime: sizingRegime.regime,
+                    sizing_conviction: sizingRegime.conviction,
+                    sizing_conflicts: sizingRegime.conflictsWithVerdict,
+                    atr_pct: ta.atrPct,
+                    velocity: ta.extensionVelocity,
+                    days_since_200d_cross: ta.daysSinceCross200d,
+                };
+                // Try LLM first, then fall back to rule-based narrative
+                console.log(`[NARRATIVE] Generating for ${symbol} — LLM disabled: ${isLLMDisabled()}`);
                 try {
-                    const dataPayload = JSON.stringify({
-                        symbol, price: Math.round(price * 100) / 100,
-                        ma50: ta.sma50, ma200: ta.sma200,
-                        extension_from_200d: ta.priceVsSma200,
-                        golden_cross: ta.sma50Above200,
-                        rsi: ta.rsi14 ? Math.round(ta.rsi14) : null,
-                        macd_histogram: ta.macd?.histogram,
-                        macd_slope: ta.macdHistSlope,
-                        up_down_volume_ratio: upDownRatio,
-                        failed_breakdowns: failedBreakdownCount,
-                        earnings_reactions: earningsReactions.map(e => e.move),
-                        pct_from_52w_high: pctFrom52wHigh,
-                        sector: sectorName,
-                        sector_etf_primary: primaryETF,
-                        sector_etf_secondary: secondaryETF,
-                        relative_strength_vs_spy: ta.rsVsSpy20d,
-                        green_day_vol_ratio: ta.volume?.greenDayVolRatio || null,
-                        system_verdict: verdict.verdict,
-                        system_archetype: verdict.archetype,
-                        system_sub_phase: verdict.subPhase,
-                        news_test: verdict.newsTest,
-                        sizing_regime: sizingRegime.regime,
-                        sizing_conviction: sizingRegime.conviction,
-                        sizing_conflicts: sizingRegime.conflictsWithVerdict,
-                        atr_pct: ta.atrPct,
-                        velocity: ta.extensionVelocity,
-                        days_since_200d_cross: ta.daysSinceCross200d,
-                    });
-                    return await callLLM({
+                    const llmResult = await callLLM({
                         system: `You are the Druck Engine narrative analyst. You use the Druckenmiller Trade Cycle phase system and the PortGenie expectations framework to analyze stocks.
 
 CORE PRINCIPLE: Markets are expectation-discounting mechanisms. Price moves when Reality ≠ Expectations. You identify inflection points where narrative, expectations, positioning, and fundamentals diverge from price.
@@ -2655,14 +2815,23 @@ DRUCKENMILLER RULES: "Liquidity drives markets, not earnings." Never fight the t
 OUTPUT FORMAT: Write 2-3 concise paragraphs. First paragraph: the macro/narrative read — what story is the market pricing for this stock and is it right? Second paragraph: the tape evidence — what the technicals confirm or deny, referencing the phase (P1-P5) explicitly. Third paragraph: the verdict — what Druckenmiller would do, stated in his voice. Be direct, confident, specific. No hedging. No "could go either way." Take a position. End with the phase classification: "This is a P[X] [Buy/Ride/Trim/Exit/Avoid] setup."
 
 CRITICAL: You only have technical data, not fundamental data. Acknowledge what you can see and what you can't. Note that forward estimate revisions and institutional ownership changes are not available — flag this as a blind spot when relevant.`,
-                        userMessage: `Analyze this stock using the PortGenie/Druckenmiller framework. Here is the complete technical dataset:\n\n${dataPayload}`,
+                        userMessage: `Analyze this stock using the PortGenie/Druckenmiller framework. Here is the complete technical dataset:\n\n${JSON.stringify(dataObj)}`,
                         maxTokens: 800,
                     });
+                    // LLM succeeded — use it (callLLM now returns null on any error)
+                    if (llmResult && llmResult.length > 50 && !llmResult.startsWith('[')) {
+                        console.log(`[NARRATIVE] LLM success for ${symbol} (${llmResult.length} chars)`);
+                        return llmResult;
+                    }
+                    console.log(`[NARRATIVE] LLM returned null/invalid for ${symbol}, using rule-based`);
                 }
                 catch (err) {
-                    console.error('[NARRATIVE] LLM API error:', err?.message);
-                    return null;
+                    console.error(`[NARRATIVE] Exception for ${symbol}, using rule-based:`, err?.message?.slice(0, 60));
                 }
+                // ═══ RULE-BASED FALLBACK — generates Druckenmiller-style opinion from data ═══
+                const ruleNarrative = generateRuleBasedNarrative(dataObj);
+                console.log(`[NARRATIVE] Rule-based generated for ${symbol} (${ruleNarrative.length} chars)`);
+                return ruleNarrative;
             })(),
             // Price history for charting
             priceHistory: {
