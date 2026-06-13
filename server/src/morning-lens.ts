@@ -2459,6 +2459,264 @@ function generateRuleBasedNarrative(d: any): string {
   return `${p1}\n\n${p2}\n\n${p3}`;
 }
 
+// ═══ STEEL MAN / STRAW MAN INVESTMENT CASES ═══
+// Generates opposing bull and bear cases from the same technical data.
+// Both cases are rule-based, derived from the same inputs the verdict and phase use.
+// Purpose: present the best argument FOR and AGAINST a position so the reader
+// can weigh the evidence rather than trusting a single algorithmic verdict.
+
+interface InvestmentCase {
+  title: string;
+  thesis: string;
+  evidence: string[];
+  catalysts: string[];
+  invalidation: string;
+}
+
+function generateInvestmentCases(d: any, verdict: any, phaseInfo: any): { bullCase: InvestmentCase; bearCase: InvestmentCase } {
+  const symbol = d.symbol || '???';
+  const price = d.price || 0;
+  const ext200 = d.extension_from_200d;
+  const rsi = d.rsi;
+  const udv = d.up_down_volume_ratio;
+  const failedBDs = d.failed_breakdowns || 0;
+  const goldenCross = d.golden_cross;
+  const pctFromHigh = d.pct_from_52w_high;
+  const macdSlope = d.macd_slope;
+  const macdHist = d.macd_histogram;
+  const earnings = d.earnings_reactions || [];
+  const rs = d.relative_strength_vs_spy;
+  const atrPct = d.atr_pct;
+  const velocity = d.velocity;
+  const daysSinceCross = d.days_since_200d_cross;
+  const greenDayRatio = d.green_day_vol_ratio;
+  const phaseNum = d.phase_num || 0;
+  const verdictStr = verdict?.verdict || '';
+  const archetype = verdict?.archetype || '';
+
+  // ── BULL CASE (Steel Man) ──
+  const bullEvidence: string[] = [];
+  const bullCatalysts: string[] = [];
+  let bullThesis = '';
+  let bullInvalidation = '';
+
+  // Gather every bullish signal
+  if (failedBDs >= 2) {
+    bullEvidence.push(`${failedBDs} failed breakdowns — bears tried to push this lower and failed repeatedly. Historically the single most explosive bullish pattern.`);
+  } else if (failedBDs === 1) {
+    bullEvidence.push(`1 failed breakdown — a floor has been tested and held. Trapped shorts become future fuel.`);
+  }
+
+  if (udv !== null && udv > 1.3) {
+    bullEvidence.push(`Up/Down Volume Ratio at ${udv.toFixed(2)} — buyers are dominating volume, consistent with institutional accumulation.`);
+  } else if (udv !== null && udv > 1.0) {
+    bullEvidence.push(`Up/Down Volume Ratio at ${udv.toFixed(2)} — slightly positive, suggesting demand is at least matching supply.`);
+  }
+
+  if (rsi !== null && rsi < 35) {
+    bullEvidence.push(`RSI at ${rsi} (oversold) — selling pressure may be exhausted. Mean-reversion probability increases at these levels.`);
+  } else if (rsi !== null && rsi > 50 && rsi < 70) {
+    bullEvidence.push(`RSI at ${rsi} — healthy momentum range, not yet overbought. Room to run.`);
+  }
+
+  if (goldenCross) {
+    bullEvidence.push(`Golden cross intact (50d above 200d) — the broad trend structure remains bullish despite any short-term weakness.`);
+  }
+
+  if (ext200 !== null && ext200 < -10) {
+    bullEvidence.push(`Trading ${Math.abs(ext200).toFixed(1)}% below 200d MA — historically, extensions this deep often mark durable lows. Reversion to the mean alone implies significant upside.`);
+  } else if (ext200 !== null && ext200 > 0 && ext200 < 10) {
+    bullEvidence.push(`Trading ${ext200.toFixed(1)}% above 200d — early to mid-trend positioning. The move has room before becoming extended.`);
+  }
+
+  if (macdSlope !== null && macdSlope > 0) {
+    bullEvidence.push(`MACD histogram improving — momentum is turning positive, often a leading indicator of trend continuation or reversal.`);
+  }
+
+  if (earnings.length >= 2) {
+    const lastTwo = earnings.slice(-2);
+    const improving = lastTwo.length === 2 && lastTwo[1] > lastTwo[0];
+    const lastPositive = lastTwo[lastTwo.length - 1] > 0;
+    if (improving) {
+      bullEvidence.push(`Earnings trajectory improving (${lastTwo.map((e: number) => (e > 0 ? '+' : '') + e.toFixed(1) + '%').join(' → ')}) — market is rewarding results at an accelerating rate.`);
+    } else if (lastPositive) {
+      bullEvidence.push(`Last earnings reaction positive (+${lastTwo[lastTwo.length - 1].toFixed(1)}%) — the market is accepting the fundamental story.`);
+    }
+    // Bad-news-failing signal (bullish)
+    if (ext200 !== null && ext200 < -5 && lastPositive) {
+      bullEvidence.push(`Positive earnings reaction despite being deeply below the 200d — bad news is failing to push the stock lower. Classic Druckenmiller accumulation signal.`);
+    }
+  }
+
+  if (rs !== null && rs > 1.05) {
+    bullEvidence.push(`Outperforming SPY on relative strength — institutional capital is rotating INTO this name, not away from it.`);
+  }
+
+  if (pctFromHigh !== null && pctFromHigh > -5) {
+    bullEvidence.push(`Within ${Math.abs(pctFromHigh).toFixed(1)}% of 52-week high — persistent demand keeping price near highs despite any negative sentiment.`);
+  }
+
+  if (velocity !== null && velocity > 0 && velocity < 0.3 && daysSinceCross !== null && daysSinceCross > 40) {
+    bullEvidence.push(`Steady grind higher (${(velocity * 100).toFixed(1)}% per day over ${daysSinceCross} days) — the highest quality trend pattern. Druckenmiller's favorite: "I like things that have been quietly going up."`);
+  }
+
+  // If we found very few bullish signals, add a residual one
+  if (bullEvidence.length < 2) {
+    if (pctFromHigh !== null && pctFromHigh < -20) {
+      bullEvidence.push(`Down ${Math.abs(pctFromHigh).toFixed(1)}% from highs — if the business is intact, this much pessimism creates asymmetric upside opportunity.`);
+    }
+    bullEvidence.push(`At $${price}, current price reflects substantial negative expectations. Any positive surprise — earnings beat, guidance raise, macro tailwind — could trigger a sharp repricing higher.`);
+  }
+
+  // Bull catalysts
+  if (!goldenCross) bullCatalysts.push('Reclaim of 200d MA and formation of golden cross would confirm trend reversal');
+  if (ext200 !== null && ext200 < 0) bullCatalysts.push('Price reclaim above 200d MA would shift institutional sentiment');
+  if (failedBDs === 0) bullCatalysts.push('Failed breakdown at current support would trap shorts and build a launchpad');
+  bullCatalysts.push('Positive earnings surprise or guidance raise triggering narrative shift');
+  if (udv !== null && udv < 1.0) bullCatalysts.push('Volume rotation from distribution to accumulation (Up/Down > 1.3)');
+  if (rsi !== null && rsi < 30) bullCatalysts.push('RSI reversal from oversold — mean reversion bounce');
+  bullCatalysts.push('Sector rotation or macro catalyst (rate cuts, policy shift, sector tailwind)');
+
+  // Bull thesis
+  if (phaseNum <= 2 && verdictStr.includes('BUY') || verdictStr.includes('ACCUMULATE')) {
+    bullThesis = `${symbol} presents a high-conviction long opportunity. Both the structural phase classification (P${phaseNum}) and the tape verdict (${verdictStr}) are aligned bullish. The weight of evidence supports building a position now, with clear structural confirmation in place.`;
+  } else if (failedBDs >= 2 || (rsi !== null && rsi < 30) || (udv !== null && udv > 1.3)) {
+    bullThesis = `${symbol} is showing early signs of a bottoming process despite bearish headline metrics. The accumulation signals (${failedBDs > 0 ? failedBDs + ' failed breakdowns, ' : ''}${udv !== null && udv > 1.0 ? 'positive volume, ' : ''}${rsi !== null && rsi < 35 ? 'oversold RSI' : 'improving momentum'}) suggest smart money is positioning ahead of a narrative shift. The pain is priced in — the question is timing, not direction.`;
+  } else if (ext200 !== null && ext200 > 5) {
+    bullThesis = `${symbol} is in an established uptrend and the trend is the bull's best friend. Momentum, structure, and price action are confirming the current narrative. The risk is not being long — it's being underweight in a name where the path of least resistance is higher.`;
+  } else {
+    bullThesis = `${symbol} at $${price} presents an asymmetric risk/reward setup. While not without risk, the combination of signals (${bullEvidence.length} bullish factors identified) suggests the market may be underpricing the recovery or continuation scenario. Patience and measured position sizing could be rewarded.`;
+  }
+
+  // Bull invalidation
+  if (goldenCross) {
+    bullInvalidation = `This thesis fails if: price breaks below the 200d MA and golden cross fails, volume shifts to sustained distribution (Up/Down < 0.7 for 20+ days), or next 2 earnings reactions are negative — confirming the fundamental story has broken.`;
+  } else {
+    bullInvalidation = `This thesis fails if: price makes new 52-week lows on expanding volume, failed breakdowns stop occurring (clean breakdowns instead), or earnings reactions turn sharply negative — confirming this is a value trap, not a capitulation opportunity.`;
+  }
+
+  // ── BEAR CASE (Straw Man) ──
+  const bearEvidence: string[] = [];
+  const bearCatalysts: string[] = [];
+  let bearThesis = '';
+  let bearInvalidation = '';
+
+  // Gather every bearish signal
+  if (!goldenCross) {
+    bearEvidence.push(`Death cross in place (50d below 200d) — trend structure is broken. The broad direction is down and rallies should be sold.`);
+  }
+
+  if (ext200 !== null && ext200 < -10) {
+    bearEvidence.push(`Trading ${Math.abs(ext200).toFixed(1)}% below 200d — persistent weakness far from the structural anchor. This isn't a dip, it's a trend change.`);
+  } else if (ext200 !== null && ext200 > 15) {
+    bearEvidence.push(`Extended ${ext200.toFixed(1)}% above 200d — parabolic territory. Mean reversion risk is elevated. Blow-off tops look like strength right until they don't.`);
+  }
+
+  if (udv !== null && udv < 0.7) {
+    bearEvidence.push(`Up/Down Volume Ratio at ${udv.toFixed(2)} — sellers dominating. Institutional distribution is active and persistent.`);
+  } else if (udv !== null && udv < 1.0) {
+    bearEvidence.push(`Up/Down Volume Ratio at ${udv.toFixed(2)} — supply exceeding demand. Not yet panic selling, but the bid is thinning.`);
+  }
+
+  if (rsi !== null && rsi > 70) {
+    bearEvidence.push(`RSI at ${rsi} (overbought) — momentum stretched. Historically, mean reversion from these levels produces swift corrections.`);
+  } else if (rsi !== null && rsi > 40 && rsi < 50 && ext200 !== null && ext200 < 0) {
+    bearEvidence.push(`RSI at ${rsi} — middling momentum while below the 200d. Not oversold enough for a bounce, not strong enough to break out. Dead money zone.`);
+  }
+
+  if (failedBDs === 0 && ext200 !== null && ext200 < 0) {
+    bearEvidence.push(`Zero failed breakdowns — every support level has broken cleanly. No floor has been established. There is no structural reason to buy.`);
+  }
+
+  if (pctFromHigh !== null && pctFromHigh < -20) {
+    bearEvidence.push(`Down ${Math.abs(pctFromHigh).toFixed(1)}% from 52-week high — massive overhead supply. Every rally faces sellers who are "getting back to even." This ceiling takes months to work through.`);
+  }
+
+  if (macdSlope !== null && macdSlope < 0) {
+    bearEvidence.push(`MACD histogram deteriorating — momentum is fading. The rate of change is getting worse, not better.`);
+  }
+
+  if (earnings.length >= 2) {
+    const lastTwo = earnings.slice(-2);
+    const deteriorating = lastTwo.length === 2 && lastTwo[1] < lastTwo[0];
+    const lastNegative = lastTwo[lastTwo.length - 1] < 0;
+    if (lastNegative) {
+      bearEvidence.push(`Last earnings reaction negative (${lastTwo[lastTwo.length - 1].toFixed(1)}%) — the market is not buying the story. Fundamental narrative may be breaking down.`);
+    }
+    if (deteriorating) {
+      bearEvidence.push(`Earnings trajectory deteriorating (${lastTwo.map((e: number) => (e > 0 ? '+' : '') + e.toFixed(1) + '%').join(' → ')}) — each report is received worse than the last.`);
+    }
+    // Good-news-failing signal (bearish)
+    if (ext200 !== null && ext200 > 0 && lastNegative) {
+      bearEvidence.push(`Negative earnings reaction despite being above the 200d — good news is failing to lift the stock. Classic distribution signal.`);
+    }
+  }
+
+  if (rs !== null && rs < 0.95) {
+    bearEvidence.push(`Underperforming SPY on relative strength — institutional capital is leaving this name for better opportunities elsewhere.`);
+  }
+
+  if (velocity !== null && velocity > 0.5) {
+    bearEvidence.push(`Velocity of move at ${(velocity * 100).toFixed(1)}% per day — parabolic ascent. Druckenmiller: "I'm suspicious of moves that happen too fast." Euphoric velocity precedes violent reversals.`);
+  }
+
+  if (greenDayRatio !== null && greenDayRatio < 0.6) {
+    bearEvidence.push(`Green day volume ratio at ${greenDayRatio.toFixed(2)} — down days carry heavier volume than up days. Sellers are more aggressive than buyers.`);
+  }
+
+  // If we found very few bearish signals, add residual ones
+  if (bearEvidence.length < 2) {
+    if (ext200 !== null && ext200 > 5) {
+      bearEvidence.push(`Extended ${ext200.toFixed(1)}% above 200d — the easy money has been made. Late entries here carry poor risk/reward.`);
+    }
+    bearEvidence.push(`At $${price}, the current price may already reflect the optimistic scenario. Any negative surprise — earnings miss, guidance cut, macro headwind — could trigger a rapid de-rating.`);
+  }
+
+  // Bear catalysts
+  if (goldenCross) bearCatalysts.push('Death cross formation (50d crossing below 200d) would confirm structural trend change');
+  if (ext200 !== null && ext200 > 0) bearCatalysts.push('Loss of 200d MA support would trigger institutional stop-loss cascades');
+  bearCatalysts.push('Negative earnings surprise or guidance cut confirming fundamental deterioration');
+  if (udv !== null && udv > 1.0) bearCatalysts.push('Volume shift from accumulation to distribution (Up/Down < 0.7)');
+  if (failedBDs > 0) bearCatalysts.push('Clean breakdown through previously held support would eliminate the floor');
+  bearCatalysts.push('Sector headwind, macro deterioration, or credit tightening');
+  if (rsi !== null && rsi > 65) bearCatalysts.push('RSI rollover from overbought — momentum exhaustion');
+
+  // Bear thesis
+  if (phaseNum >= 4 || verdictStr.includes('AVOID') || verdictStr.includes('SHORT')) {
+    bearThesis = `${symbol} is in a confirmed bearish regime. Both the structural phase (P${phaseNum}) and the tape verdict (${verdictStr}) agree — this is not a buying opportunity, it's a capital preservation situation. The weight of evidence says get out or stay away. Any bounce is a chance to sell, not a reason to buy.`;
+  } else if (!goldenCross || (udv !== null && udv < 0.7)) {
+    bearThesis = `${symbol} is showing structural deterioration beneath what may appear to be a stable surface. The ${!goldenCross ? 'death cross' : 'distribution volume'} signals that institutional capital is rotating out. The "buy the dip" reflex is the most expensive habit on Wall Street — and this dip may be the beginning of a sustained move lower.`;
+  } else if (ext200 !== null && ext200 > 15) {
+    bearThesis = `${symbol} is dangerously extended. At ${ext200.toFixed(1)}% above the 200d, the stock is priced for perfection. The risk is asymmetric to the downside — any disappointment gets punished severely from these levels, while upside surprise is already baked in. Druckenmiller would be lightening up, not adding.`;
+  } else {
+    bearThesis = `${symbol} at $${price} carries meaningful downside risk that the current positioning may not adequately price. With ${bearEvidence.length} bearish factors identified, the burden of proof is on the bulls to explain why this time is different. Without a clear catalyst for re-acceleration, capital is better deployed elsewhere.`;
+  }
+
+  // Bear invalidation
+  if (!goldenCross) {
+    bearInvalidation = `This thesis fails if: price reclaims the 200d MA on expanding volume and holds for 10+ days, golden cross forms, Up/Down ratio flips above 1.3 — confirming institutional re-accumulation and trend reversal.`;
+  } else {
+    bearInvalidation = `This thesis fails if: pullback holds above the 50d MA, volume remains constructive (Up/Down > 1.0), next earnings reaction is positive — confirming the trend is bending, not breaking.`;
+  }
+
+  return {
+    bullCase: {
+      title: 'Steel Man (Bull Case)',
+      thesis: bullThesis,
+      evidence: bullEvidence.slice(0, 6),  // Cap at 6 most relevant points
+      catalysts: bullCatalysts.slice(0, 4),  // Cap at 4
+      invalidation: bullInvalidation,
+    },
+    bearCase: {
+      title: 'Straw Man (Bear Case)',
+      thesis: bearThesis,
+      evidence: bearEvidence.slice(0, 6),
+      catalysts: bearCatalysts.slice(0, 4),
+      invalidation: bearInvalidation,
+    },
+  };
+}
+
 // ═══ STARTUP CACHE WARMER — proactively fetch Yahoo data for all tickers ═══
 // This runs once on startup to pre-populate the cache before any user requests
 let cacheWarmingInProgress = false;
@@ -3387,6 +3645,27 @@ CRITICAL: You only have technical data, not fundamental data. Acknowledge what y
         console.log(`[NARRATIVE] Rule-based generated for ${symbol} (${ruleNarrative.length} chars)`);
         return ruleNarrative;
       })(),
+
+      // Investment Cases (Steel Man / Straw Man)
+      investmentCases: generateInvestmentCases({
+        symbol, price: Math.round(price * 100) / 100,
+        extension_from_200d: ta.priceVsSma200,
+        golden_cross: ta.sma50Above200,
+        rsi: ta.rsi14 ? Math.round(ta.rsi14) : null,
+        macd_histogram: ta.macd?.histogram,
+        macd_slope: ta.macdHistSlope,
+        up_down_volume_ratio: upDownRatio,
+        failed_breakdowns: failedBreakdownCount,
+        earnings_reactions: earningsReactions.map(e => e.move),
+        pct_from_52w_high: pctFrom52wHigh,
+        relative_strength_vs_spy: ta.rsVsSpy20d,
+        green_day_vol_ratio: ta.volume?.greenDayVolRatio || null,
+        atr_pct: ta.atrPct,
+        velocity: ta.extensionVelocity,
+        days_since_200d_cross: ta.daysSinceCross200d,
+        phase_num: phaseInfo?.num || 0,
+        phase_short: phaseInfo?.short || '?',
+      }, verdict, phaseInfo),
 
       // Price history for charting
       priceHistory: {
