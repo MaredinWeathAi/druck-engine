@@ -146,9 +146,14 @@ const KNOWN_TICKERS = new Set([
   'TEAM', 'MDB', 'NET', 'CFLT', 'MNDY', 'BILL', 'PCOR', 'ESTC', 'GTLB',
   'DOCN', 'PD', 'FROG', 'APPF', 'TENB', 'QLYS', 'RPD', 'VRNS', 'S',
   // Memory / Semi
-  'MU', 'DRAM', 'SMH',
+  'MU', 'DRAM', 'SMH', 'AMAT',
+  // Healthcare
+  'HCA', 'MOH',
+  // Defense (PLTR comps)
+  'LMT', 'GD', 'NOC',
   // Other mentioned
   'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'AMD', 'INTC', 'AVGO',
+  'CSCO', 'SLM', 'FOUR', 'VIAV',
 ]);
 
 // ─── RSS PARSING ───
@@ -559,7 +564,7 @@ async function pollForNewPosts(): Promise<{ newPosts: number; titles: string[] }
   const d = getDb();
 
   // Update poll state
-  d.prepare('UPDATE burry_rss_state SET last_poll_at = datetime("now"), poll_count = poll_count + 1 WHERE id = 1').run();
+  d.prepare(`UPDATE burry_rss_state SET last_poll_at = datetime('now'), poll_count = poll_count + 1 WHERE id = 1`).run();
 
   const newTitles: string[] = [];
   let newCount = 0;
