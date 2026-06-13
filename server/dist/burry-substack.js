@@ -67,31 +67,39 @@ async function generateLLMBurryNarrative(symbol) {
     const state = getBurryCurrentState();
     if (state.totalPosts === 0)
         return generateBurryNarrative(symbol);
-    const d = getDb();
-    // Gather raw materials for synthesis
-    const recentPosts = d.prepare(`
+    let d;
+    try {
+        d = getDb();
+    }
+    catch (err) {
+        console.error('[BurryLLM] DB error:', err.message);
+        return generateBurryNarrative(symbol);
+    }
+    try {
+        // Gather raw materials for synthesis
+        const recentPosts = d.prepare(`
     SELECT title, post_date, sentiment, conviction_level, content_text,
            tickers_mentioned, key_themes, post_type
     FROM burry_posts
     ORDER BY post_date DESC
     LIMIT 15
   `).all();
-    const allPositions = d.prepare(`
+        const allPositions = d.prepare(`
     SELECT bp.ticker, bp.direction, bp.action, bp.price, bp.position_size,
            bp.instrument_type, bp.option_details, bp.rationale, p.post_date, p.title as post_title
     FROM burry_positions bp
     JOIN burry_posts p ON bp.post_id = p.id
     ORDER BY p.post_date DESC
   `).all();
-    const themes = d.prepare(`
+        const themes = d.prepare(`
     SELECT theme_name as theme, mention_count as cnt, last_mentioned as last_seen
     FROM burry_themes
     WHERE status = 'active'
     ORDER BY mention_count DESC
     LIMIT 12
   `).all();
-    // Build the analytical pieces Burry emphasizes
-    const analyticalPosts = d.prepare(`
+        // Build the analytical pieces Burry emphasizes
+        const analyticalPosts = d.prepare(`
     SELECT title, post_date, content_text
     FROM burry_posts
     WHERE post_type IN ('deep_analysis', 'thesis_development')
@@ -102,44 +110,44 @@ async function generateLLMBurryNarrative(symbol) {
     ORDER BY post_date DESC
     LIMIT 8
   `).all();
-    // Build context for LLM
-    const positionsMap = new Map();
-    for (const p of allPositions) {
-        if (!positionsMap.has(p.ticker))
-            positionsMap.set(p.ticker, []);
-        positionsMap.get(p.ticker).push(p);
-    }
-    const positionSummaries = [];
-    for (const [ticker, actions] of positionsMap) {
-        const latest = actions[0];
-        const hist = actions.map((a) => `${a.post_date}: ${a.action} ${a.price ? '@$' + a.price : ''} (${a.instrument_type})`).join('; ');
-        positionSummaries.push(`${ticker} [${latest.direction}]: Latest=${latest.action} ${latest.price ? '@$' + latest.price : ''} (${latest.position_size || 'unknown size'}). History: ${hist}. Rationale: ${latest.rationale || 'n/a'}`);
-    }
-    const recentPostSummaries = recentPosts.map((p) => {
-        const content = p.content_text?.substring(0, 500) || '';
-        return `"${p.title}" (${p.post_date}) [${p.sentiment}, ${p.conviction_level}]: ${content}`;
-    }).join('\n\n');
-    const analyticalSummaries = analyticalPosts.map((p) => {
-        return `"${p.title}" (${p.post_date}): ${p.content_text?.substring(0, 600) || ''}`;
-    }).join('\n\n');
-    const themeSummary = themes.map((t) => `${t.theme} (${t.cnt}x, last: ${t.last_seen})`).join(', ');
-    // If ticker-specific, add ticker context
-    let tickerContext = '';
-    if (symbol) {
-        const upper = symbol.toUpperCase();
-        const tickerPosts = d.prepare(`
+        // Build context for LLM
+        const positionsMap = new Map();
+        for (const p of allPositions) {
+            if (!positionsMap.has(p.ticker))
+                positionsMap.set(p.ticker, []);
+            positionsMap.get(p.ticker).push(p);
+        }
+        const positionSummaries = [];
+        for (const [ticker, actions] of positionsMap) {
+            const latest = actions[0];
+            const hist = actions.map((a) => `${a.post_date}: ${a.action} ${a.price ? '@$' + a.price : ''} (${a.instrument_type})`).join('; ');
+            positionSummaries.push(`${ticker} [${latest.direction}]: Latest=${latest.action} ${latest.price ? '@$' + latest.price : ''} (${latest.position_size || 'unknown size'}). History: ${hist}. Rationale: ${latest.rationale || 'n/a'}`);
+        }
+        const recentPostSummaries = recentPosts.map((p) => {
+            const content = p.content_text?.substring(0, 500) || '';
+            return `"${p.title}" (${p.post_date}) [${p.sentiment}, ${p.conviction_level}]: ${content}`;
+        }).join('\n\n');
+        const analyticalSummaries = analyticalPosts.map((p) => {
+            return `"${p.title}" (${p.post_date}): ${p.content_text?.substring(0, 600) || ''}`;
+        }).join('\n\n');
+        const themeSummary = themes.map((t) => `${t.theme} (${t.cnt}x, last: ${t.last_seen})`).join(', ');
+        // If ticker-specific, add ticker context
+        let tickerContext = '';
+        if (symbol) {
+            const upper = symbol.toUpperCase();
+            const tickerPosts = d.prepare(`
       SELECT title, post_date, sentiment, content_text
       FROM burry_posts
       WHERE tickers_mentioned LIKE ?
       ORDER BY post_date DESC
       LIMIT 5
     `).all(`%"${upper}"%`);
-        const tickerPositions = positionsMap.get(upper) || [];
-        tickerContext = `\n\nSPECIFIC TICKER FOCUS: ${upper}
+            const tickerPositions = positionsMap.get(upper) || [];
+            tickerContext = `\n\nSPECIFIC TICKER FOCUS: ${upper}
 Posts mentioning ${upper}: ${tickerPosts.map((p) => `"${p.title}" (${p.post_date}): ${p.content_text?.substring(0, 300)}`).join('\n')}
 Position history: ${tickerPositions.map((p) => `${p.post_date}: ${p.action} @$${p.price} (${p.instrument_type}${p.option_details ? ', ' + p.option_details : ''})`).join('; ')}`;
-    }
-    const system = `You are synthesizing Michael Burry's current investment thinking based on his "Cassandra Unchained" Substack.
+        }
+        const system = `You are synthesizing Michael Burry's current investment thinking based on his "Cassandra Unchained" Substack.
 
 You must write as a deeply knowledgeable analyst who has internalized Burry's entire framework. Channel his voice — direct, data-driven, historically grounded, contrarian.
 
@@ -159,7 +167,7 @@ BURRY'S POSTURE: Long quality compounders at depressed valuations (ADBE, PYPL, V
 Be specific. Use numbers. Reference the frameworks. Write like someone who has read every post, not like a generic summary.
 
 ${symbol ? `Focus the narrative on ${symbol.toUpperCase()} and what Burry's framework says about it.` : 'Synthesize the overall investment posture, key theses, and what Burry is watching next.'}`;
-    const userMessage = `Here is the raw data from Burry's Substack (${state.totalPosts} posts, ${state.postsLast30Days} in last 30 days):
+        const userMessage = `Here is the raw data from Burry's Substack (${state.totalPosts} posts, ${state.postsLast30Days} in last 30 days):
 
 RECENT POSTS:
 ${recentPostSummaries}
@@ -174,13 +182,21 @@ ${analyticalSummaries}
 ${tickerContext}
 
 Synthesize this into a ${symbol ? `focused narrative on ${symbol.toUpperCase()}` : 'comprehensive investment narrative'} that captures Burry's current thinking, thesis evolution, and positioning. Be specific with numbers, entry prices, and framework applications. 600-900 words.`;
-    const llmResult = await callBurryLLM(system, userMessage, 2000);
-    if (llmResult) {
-        cachedLLMNarrative = { text: llmResult, timestamp: Date.now(), symbol: cacheKey };
-        return llmResult;
+        console.log(`[BurryLLM] Calling LLM with ${userMessage.length} char prompt for ${cacheKey}`);
+        const llmResult = await callBurryLLM(system, userMessage, 2000);
+        if (llmResult) {
+            console.log(`[BurryLLM] LLM success — ${llmResult.length} chars`);
+            cachedLLMNarrative = { text: llmResult, timestamp: Date.now(), symbol: cacheKey };
+            return llmResult;
+        }
+        console.log('[BurryLLM] LLM returned null, falling back to template');
+        // Fallback to template-based narrative
+        return generateBurryNarrative(symbol);
     }
-    // Fallback to template-based narrative
-    return generateBurryNarrative(symbol);
+    catch (err) {
+        console.error('[BurryLLM] Error in narrative generation:', err.message);
+        return generateBurryNarrative(symbol);
+    }
 }
 // ─── DATABASE SETUP ───
 const DATA_DIR = process.env.DATA_DIR || path_1.default.join(process.cwd(), 'data');

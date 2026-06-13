@@ -67,7 +67,15 @@ async function generateLLMBurryNarrative(symbol?: string): Promise<string> {
   const state = getBurryCurrentState();
   if (state.totalPosts === 0) return generateBurryNarrative(symbol);
 
-  const d = getDb();
+  let d: Database.Database;
+  try {
+    d = getDb();
+  } catch (err: any) {
+    console.error('[BurryLLM] DB error:', err.message);
+    return generateBurryNarrative(symbol);
+  }
+
+  try {
 
   // Gather raw materials for synthesis
   const recentPosts = d.prepare(`
@@ -187,15 +195,23 @@ ${tickerContext}
 
 Synthesize this into a ${symbol ? `focused narrative on ${symbol.toUpperCase()}` : 'comprehensive investment narrative'} that captures Burry's current thinking, thesis evolution, and positioning. Be specific with numbers, entry prices, and framework applications. 600-900 words.`;
 
+  console.log(`[BurryLLM] Calling LLM with ${userMessage.length} char prompt for ${cacheKey}`);
   const llmResult = await callBurryLLM(system, userMessage, 2000);
 
   if (llmResult) {
+    console.log(`[BurryLLM] LLM success — ${llmResult.length} chars`);
     cachedLLMNarrative = { text: llmResult, timestamp: Date.now(), symbol: cacheKey };
     return llmResult;
   }
 
+  console.log('[BurryLLM] LLM returned null, falling back to template');
   // Fallback to template-based narrative
   return generateBurryNarrative(symbol);
+
+  } catch (err: any) {
+    console.error('[BurryLLM] Error in narrative generation:', err.message);
+    return generateBurryNarrative(symbol);
+  }
 }
 
 // ─── DATABASE SETUP ───
