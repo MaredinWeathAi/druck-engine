@@ -48,7 +48,7 @@ async function callLLM(opts: { system: string; userMessage: string; maxTokens: n
       // Anthropic
       const anthropic = new Anthropic({ apiKey });
       const msg = await anthropic.messages.create({
-        model: 'claude-sonnet-4-5-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: opts.maxTokens,
         system: opts.system,
         messages: [{ role: 'user', content: opts.userMessage }],

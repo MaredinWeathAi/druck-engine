@@ -365,7 +365,7 @@ async function analyzeEventsWithClaude(
     ).join('\n');
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       messages: [{
         role: 'user',
@@ -855,7 +855,7 @@ router.post('/analyze-custom', async (req: Request, res: Response) => {
     const sectors = Object.keys(SECTOR_TICKER_MAP).join(', ');
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 3000,
       messages: [{
         role: 'user',

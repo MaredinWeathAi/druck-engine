@@ -301,7 +301,7 @@ async function analyzeEventsWithClaude(newsItems, anthropicApiKey) {
         // Send batch of headlines for analysis
         const headlines = newsItems.slice(0, 40).map((n, i) => `[${i}] ${n.title} (${n.source}, ${n.date})\n    ${n.snippet.substring(0, 200)}`).join('\n');
         const response = await client.messages.create({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 4096,
             messages: [{
                     role: 'user',
@@ -738,7 +738,7 @@ router.post('/analyze-custom', async (req, res) => {
         const client = new Anthropic({ apiKey: _anthropicKey });
         const sectors = Object.keys(SECTOR_TICKER_MAP).join(', ');
         const response = await client.messages.create({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 3000,
             messages: [{
                     role: 'user',

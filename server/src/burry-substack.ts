@@ -36,22 +36,29 @@ async function callBurryLLM(system: string, userMessage: string, maxTokens: numb
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY || '';
-  if (!apiKey || !apiKey.startsWith('sk-ant')) return null;
+  if (!apiKey || !apiKey.startsWith('sk-ant')) {
+    console.log(`[BurryLLM] No valid API key (prefix: ${apiKey.slice(0, 6)}...)`);
+    return null;
+  }
 
   try {
-    const anthropic = new Anthropic({ apiKey });
+    console.log(`[BurryLLM] Calling claude-sonnet-4-6 with ${userMessage.length} chars...`);
+    const anthropic = new Anthropic({ apiKey, timeout: 25000 });
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: maxTokens,
       system,
       messages: [{ role: 'user', content: userMessage }],
     });
     burryLLMFailures = 0;
+    console.log(`[BurryLLM] Success — ${msg.content[0]?.type === 'text' ? msg.content[0].text.length : 0} chars returned`);
     return msg.content[0]?.type === 'text' ? msg.content[0].text : null;
   } catch (err: any) {
     burryLLMFailures++;
     burryLLMLastFailure = Date.now();
-    console.error(`[BurryLLM] API error (#${burryLLMFailures}):`, err?.message?.slice(0, 100));
+    const errType = err?.constructor?.name || 'Unknown';
+    const errStatus = err?.status || 'n/a';
+    console.error(`[BurryLLM] API error (#${burryLLMFailures}) [${errType} status=${errStatus}]:`, err?.message?.slice(0, 200));
     return null;
   }
 }
@@ -115,6 +122,17 @@ async function generateLLMBurryNarrative(symbol?: string): Promise<string> {
     LIMIT 8
   `).all() as any[];
 
+  // Get author comments/replies for additional insight
+  const authorComments = d.prepare(`
+    SELECT bc.comment_text, bc.subscriber_question, bc.comment_date,
+           bc.tickers_mentioned, bc.is_author_reply, bp.title as post_title
+    FROM burry_comments bc
+    JOIN burry_posts bp ON bc.post_id = bp.id
+    WHERE bc.is_author_comment = 1 OR bc.is_author_reply = 1
+    ORDER BY bc.comment_date DESC
+    LIMIT 20
+  `).all() as any[];
+
   // Build context for LLM
   const positionsMap = new Map<string, any[]>();
   for (const p of allPositions) {
@@ -129,9 +147,21 @@ async function generateLLMBurryNarrative(symbol?: string): Promise<string> {
     positionSummaries.push(`${ticker} [${latest.direction}]: Latest=${latest.action} ${latest.price ? '@$'+latest.price : ''} (${latest.position_size || 'unknown size'}). History: ${hist}. Rationale: ${latest.rationale || 'n/a'}`);
   }
 
+  // Label posts by temporal tier for the LLM
+  const now = Date.now();
+  function temporalTier(dateStr: string): string {
+    const postDate = new Date(dateStr).getTime();
+    const daysDiff = Math.floor((now - postDate) / (1000 * 60 * 60 * 24));
+    if (daysDiff <= 14) return 'CURRENT';
+    if (daysDiff <= 56) return 'RECENT';
+    if (daysDiff <= 180) return 'FOUNDATIONAL';
+    return 'HISTORICAL';
+  }
+
   const recentPostSummaries = recentPosts.map((p: any) => {
     const content = p.content_text?.substring(0, 500) || '';
-    return `"${p.title}" (${p.post_date}) [${p.sentiment}, ${p.conviction_level}]: ${content}`;
+    const tier = temporalTier(p.post_date);
+    return `[${tier}] "${p.title}" (${p.post_date}) [${p.sentiment}, ${p.conviction_level}]: ${content}`;
   }).join('\n\n');
 
   const analyticalSummaries = analyticalPosts.map((p: any) => {
@@ -158,9 +188,22 @@ Posts mentioning ${upper}: ${tickerPosts.map((p: any) => `"${p.title}" (${p.post
 Position history: ${tickerPositions.map((p: any) => `${p.post_date}: ${p.action} @$${p.price} (${p.instrument_type}${p.option_details ? ', '+p.option_details : ''})`).join('; ')}`;
   }
 
+  // Current date for temporal context
+  const today = new Date().toISOString().split('T')[0];
+
   const system = `You are synthesizing Michael Burry's current investment thinking based on his "Cassandra Unchained" Substack.
 
 You must write as a deeply knowledgeable analyst who has internalized Burry's entire framework. Channel his voice — direct, data-driven, historically grounded, contrarian.
+
+TODAY'S DATE: ${today}
+
+CRITICAL — TEMPORAL CONTEXT RULES:
+1. Posts from the last 2 weeks = CURRENT THINKING. Weight these highest. These reflect his live positioning.
+2. Posts from 2-8 weeks ago = RECENT CONTEXT. Still relevant but check if subsequent posts have updated the thesis.
+3. Posts from 2-6 months ago = FOUNDATIONAL FRAMEWORK. Treat as background thesis, NOT current signals. Market conditions may have changed materially since these were written.
+4. Posts from 6+ months ago = HISTORICAL BACKGROUND. Useful for understanding thesis evolution, but DO NOT apply old observations to the current environment unless Burry has explicitly reaffirmed them recently.
+5. When referencing older posts, ALWAYS note "as of [date]" and acknowledge that market conditions at that time may differ from today.
+6. If Burry said something bearish about NVDA in November 2025 but has not updated since, do NOT present it as his current view. Note it as his framework analysis from that period.
 
 KEY FRAMEWORKS TO REFERENCE:
 - TRAGIC ALGEBRA: SBC dilution destroys intrinsic value. PV = CF/(d-g+y) where y=dilution. Even 1% dilution destroys 20% of value.
@@ -175,13 +218,26 @@ KEY FRAMEWORKS TO REFERENCE:
 
 BURRY'S POSTURE: Long quality compounders at depressed valuations (ADBE, PYPL, VEEV, ZTS, MOH, HCA, BABA, JD, LULU, SFM, FISV, MELI) + Hong Kong deep value (Tencent, Meituan, Haidilao, Haier). Short the AI/semiconductor complex (PLTR puts, NVDA puts, QQQ puts, SOXX puts, ORCL puts, TSLA outright short). ~20% cash.
 
-Be specific. Use numbers. Reference the frameworks. Write like someone who has read every post, not like a generic summary.
+Be specific. Use numbers. Reference the frameworks. Write like someone who has read every post, not like a generic summary. Always ground observations in their temporal context.
 
-${symbol ? `Focus the narrative on ${symbol.toUpperCase()} and what Burry's framework says about it.` : 'Synthesize the overall investment posture, key theses, and what Burry is watching next.'}`;
+${symbol ? `Focus the narrative on ${symbol.toUpperCase()} and what Burry's framework says about it. Pay special attention to the most recent mentions and whether earlier analysis has been updated.` : 'Synthesize the overall investment posture, key theses, and what Burry is watching next. Clearly distinguish between current active positions and older framework analysis.'}`;
+
+  // Build comment context if we have any
+  let commentContext = '';
+  if (authorComments.length > 0) {
+    const commentSummaries = authorComments.map((c: any) => {
+      const tier = temporalTier(c.comment_date);
+      const prefix = c.is_author_reply ? `[REPLY on "${c.post_title}"]` : `[COMMENT on "${c.post_title}"]`;
+      const question = c.subscriber_question ? `\n  Subscriber asked: "${c.subscriber_question.substring(0, 150)}"` : '';
+      return `[${tier}] ${prefix} (${c.comment_date}): ${c.comment_text.substring(0, 300)}${question}`;
+    }).join('\n');
+    commentContext = `\n\nBURRY'S COMMENTS & REPLIES (${authorComments.length} found — these reveal deeper thinking and clarifications):
+${commentSummaries}`;
+  }
 
   const userMessage = `Here is the raw data from Burry's Substack (${state.totalPosts} posts, ${state.postsLast30Days} in last 30 days):
 
-RECENT POSTS:
+RECENT POSTS (labeled by temporal tier — CURRENT/RECENT/FOUNDATIONAL/HISTORICAL):
 ${recentPostSummaries}
 
 ALL POSITIONS (${positionSummaries.length} tickers):
@@ -191,9 +247,9 @@ DOMINANT THEMES: ${themeSummary}
 
 KEY ANALYTICAL PIECES:
 ${analyticalSummaries}
-${tickerContext}
+${tickerContext}${commentContext}
 
-Synthesize this into a ${symbol ? `focused narrative on ${symbol.toUpperCase()}` : 'comprehensive investment narrative'} that captures Burry's current thinking, thesis evolution, and positioning. Be specific with numbers, entry prices, and framework applications. 600-900 words.`;
+Synthesize this into a ${symbol ? `focused narrative on ${symbol.toUpperCase()}` : 'comprehensive investment narrative'} that captures Burry's current thinking, thesis evolution, and positioning. Be specific with numbers, entry prices, and framework applications. Always ground observations in their temporal context — distinguish what Burry is saying NOW vs what he said months ago. 600-900 words.`;
 
   console.log(`[BurryLLM] Calling LLM with ${userMessage.length} char prompt for ${cacheKey}`);
   const llmResult = await callBurryLLM(system, userMessage, 2000);
@@ -301,6 +357,27 @@ export function initBurryTables(): void {
       reference_period TEXT NOT NULL,
       comparison_text TEXT,
       current_analog TEXT,
+      FOREIGN KEY (post_id) REFERENCES burry_posts(id)
+    )
+  `);
+
+  // Comments table — Burry's comments on his own posts + his replies to subscribers
+  d.exec(`
+    CREATE TABLE IF NOT EXISTS burry_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER NOT NULL,
+      comment_id TEXT UNIQUE,
+      parent_comment_id TEXT,
+      is_author_comment INTEGER NOT NULL DEFAULT 0,
+      is_author_reply INTEGER NOT NULL DEFAULT 0,
+      author_name TEXT,
+      comment_text TEXT NOT NULL,
+      comment_date TEXT,
+      subscriber_question TEXT,
+      tickers_mentioned TEXT,
+      key_themes TEXT,
+      sentiment TEXT DEFAULT 'neutral',
+      ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (post_id) REFERENCES burry_posts(id)
     )
   `);
@@ -1143,6 +1220,14 @@ router.get('/burry/status', (_req, res) => {
     const rssState = d.prepare('SELECT * FROM burry_rss_state WHERE id = 1').get() as any;
     const latestPost = d.prepare('SELECT title, post_date FROM burry_posts ORDER BY post_date DESC LIMIT 1').get() as any;
 
+    // Comment counts
+    let totalComments = 0;
+    let authorComments = 0;
+    try {
+      totalComments = (d.prepare('SELECT COUNT(*) as cnt FROM burry_comments').get() as any).cnt;
+      authorComments = (d.prepare('SELECT COUNT(*) as cnt FROM burry_comments WHERE is_author_comment = 1 OR is_author_reply = 1').get() as any).cnt;
+    } catch { /* table may not exist yet on older deploys */ }
+
     res.json({
       status: 'ok',
       substack: 'Cassandra Unchained',
@@ -1151,6 +1236,8 @@ router.get('/burry/status', (_req, res) => {
       total_posts: totalPosts,
       total_positions_extracted: totalPositions,
       total_themes: totalThemes,
+      total_comments: totalComments,
+      author_comments: authorComments,
       latest_post: latestPost || null,
       rss_polling: {
         active: pollTimer !== null,
@@ -1378,6 +1465,100 @@ router.get('/burry/ticker/:symbol', async (req, res) => {
       total_mentions: mentions.length,
       has_position: positions.length > 0,
       latest_direction: positions[0]?.direction || null,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /burry/ingest-comments — Batch ingest comments (from Chrome scraping)
+router.post('/burry/ingest-comments', (req, res) => {
+  try {
+    const { post_slug, comments } = req.body;
+    if (!post_slug || !Array.isArray(comments)) {
+      return res.status(400).json({ error: 'post_slug and comments array required' });
+    }
+
+    const d = getDb();
+    const post = d.prepare('SELECT id FROM burry_posts WHERE slug = ?').get(post_slug) as any;
+    if (!post) return res.status(404).json({ error: `Post with slug "${post_slug}" not found` });
+
+    const insertComment = d.prepare(`
+      INSERT OR REPLACE INTO burry_comments
+        (post_id, comment_id, parent_comment_id, is_author_comment, is_author_reply,
+         author_name, comment_text, comment_date, subscriber_question,
+         tickers_mentioned, key_themes, sentiment)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    let ingested = 0;
+    for (const c of comments) {
+      const isAuthor = (c.author_name || '').toLowerCase().includes('michael') ||
+                       (c.author_name || '').toLowerCase().includes('burry') ||
+                       c.is_author === true;
+      const isReply = !!c.parent_comment_id && isAuthor;
+
+      const tickers = extractTickersMentioned(c.text || '');
+      const themes = extractKeyThemes(c.text || '');
+      const sentiment = extractSentiment(c.text || '');
+
+      insertComment.run(
+        post.id,
+        c.comment_id || `${post_slug}-${ingested}`,
+        c.parent_comment_id || null,
+        isAuthor ? 1 : 0,
+        isReply ? 1 : 0,
+        c.author_name || 'Unknown',
+        c.text || '',
+        c.date || new Date().toISOString().split('T')[0],
+        isReply ? c.subscriber_question || null : null,
+        JSON.stringify(tickers),
+        JSON.stringify(themes),
+        sentiment
+      );
+      ingested++;
+    }
+
+    console.log(`[BURRY] Ingested ${ingested} comments for post "${post_slug}" (author comments: ${comments.filter((c: any) => c.is_author).length})`);
+    res.json({ status: 'ok', post_slug, ingested });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /burry/comments — Get Burry's comments (author comments and replies only)
+router.get('/burry/comments', (req, res) => {
+  try {
+    const d = getDb();
+    const postSlug = req.query.post as string;
+    const onlyAuthor = req.query.author !== 'false'; // Default: only Burry's comments
+
+    let query = `
+      SELECT bc.*, bp.title as post_title, bp.slug as post_slug, bp.post_date
+      FROM burry_comments bc
+      JOIN burry_posts bp ON bc.post_id = bp.id
+    `;
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (onlyAuthor) {
+      conditions.push('(bc.is_author_comment = 1 OR bc.is_author_reply = 1)');
+    }
+    if (postSlug) {
+      conditions.push('bp.slug = ?');
+      params.push(postSlug);
+    }
+
+    if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ');
+    query += ' ORDER BY bc.comment_date DESC LIMIT 100';
+
+    const comments = d.prepare(query).all(...params);
+    const totalAuthor = (d.prepare('SELECT COUNT(*) as cnt FROM burry_comments WHERE is_author_comment = 1 OR is_author_reply = 1').get() as any).cnt;
+
+    res.json({
+      comments,
+      count: comments.length,
+      total_author_comments: totalAuthor,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

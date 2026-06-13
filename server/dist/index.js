@@ -744,9 +744,9 @@ app.get('/api/health', (_req, res) => {
     recalcDerived();
     res.json({
         status: 'ok',
-        version: '15.1.0',
-        build: '2026-06-13T15:00:00Z',
-        BUILD_CANARY: 'BURRY_LLM_NARRATIVE',
+        version: '15.2.0',
+        build: '2026-06-13T20:00:00Z',
+        BUILD_CANARY: 'MODEL_FIX_SONNET_46',
         name: 'Druck Engine — Structural Regime Intelligence',
         timestamp: new Date().toISOString(),
         fred_key: !!FRED_API_KEY,
@@ -1665,7 +1665,7 @@ Format your response as JSON with this exact structure:
 Return ONLY valid JSON, no markdown fences.`,
         });
         const response = await client.messages.create({
-            model: 'claude-sonnet-4-20250514',
+            model: 'claude-sonnet-4-6',
             max_tokens: 4096,
             messages: [{ role: 'user', content: imageContent }],
         });
