@@ -9,6 +9,8 @@ import { Router, Request, Response } from 'express';
 import YahooFinance from 'yahoo-finance2';
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // ── LLM PROVIDER ABSTRACTION ──
 // Auto-detects Anthropic vs OpenAI key and routes accordingly
@@ -483,10 +485,12 @@ const YAHOO_ONLY_PATTERN = /[=]F$|^\^TNX$|^\^FVX$|^\^TYX$|^\^IRX$|[=]X$/;
 async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar[]> {
   const years = period === '5y' ? 5 : period === '2y' ? 2 : 1;
 
-  // ── CHECK PERSISTENT SQLite CACHE (survives deploys) — 7 day TTL ──
+  // ── CHECK PERSISTENT SQLite CACHE (survives deploys) — 30 day TTL ──
+  // Extended from 7 to 30 days: stale data is far better than no data,
+  // especially when Yahoo blocks Railway IPs and we rely on seed data.
   try {
     const ageMin = getBarCacheAge(symbol);
-    if (ageMin !== null && ageMin < 10080) { // 7 days
+    if (ageMin !== null && ageMin < 43200) { // 30 days (43200 minutes)
       const dbCached = getCachedBars(symbol);
       if (dbCached && dbCached.bars.length >= 50) {
         return dbCached.bars.map((b: any) => ({
@@ -558,7 +562,55 @@ async function fetchOHLC(symbol: string, period: string = '1y'): Promise<OHLCBar
     }
   }
 
-  // ── FALLBACK: GuruFocus (close-only, no volume — but better than nothing) ──
+  // ── FALLBACK 2: Raw Yahoo chart API (bypasses yahoo-finance2 library patterns) ──
+  try {
+    const endTs = Math.floor(Date.now() / 1000);
+    const startTs = endTs - (years * 365.25 * 86400);
+    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${Math.floor(startTs)}&period2=${endTs}&interval=1d`;
+    const chartResp = await Promise.race([
+      fetch(chartUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+          'Accept': 'application/json',
+        },
+      }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('raw_yahoo_timeout')), 12000)),
+    ]);
+    if (chartResp.ok) {
+      const chartData: any = await chartResp.json();
+      const result = chartData?.chart?.result?.[0];
+      const timestamps = result?.timestamp || [];
+      const ohlcv = result?.indicators?.quote?.[0] || {};
+      if (timestamps.length >= 50) {
+        const bars: OHLCBar[] = [];
+        for (let k = 0; k < timestamps.length; k++) {
+          const c = ohlcv.close?.[k];
+          if (c == null || c <= 0) continue;
+          bars.push({
+            date: new Date(timestamps[k] * 1000),
+            open: ohlcv.open?.[k] || c,
+            high: ohlcv.high?.[k] || c,
+            low: ohlcv.low?.[k] || c,
+            close: c,
+            volume: ohlcv.volume?.[k] || 0,
+          });
+        }
+        if (bars.length >= 50) {
+          console.log(`[YF-RAW] Direct chart API: ${bars.length} bars for ${symbol}`);
+          try {
+            setCachedBars(symbol, bars.map((b: OHLCBar) => ({
+              date: b.date.toISOString().split('T')[0], open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume,
+            })));
+          } catch {}
+          return bars;
+        }
+      }
+    }
+  } catch (rawErr: any) {
+    // Raw Yahoo also failed — continue to GuruFocus
+  }
+
+  // ── FALLBACK 3: GuruFocus (close-only, no volume — but better than nothing) ──
   try {
     const gfUrl = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${encodeURIComponent(symbol)}/price`;
     const gfResponse = await fetch(gfUrl);
@@ -1397,11 +1449,93 @@ async function refreshMorningLens(): Promise<void> {
   console.log(`[LENS] ✓ Refresh complete — ${newSnapshots.size} instruments, Death Nails: ${currentSignals.deathNails.count}/3, Leading Groups: ${currentSignals.leadingGroups.healthyCount}H/${currentSignals.leadingGroups.brokenCount}B`);
 }
 
+// ═══ SEED DATA LOADER — breaks the chicken-and-egg cache problem ═══
+// On Railway, Yahoo blocks our IP. The SQLite cache is empty on first deploy.
+// This loads seed-bars.json (generated from a non-blocked IP) into SQLite
+// so that fetchOHLC() can serve data from cache immediately.
+function loadSeedDataIfNeeded(): number {
+  try {
+    // Count how many instruments already have cache
+    let cachedCount = 0;
+    for (const inst of INSTRUMENTS) {
+      const age = getBarCacheAge(inst.symbol);
+      if (age !== null) cachedCount++;
+    }
+
+    // If we already have > 50% cached, skip seeding
+    if (cachedCount >= INSTRUMENTS.length * 0.5) {
+      console.log(`[SEED] SQLite cache has ${cachedCount}/${INSTRUMENTS.length} instruments — skipping seed`);
+      return cachedCount;
+    }
+
+    // Look for seed file in multiple locations (handles different build layouts)
+    const seedPaths = [
+      path.join(__dirname, '..', 'data', 'seed-bars.json'),       // server/dist/../data/
+      path.join(__dirname, '..', '..', 'server', 'data', 'seed-bars.json'), // project root
+      path.join(process.cwd(), 'server', 'data', 'seed-bars.json'),
+      '/app/server/data/seed-bars.json',                           // Railway container
+    ];
+
+    let seedData: Record<string, any[]> | null = null;
+    for (const sp of seedPaths) {
+      try {
+        if (fs.existsSync(sp)) {
+          const raw = fs.readFileSync(sp, 'utf-8');
+          seedData = JSON.parse(raw);
+          console.log(`[SEED] Loaded seed file from ${sp} (${Object.keys(seedData!).length} instruments)`);
+          break;
+        }
+      } catch {}
+    }
+
+    if (!seedData) {
+      console.warn('[SEED] No seed file found — instruments will load slowly via live fetches');
+      return cachedCount;
+    }
+
+    // Load each instrument into SQLite cache
+    let seeded = 0;
+    for (const [symbol, compactBars] of Object.entries(seedData)) {
+      // Skip if already cached (don't overwrite fresher data)
+      const existing = getBarCacheAge(symbol);
+      if (existing !== null) continue;
+
+      // Expand compact format [date, open, high, low, close, volume] to objects
+      const bars = compactBars.map((b: any) => ({
+        date: b[0],
+        open: b[1],
+        high: b[2],
+        low: b[3],
+        close: b[4],
+        volume: b[5] || 0,
+      }));
+
+      if (bars.length >= 20) {
+        try {
+          setCachedBars(symbol, bars);
+          seeded++;
+        } catch {}
+      }
+    }
+
+    console.log(`[SEED] ✓ Loaded ${seeded} instruments from seed data into SQLite cache`);
+    return cachedCount + seeded;
+  } catch (seedErr: any) {
+    console.error(`[SEED] Error loading seed: ${seedErr?.message}`);
+    return 0;
+  }
+}
+
 // Auto-refresh on startup with resilient retry loop
 // Keeps retrying with escalating delays until we get data
 (async () => {
+  // ═══ STEP 0: Load seed data into SQLite if cache is empty ═══
+  // This ensures fetchOHLC() has data even when Yahoo blocks us
+  const seedCount = loadSeedDataIfNeeded();
+  console.log(`[STARTUP] Seed loading complete — ${seedCount} instruments in cache`);
+
   const STARTUP_RETRIES = 5;
-  const RETRY_DELAYS = [5000, 30000, 60000, 120000, 300000]; // 5s, 30s, 1m, 2m, 5m
+  const RETRY_DELAYS = [3000, 15000, 60000, 120000, 300000]; // 3s, 15s, 1m, 2m, 5m
 
   for (let attempt = 0; attempt < STARTUP_RETRIES; attempt++) {
     const delay = RETRY_DELAYS[attempt] || 300000;
@@ -1442,19 +1576,43 @@ async function refreshMorningLens(): Promise<void> {
     }
   }, 30000); // 30s after startup — instruments should be loaded by then
 
-  // ═══ TRICKLE WARMER — gradually re-warm Yahoo data to avoid IP blocking ═══
-  // Warms 2 watchlist tickers every 5 minutes to keep volume data fresh
+  // ═══ TRICKLE WARMER — gradually refreshes data to keep cache alive ═══
+  // Cycles through BOTH watchlist AND instruments, warming 2 tickers every 5 minutes
+  // This ensures the SQLite cache stays fresh even when bulk refresh fails
   let trickleIndex = 0;
+  let instrumentTrickleIndex = 0;
   setInterval(async () => {
-    const watchlistItems = getWatchlist();
-    if (watchlistItems.length === 0) return;
-
-    // Pick next 2 tickers to warm
     const tickersToWarm: string[] = [];
-    for (let i = 0; i < 2 && watchlistItems.length > 0; i++) {
-      const idx = trickleIndex % watchlistItems.length;
-      tickersToWarm.push(watchlistItems[idx].symbol);
-      trickleIndex++;
+
+    // Alternate: even cycles = watchlist, odd cycles = instruments
+    const cycleNum = Math.floor(trickleIndex / 2);
+    if (cycleNum % 2 === 0) {
+      // Warm watchlist tickers
+      const watchlistItems = getWatchlist();
+      if (watchlistItems.length > 0) {
+        for (let i = 0; i < 2 && watchlistItems.length > 0; i++) {
+          const idx = trickleIndex % watchlistItems.length;
+          tickersToWarm.push(watchlistItems[idx].symbol);
+          trickleIndex++;
+        }
+      }
+    } else {
+      // Warm INSTRUMENTS tickers — keeps the bulk cache alive
+      for (let i = 0; i < 2; i++) {
+        const idx = instrumentTrickleIndex % INSTRUMENTS.length;
+        tickersToWarm.push(INSTRUMENTS[idx].symbol);
+        instrumentTrickleIndex++;
+      }
+      trickleIndex += 2;
+    }
+
+    if (tickersToWarm.length === 0) {
+      // If watchlist is empty, always warm instruments
+      for (let i = 0; i < 2; i++) {
+        const idx = instrumentTrickleIndex % INSTRUMENTS.length;
+        tickersToWarm.push(INSTRUMENTS[idx].symbol);
+        instrumentTrickleIndex++;
+      }
     }
 
     for (const sym of tickersToWarm) {
