@@ -22,7 +22,167 @@ const express_1 = require("express");
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
+const sdk_1 = __importDefault(require("@anthropic-ai/sdk"));
 const router = (0, express_1.Router)();
+// ─── LLM INTEGRATION ───
+let burryLLMFailures = 0;
+let burryLLMLastFailure = 0;
+const BURRY_LLM_COOLDOWN = 60 * 60 * 1000; // 1 hour after 3 failures
+// Simple LLM narrative cache — avoids hammering API on repeated calls
+let cachedLLMNarrative = null;
+const NARRATIVE_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+async function callBurryLLM(system, userMessage, maxTokens) {
+    if (burryLLMFailures >= 3 && (Date.now() - burryLLMLastFailure) < BURRY_LLM_COOLDOWN) {
+        console.log(`[BurryLLM] Circuit breaker open — ${burryLLMFailures} failures, cooldown active`);
+        return null;
+    }
+    const apiKey = process.env.ANTHROPIC_API_KEY || '';
+    if (!apiKey || !apiKey.startsWith('sk-ant'))
+        return null;
+    try {
+        const anthropic = new sdk_1.default({ apiKey });
+        const msg = await anthropic.messages.create({
+            model: 'claude-sonnet-4-5-20250514',
+            max_tokens: maxTokens,
+            system,
+            messages: [{ role: 'user', content: userMessage }],
+        });
+        burryLLMFailures = 0;
+        return msg.content[0]?.type === 'text' ? msg.content[0].text : null;
+    }
+    catch (err) {
+        burryLLMFailures++;
+        burryLLMLastFailure = Date.now();
+        console.error(`[BurryLLM] API error (#${burryLLMFailures}):`, err?.message?.slice(0, 100));
+        return null;
+    }
+}
+async function generateLLMBurryNarrative(symbol) {
+    // Check cache
+    const cacheKey = symbol || 'general';
+    if (cachedLLMNarrative && cachedLLMNarrative.symbol === cacheKey &&
+        (Date.now() - cachedLLMNarrative.timestamp) < NARRATIVE_CACHE_TTL) {
+        return cachedLLMNarrative.text;
+    }
+    const state = getBurryCurrentState();
+    if (state.totalPosts === 0)
+        return generateBurryNarrative(symbol);
+    const d = getDb();
+    // Gather raw materials for synthesis
+    const recentPosts = d.prepare(`
+    SELECT title, post_date, sentiment, conviction_level, content_text,
+           tickers_mentioned, key_themes, post_type
+    FROM burry_posts
+    ORDER BY post_date DESC
+    LIMIT 15
+  `).all();
+    const allPositions = d.prepare(`
+    SELECT bp.ticker, bp.direction, bp.action, bp.price, bp.position_size,
+           bp.instrument_type, bp.option_details, bp.rationale, p.post_date, p.title as post_title
+    FROM burry_positions bp
+    JOIN burry_posts p ON bp.post_id = p.id
+    ORDER BY p.post_date DESC
+  `).all();
+    const themes = d.prepare(`
+    SELECT theme, COUNT(*) as cnt, MAX(p.post_date) as last_seen
+    FROM burry_themes bt
+    JOIN burry_posts p ON bt.post_id = p.id
+    GROUP BY theme
+    ORDER BY cnt DESC
+    LIMIT 12
+  `).all();
+    // Build the analytical pieces Burry emphasizes
+    const analyticalPosts = d.prepare(`
+    SELECT title, post_date, content_text
+    FROM burry_posts
+    WHERE post_type IN ('deep_analysis', 'thesis_development')
+       OR key_themes LIKE '%tragic_algebra%'
+       OR key_themes LIKE '%expert_vs_skilled%'
+       OR key_themes LIKE '%stone_classification%'
+       OR key_themes LIKE '%aict_tiering%'
+    ORDER BY post_date DESC
+    LIMIT 8
+  `).all();
+    // Build context for LLM
+    const positionsMap = new Map();
+    for (const p of allPositions) {
+        if (!positionsMap.has(p.ticker))
+            positionsMap.set(p.ticker, []);
+        positionsMap.get(p.ticker).push(p);
+    }
+    const positionSummaries = [];
+    for (const [ticker, actions] of positionsMap) {
+        const latest = actions[0];
+        const hist = actions.map((a) => `${a.post_date}: ${a.action} ${a.price ? '@$' + a.price : ''} (${a.instrument_type})`).join('; ');
+        positionSummaries.push(`${ticker} [${latest.direction}]: Latest=${latest.action} ${latest.price ? '@$' + latest.price : ''} (${latest.position_size || 'unknown size'}). History: ${hist}. Rationale: ${latest.rationale || 'n/a'}`);
+    }
+    const recentPostSummaries = recentPosts.map((p) => {
+        const content = p.content_text?.substring(0, 500) || '';
+        return `"${p.title}" (${p.post_date}) [${p.sentiment}, ${p.conviction_level}]: ${content}`;
+    }).join('\n\n');
+    const analyticalSummaries = analyticalPosts.map((p) => {
+        return `"${p.title}" (${p.post_date}): ${p.content_text?.substring(0, 600) || ''}`;
+    }).join('\n\n');
+    const themeSummary = themes.map((t) => `${t.theme} (${t.cnt}x, last: ${t.last_seen})`).join(', ');
+    // If ticker-specific, add ticker context
+    let tickerContext = '';
+    if (symbol) {
+        const upper = symbol.toUpperCase();
+        const tickerPosts = d.prepare(`
+      SELECT title, post_date, sentiment, content_text
+      FROM burry_posts
+      WHERE tickers_mentioned LIKE ?
+      ORDER BY post_date DESC
+      LIMIT 5
+    `).all(`%"${upper}"%`);
+        const tickerPositions = positionsMap.get(upper) || [];
+        tickerContext = `\n\nSPECIFIC TICKER FOCUS: ${upper}
+Posts mentioning ${upper}: ${tickerPosts.map((p) => `"${p.title}" (${p.post_date}): ${p.content_text?.substring(0, 300)}`).join('\n')}
+Position history: ${tickerPositions.map((p) => `${p.post_date}: ${p.action} @$${p.price} (${p.instrument_type}${p.option_details ? ', ' + p.option_details : ''})`).join('; ')}`;
+    }
+    const system = `You are synthesizing Michael Burry's current investment thinking based on his "Cassandra Unchained" Substack.
+
+You must write as a deeply knowledgeable analyst who has internalized Burry's entire framework. Channel his voice — direct, data-driven, historically grounded, contrarian.
+
+KEY FRAMEWORKS TO REFERENCE:
+- TRAGIC ALGEBRA: SBC dilution destroys intrinsic value. PV = CF/(d-g+y) where y=dilution. Even 1% dilution destroys 20% of value.
+- IV15: Intrinsic Value requiring 15%+ annual returns for 15+ years. P/IV15 < 1.0 = attractive.
+- ΔE (Delta Earnings): Owners' earnings vs GAAP. Adjusts for SBC, buybacks to nowhere.
+- CAPITAL CYCLE THEORY: Stock market peaks occur MIDWAY through investment booms, not at end.
+- STONE CLASSIFICATION: Granite (hardest moat) → Sandstone → Limestone → Chalk (crumbling).
+- AICT (AI Competitive Threat): 5 tiers from existential to minimal.
+- EXPERT vs SKILLED SOFTWARE: Expert software (wraps specialized knowledge) more defensible than skilled-human software.
+- TOKENMAXXING: Quota-driven AI overconsumption.
+- THE BEZZLE: Temporary demand being capitalized as permanent.
+
+BURRY'S POSTURE: Long quality compounders at depressed valuations (ADBE, PYPL, VEEV, ZTS, MOH, HCA, BABA, JD, LULU, SFM, FISV, MELI) + Hong Kong deep value (Tencent, Meituan, Haidilao, Haier). Short the AI/semiconductor complex (PLTR puts, NVDA puts, QQQ puts, SOXX puts, ORCL puts, TSLA outright short). ~20% cash.
+
+Be specific. Use numbers. Reference the frameworks. Write like someone who has read every post, not like a generic summary.
+
+${symbol ? `Focus the narrative on ${symbol.toUpperCase()} and what Burry's framework says about it.` : 'Synthesize the overall investment posture, key theses, and what Burry is watching next.'}`;
+    const userMessage = `Here is the raw data from Burry's Substack (${state.totalPosts} posts, ${state.postsLast30Days} in last 30 days):
+
+RECENT POSTS:
+${recentPostSummaries}
+
+ALL POSITIONS (${positionSummaries.length} tickers):
+${positionSummaries.join('\n')}
+
+DOMINANT THEMES: ${themeSummary}
+
+KEY ANALYTICAL PIECES:
+${analyticalSummaries}
+${tickerContext}
+
+Synthesize this into a ${symbol ? `focused narrative on ${symbol.toUpperCase()}` : 'comprehensive investment narrative'} that captures Burry's current thinking, thesis evolution, and positioning. Be specific with numbers, entry prices, and framework applications. 600-900 words.`;
+    const llmResult = await callBurryLLM(system, userMessage, 2000);
+    if (llmResult) {
+        cachedLLMNarrative = { text: llmResult, timestamp: Date.now(), symbol: cacheKey };
+        return llmResult;
+    }
+    // Fallback to template-based narrative
+    return generateBurryNarrative(symbol);
+}
 // ─── DATABASE SETUP ───
 const DATA_DIR = process.env.DATA_DIR || path_1.default.join(process.cwd(), 'data');
 if (!fs_1.default.existsSync(DATA_DIR))
@@ -821,12 +981,19 @@ router.get('/burry/status', (_req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-// GET /burry/narrative — Full Burry Lens narrative
-router.get('/burry/narrative', (req, res) => {
+// GET /burry/narrative — Full Burry Lens narrative (LLM-powered with template fallback)
+router.get('/burry/narrative', async (req, res) => {
     try {
         const symbol = req.query.symbol;
-        const narrative = generateBurryNarrative(symbol);
-        res.json({ narrative, symbol: symbol || 'general', timestamp: new Date().toISOString() });
+        const mode = req.query.mode; // 'llm' or 'template'
+        if (mode === 'template') {
+            const narrative = generateBurryNarrative(symbol);
+            return res.json({ narrative, symbol: symbol || 'general', mode: 'template', timestamp: new Date().toISOString() });
+        }
+        // Default: try LLM, fallback to template
+        const narrative = await generateLLMBurryNarrative(symbol);
+        const isLLM = cachedLLMNarrative?.symbol === (symbol || 'general');
+        res.json({ narrative, symbol: symbol || 'general', mode: isLLM ? 'llm' : 'template', timestamp: new Date().toISOString() });
     }
     catch (err) {
         res.status(500).json({ error: err.message });
@@ -991,11 +1158,11 @@ router.post('/burry/poll', async (_req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-// GET /burry/ticker/:symbol — Burry's view on a specific ticker
-router.get('/burry/ticker/:symbol', (req, res) => {
+// GET /burry/ticker/:symbol — Burry's view on a specific ticker (LLM-powered)
+router.get('/burry/ticker/:symbol', async (req, res) => {
     try {
         const symbol = req.params.symbol.toUpperCase();
-        const narrative = generateBurryNarrative(symbol);
+        const narrative = await generateLLMBurryNarrative(symbol);
         const d = getDb();
         const positions = d.prepare(`
       SELECT bp.*, p.post_date, p.title as post_title

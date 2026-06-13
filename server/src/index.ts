@@ -781,9 +781,9 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '15.0.0',
+    version: '15.1.0',
     build: '2026-06-13T15:00:00Z',
-    BUILD_CANARY: 'BURRY_SUBSTACK_ENGINE',
+    BUILD_CANARY: 'BURRY_LLM_NARRATIVE',
     name: 'Druck Engine — Structural Regime Intelligence',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
