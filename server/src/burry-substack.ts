@@ -87,11 +87,10 @@ async function generateLLMBurryNarrative(symbol?: string): Promise<string> {
   `).all() as any[];
 
   const themes = d.prepare(`
-    SELECT theme, COUNT(*) as cnt, MAX(p.post_date) as last_seen
-    FROM burry_themes bt
-    JOIN burry_posts p ON bt.post_id = p.id
-    GROUP BY theme
-    ORDER BY cnt DESC
+    SELECT theme_name as theme, mention_count as cnt, last_mentioned as last_seen
+    FROM burry_themes
+    WHERE status = 'active'
+    ORDER BY mention_count DESC
     LIMIT 12
   `).all() as any[];
 
