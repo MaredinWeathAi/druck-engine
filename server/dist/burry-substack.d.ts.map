@@ -1,1 +1,1 @@
-{"version":3,"file":"burry-substack.d.ts","sourceRoot":"","sources":["../src/burry-substack.ts"],"names":[],"mappings":"AAmBA,QAAA,MAAM,MAAM,4CAAW,CAAC;AA+QxB,wBAAgB,eAAe,IAAI,IAAI,CA+GtC;AA+fD,wBAAgB,eAAe,IAAI,IAAI,CAiBtC;AAED,wBAAgB,cAAc,IAAI,IAAI,CAMrC;AAsnBD,eAAe,MAAM,CAAC"}
+{"version":3,"file":"burry-substack.d.ts","sourceRoot":"","sources":["../src/burry-substack.ts"],"names":[],"mappings":"AAmBA,QAAA,MAAM,MAAM,4CAAW,CAAC;AA+QxB,wBAAgB,eAAe,IAAI,IAAI,CA+GtC;AA+fD,wBAAgB,eAAe,IAAI,IAAI,CAiBtC;AAED,wBAAgB,cAAc,IAAI,IAAI,CAMrC;AA4pBD,eAAe,MAAM,CAAC"}

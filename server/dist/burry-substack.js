@@ -1098,6 +1098,40 @@ router.get('/burry/narrative', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+// GET /burry/llm-test — Diagnostic: test LLM call directly
+router.get('/burry/llm-test', async (_req, res) => {
+    const apiKey = process.env.ANTHROPIC_API_KEY || '';
+    const keyInfo = apiKey ? `${apiKey.slice(0, 10)}...${apiKey.slice(-6)} (${apiKey.length} chars)` : 'MISSING';
+    const isAnt = apiKey.startsWith('sk-ant');
+    const diag = {
+        key_present: !!apiKey,
+        key_info: keyInfo,
+        is_anthropic: isAnt,
+        circuit_breaker: { failures: burryLLMFailures, last_failure: burryLLMLastFailure ? new Date(burryLLMLastFailure).toISOString() : 'never' },
+        model: 'claude-sonnet-4-6',
+    };
+    if (!isAnt) {
+        diag.error = 'No valid Anthropic key';
+        return res.json(diag);
+    }
+    try {
+        const anthropic = new sdk_1.default({ apiKey, timeout: 15000 });
+        const msg = await anthropic.messages.create({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 50,
+            messages: [{ role: 'user', content: 'Say "LLM OK" and nothing else.' }],
+        });
+        diag.llm_response = msg.content[0]?.type === 'text' ? msg.content[0].text : 'non-text';
+        diag.success = true;
+    }
+    catch (err) {
+        diag.success = false;
+        diag.error_type = err?.constructor?.name;
+        diag.error_status = err?.status;
+        diag.error_message = err?.message?.slice(0, 300);
+    }
+    res.json(diag);
+});
 // GET /burry/state — Current positions and themes
 router.get('/burry/state', (_req, res) => {
     try {
