@@ -134,30 +134,43 @@ const SUBSTACK_BASE = 'https://michaeljburry.substack.com';
 const RSS_URL = `${SUBSTACK_BASE}/feed`;
 const POLL_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
-// Known tickers Burry has discussed
+// Known tickers Burry has discussed — SW50 universe + positions + comps
 const KNOWN_TICKERS = new Set([
-  // Longs
+  // ── Current Longs ──
   'ADBE', 'BABA', 'PYPL', 'VEEV', 'ZTS', 'SFM', 'LULU', 'FMCC', 'FNMA',
-  'GME', 'EBAY', 'JD', 'PDD', 'BIDU', 'TCEHY',
-  'MELI', 'BRKR', 'BRKRP', 'FISV', 'MSCI', 'ADSK', 'SLM', 'FOUR',
-  // Shorts / Puts / Outright shorts
+  'JD', 'MELI', 'BRKR', 'BRKRP', 'FISV', 'MSCI', 'HCA', 'MOH',
+  // ── Sold / Former Longs ──
+  'GME', 'EBAY', 'CRM', 'ADSK', 'MSFT', 'SLM', 'FOUR',
+  // ── Shorts / Puts ──
   'PLTR', 'NVDA', 'ORCL', 'QQQ', 'SOXX', 'SPY', 'TSLA', 'INTC',
-  // Software series coverage
-  'CRM', 'NOW', 'WDAY', 'HUBS', 'SNOW', 'DDOG', 'CRWD', 'ZS', 'PANW',
-  'TEAM', 'MDB', 'NET', 'CFLT', 'MNDY', 'BILL', 'PCOR', 'ESTC', 'GTLB',
-  'DOCN', 'PD', 'FROG', 'APPF', 'TENB', 'QLYS', 'RPD', 'VRNS', 'S',
-  'INTU', 'PAYC', 'VRSK', 'MSFT',
-  // Memory / Semi
+  // ── SW50: Office SaaS (Cat 1) ──
+  'PAYC', 'FRSH', 'PCTY', 'MNDY', 'NOW', 'HUBS', 'WDAY',
+  // ── SW50: Productivity Tools (Cat 2) ──
+  'INTU', 'DOCU', 'U',
+  // ── SW50: Cybersecurity (Cat 3) ──
+  'ZS', 'PANW', 'CRWD',
+  // ── SW50: Dev & Infrastructure (Cat 4) ──
+  'GTLB', 'ESTC', 'NTAP', 'TEAM', 'SNOW', 'DDOG', 'NET', 'FROG',
+  // ── SW50: Payments (Cat 5) ──
+  'XYZ', 'TOST', 'WEX',
+  // ── SW50: Serial Acquirers (Cat 6) ──
+  'CSU', 'ROP', 'GPN',
+  // ── SW50: Software-Adjacent (Cat 7) ──
+  'PATH', 'ZM', 'BSY', 'SHOP', 'IOT',
+  // ── SW50: Regulatory & Enterprise (Cat 8) ──
+  'VRSK', 'TYL', 'DSGX', 'CDN', 'SNPS', 'CDNS', 'SPSC',
+  // ── D'ai universe additional names ──
+  'MDB', 'CFLT', 'BILL', 'PCOR', 'DOCN', 'PD', 'APPF', 'TENB',
+  'QLYS', 'RPD', 'VRNS', 'S',
+  // ── Memory / Semi ──
   'MU', 'DRAM', 'SMH', 'AMAT',
-  // Healthcare
-  'HCA', 'MOH',
-  // Defense (PLTR comps)
+  // ── Defense (PLTR comps) ──
   'LMT', 'GD', 'NOC',
-  // Macro / Others
-  'ADP', 'W', 'AGO', 'CRVW',
-  // Other mentioned
-  'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'AMD', 'INTC', 'AVGO',
-  'CSCO', 'SLM', 'FOUR', 'VIAV',
+  // ── China ADRs ──
+  'PDD', 'BIDU', 'TCEHY',
+  // ── Macro / Other mentioned ──
+  'ADP', 'W', 'AGO', 'CRVW', 'VIAV',
+  'AAPL', 'GOOGL', 'AMZN', 'META', 'AMD', 'AVGO', 'CSCO',
 ]);
 
 // ─── RSS PARSING ───
@@ -408,6 +421,14 @@ function extractKeyThemes(content: string): string[] {
     ['geopolitical', 'iran|war|oil|geopolit|conflict|tariff|sanctions'],
     ['gamestop', 'gamestop|gme|ryan cohen|instant berkshire|ebay deal'],
     ['offshore_finance', 'offshore|bermuda|cayman|reinsur|athene|apollo.*debt|abs|data.center.*backed'],
+    ['tragic_algebra', 'tragic algebra|sbc|stock.based compensation|dilut|omega|owners.earnings vs'],
+    ['expert_vs_skilled', 'expert software|skilled human|productivity tool|wrapped around'],
+    ['stone_classification', 'granite|sandstone|limestone|chalk|stone classif'],
+    ['aict_tiering', 'aict|ai competitive threat|existential|manageable|minimal'],
+    ['sw50_analysis', 'sw50|software.+payments|productivity tools|cybersecurity|serial acquir'],
+    ['zero_trust', 'zero trust|zscaler|identity.+data|deception tech|glasswing'],
+    ['consumption_model', 'consumption model|falcon flex|usage.based|seat.based'],
+    ['charity', 'charity|brain tumor|cancer|donation|glioblastoma|nbts'],
   ];
 
   for (const [theme, pattern] of themePatterns) {
