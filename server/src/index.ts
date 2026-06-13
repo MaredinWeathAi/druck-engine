@@ -10,6 +10,7 @@ import fundamentalRouter from './fundamental-data';
 import industryRouter from './industry-drivers';
 import alertRouter from './alert-system';
 import geoEventsRouter, { setGeoEventKeys } from './geo-events';
+import burrySubstackRouter, { initBurryTables, startRSSPolling } from './burry-substack';
 import {
   initDatabase, getDbStats, getSymbolHistory, getSymbolPhaseTimeline,
   getSymbolTransitions, getRecentTransitions, getLatestSnapshots,
@@ -750,7 +751,8 @@ async function refreshLiveData() {
 // Initialize historical database
 try {
   initDatabase();
-  console.log('[STARTUP] Historical database initialized');
+  initBurryTables();
+  console.log('[STARTUP] Historical database + Burry tables initialized');
 
   // Load persisted API key from SQLite (survives deploys)
   if (!anthropicApiKey) {
@@ -779,9 +781,9 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '14.5.0',
-    build: '2026-06-13T10:00:00Z',
-    BUILD_CANARY: 'STEEL_MAN_STRAW_MAN',
+    version: '15.0.0',
+    build: '2026-06-13T15:00:00Z',
+    BUILD_CANARY: 'BURRY_SUBSTACK_ENGINE',
     name: 'Druck Engine — Structural Regime Intelligence',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
@@ -1937,6 +1939,10 @@ app.use('/api/fundamentals', fundamentalRouter);
 app.use('/api/industry', industryRouter);
 app.use('/api/alerts', alertRouter);
 app.use('/api/geo-events', geoEventsRouter);
+app.use('/api', burrySubstackRouter);
+
+// Start Burry Substack RSS polling
+startRSSPolling();
 
 // Initialize geo-event keys
 setGeoEventKeys(anthropicApiKey, GURUFOCUS_API_KEY);
@@ -1953,7 +1959,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v13.0 — Structural Regime Intelligence + Historical Tracking`);
+  console.log(`\n  DRUCK ENGINE v15.0 — Structural Regime Intelligence + Burry Substack Engine`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);

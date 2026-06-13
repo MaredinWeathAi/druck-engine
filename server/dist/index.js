@@ -48,6 +48,7 @@ const fundamental_data_1 = __importDefault(require("./fundamental-data"));
 const industry_drivers_1 = __importDefault(require("./industry-drivers"));
 const alert_system_1 = __importDefault(require("./alert-system"));
 const geo_events_1 = __importStar(require("./geo-events"));
+const burry_substack_1 = __importStar(require("./burry-substack"));
 const history_store_1 = require("./history-store");
 // mtrp-client bridge removed — Market Intel lives entirely in Druck Engine
 const app = (0, express_1.default)();
@@ -717,7 +718,8 @@ async function refreshLiveData() {
 // Initialize historical database
 try {
     (0, history_store_1.initDatabase)();
-    console.log('[STARTUP] Historical database initialized');
+    (0, burry_substack_1.initBurryTables)();
+    console.log('[STARTUP] Historical database + Burry tables initialized');
     // Load persisted API key from SQLite (survives deploys)
     if (!anthropicApiKey) {
         const savedKey = (0, history_store_1.getSetting)('anthropic_api_key');
@@ -742,9 +744,9 @@ app.get('/api/health', (_req, res) => {
     recalcDerived();
     res.json({
         status: 'ok',
-        version: '14.5.0',
-        build: '2026-06-13T10:00:00Z',
-        BUILD_CANARY: 'STEEL_MAN_STRAW_MAN',
+        version: '15.0.0',
+        build: '2026-06-13T15:00:00Z',
+        BUILD_CANARY: 'BURRY_SUBSTACK_ENGINE',
         name: 'Druck Engine — Structural Regime Intelligence',
         timestamp: new Date().toISOString(),
         fred_key: !!FRED_API_KEY,
@@ -1825,6 +1827,9 @@ app.use('/api/fundamentals', fundamental_data_1.default);
 app.use('/api/industry', industry_drivers_1.default);
 app.use('/api/alerts', alert_system_1.default);
 app.use('/api/geo-events', geo_events_1.default);
+app.use('/api', burry_substack_1.default);
+// Start Burry Substack RSS polling
+(0, burry_substack_1.startRSSPolling)();
 // Initialize geo-event keys
 (0, geo_events_1.setGeoEventKeys)(anthropicApiKey, GURUFOCUS_API_KEY);
 // ─── SERVE STATIC FILES ───
@@ -1837,7 +1842,7 @@ app.get('*', (req, res) => {
     }
 });
 app.listen(PORT, () => {
-    console.log(`\n  DRUCK ENGINE v13.0 — Structural Regime Intelligence + Historical Tracking`);
+    console.log(`\n  DRUCK ENGINE v15.0 — Structural Regime Intelligence + Burry Substack Engine`);
     console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
     if (FRED_API_KEY)
         console.log(`  FRED API: Configured (4-hour cache)`);
