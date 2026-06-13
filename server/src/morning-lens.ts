@@ -1607,6 +1607,14 @@ function loadSeedDataIfNeeded(): number {
 // Auto-refresh on startup with resilient retry loop
 // Keeps retrying with escalating delays until we get data
 (async () => {
+  // ═══ CRITICAL: Wait for initDatabase() to run in index.ts ═══
+  // This module is imported before initDatabase() is called.
+  // The async IIFE yields here, allowing index.ts to finish
+  // its synchronous initialization (including initDatabase at line 752).
+  console.log('[STARTUP] Waiting for database initialization...');
+  await new Promise(r => setTimeout(r, 1000));
+  console.log('[STARTUP] Database wait complete, proceeding with seed loading');
+
   // ═══ STEP 0: Load seed data into SQLite if cache is empty ═══
   // This ensures fetchOHLC() has data even when Yahoo blocks us
   const seedCount = loadSeedDataIfNeeded();

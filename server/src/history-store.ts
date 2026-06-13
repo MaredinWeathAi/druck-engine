@@ -844,12 +844,10 @@ export function getCachedBars(symbol: string): { bars: any[]; fetchedAt: string 
 }
 
 export function setCachedBars(symbol: string, bars: any[]): void {
-  try {
-    db.prepare(`
-      INSERT OR REPLACE INTO bar_cache (symbol, bars_json, fetched_at, bar_count)
-      VALUES (?, ?, datetime('now'), ?)
-    `).run(symbol.toUpperCase(), JSON.stringify(bars), bars.length);
-  } catch {}
+  db.prepare(`
+    INSERT OR REPLACE INTO bar_cache (symbol, bars_json, fetched_at, bar_count)
+    VALUES (?, ?, datetime('now'), ?)
+  `).run(symbol.toUpperCase(), JSON.stringify(bars), bars.length);
 }
 
 export function getBarCacheAge(symbol: string): number | null {

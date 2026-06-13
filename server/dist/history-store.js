@@ -794,13 +794,10 @@ function getCachedBars(symbol) {
     }
 }
 function setCachedBars(symbol, bars) {
-    try {
-        db.prepare(`
-      INSERT OR REPLACE INTO bar_cache (symbol, bars_json, fetched_at, bar_count)
-      VALUES (?, ?, datetime('now'), ?)
-    `).run(symbol.toUpperCase(), JSON.stringify(bars), bars.length);
-    }
-    catch { }
+    db.prepare(`
+    INSERT OR REPLACE INTO bar_cache (symbol, bars_json, fetched_at, bar_count)
+    VALUES (?, ?, datetime('now'), ?)
+  `).run(symbol.toUpperCase(), JSON.stringify(bars), bars.length);
 }
 function getBarCacheAge(symbol) {
     try {
