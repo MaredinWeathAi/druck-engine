@@ -43,7 +43,7 @@ async function callBurryLLM(system: string, userMessage: string, maxTokens: numb
 
   try {
     console.log(`[BurryLLM] Calling claude-sonnet-4-6 with ${userMessage.length} chars...`);
-    const anthropic = new Anthropic({ apiKey, timeout: 25000 });
+    const anthropic = new Anthropic({ apiKey, timeout: 60000 });
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: maxTokens,
