@@ -340,6 +340,15 @@ let lensRefreshErrors = [];
 const LENS_CACHE_MS = 4 * 60 * 60 * 1000; // 4 hours
 // Yahoo-only symbols: futures (=F), yields (^TNX, ^FVX, ^TYX, ^IRX), FX (=X)
 const YAHOO_ONLY_PATTERN = /[=]F$|^\^TNX$|^\^FVX$|^\^TYX$|^\^IRX$|[=]X$/;
+// ── YAHOO BLOCK DETECTION ──
+// If Railway IPs are blocked, skip retries quickly instead of wasting 60s+ per symbol
+let yahooConsecutiveFailures = 0;
+const YAHOO_BLOCK_THRESHOLD = 3; // After 3 consecutive failures, assume blocked
+let yahooBlockDetected = false;
+// ── SEED LOADING DIAGNOSTICS ──
+let seedDiagnostics = {
+    loaded: false, seedPath: null, seedSymbols: 0, seeded: 0, existingCached: 0, pathsTried: [], errors: [],
+};
 async function fetchOHLC(symbol, period = '1y') {
     const years = period === '5y' ? 5 : period === '2y' ? 2 : 1;
     // ── CHECK PERSISTENT SQLite CACHE (survives deploys) — 30 day TTL ──
@@ -358,99 +367,38 @@ async function fetchOHLC(symbol, period = '1y') {
     }
     catch { }
     // ── PRIMARY: Yahoo Finance (has real OHLCV with volume) ──
-    const maxRetries = 4;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const endDate = new Date();
-            const startDate = new Date();
-            startDate.setFullYear(startDate.getFullYear() - years);
-            const result = await Promise.race([
-                yahooFinance.chart(symbol, {
-                    period1: startDate, period2: endDate, interval: '1d',
-                }, { validateResult: false }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Yahoo timeout')), 15000)),
-            ]);
-            const quotes = result?.quotes || result || [];
-            if (!quotes || !Array.isArray(quotes) || quotes.length === 0) {
-                if (attempt < maxRetries) {
-                    const delayMs = attempt * 4000;
-                    await new Promise(r => setTimeout(r, delayMs));
-                    continue;
+    // FAST FAIL: If Yahoo is blocking Railway IPs, skip retries entirely
+    if (!yahooBlockDetected) {
+        const maxRetries = 2; // Reduced from 4 — fail fast, rely on cache
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const endDate = new Date();
+                const startDate = new Date();
+                startDate.setFullYear(startDate.getFullYear() - years);
+                const result = await Promise.race([
+                    yahooFinance.chart(symbol, {
+                        period1: startDate, period2: endDate, interval: '1d',
+                    }, { validateResult: false }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Yahoo timeout')), 8000)), // 8s timeout (was 15s)
+                ]);
+                const quotes = result?.quotes || result || [];
+                if (!quotes || !Array.isArray(quotes) || quotes.length === 0) {
+                    break; // No retries for empty results
                 }
-                break;
-            }
-            const bars = quotes
-                .filter((q) => q.close != null && q.close > 0)
-                .map((q) => ({
-                date: new Date(q.date),
-                open: q.open || q.close,
-                high: q.high || q.close,
-                low: q.low || q.close,
-                close: q.close,
-                volume: q.volume || 0,
-            }));
-            if (bars.length >= 50) {
-                // Persist to SQLite for deploy survival
-                try {
-                    (0, history_store_1.setCachedBars)(symbol, bars.map((b) => ({
-                        date: b.date.toISOString().split('T')[0], open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume,
-                    })));
-                }
-                catch { }
-                return bars;
-            }
-        }
-        catch (err) {
-            const msg = err?.message || 'Unknown';
-            const isRateLimit = msg.includes('Too Many') || msg.includes('429') || msg.includes('throttle');
-            const isValidation = msg.includes('validation') || msg.includes('schema') || msg.includes('Failed Yahoo');
-            const delayMs = isRateLimit ? attempt * 8000 : (isValidation ? attempt * 2000 : attempt * 4000);
-            if (attempt < maxRetries) {
-                if (!isValidation) {
-                    console.warn(`[YF] Error fetching ${symbol} (attempt ${attempt}/${maxRetries}): ${msg.slice(0, 80)}, retrying in ${delayMs / 1000}s...`);
-                }
-                await new Promise(r => setTimeout(r, delayMs));
-                continue;
-            }
-            break;
-        }
-    }
-    // ── FALLBACK 2: Raw Yahoo chart API (bypasses yahoo-finance2 library patterns) ──
-    try {
-        const endTs = Math.floor(Date.now() / 1000);
-        const startTs = endTs - (years * 365.25 * 86400);
-        const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${Math.floor(startTs)}&period2=${endTs}&interval=1d`;
-        const chartResp = await Promise.race([
-            fetch(chartUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-                    'Accept': 'application/json',
-                },
-            }),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('raw_yahoo_timeout')), 12000)),
-        ]);
-        if (chartResp.ok) {
-            const chartData = await chartResp.json();
-            const result = chartData?.chart?.result?.[0];
-            const timestamps = result?.timestamp || [];
-            const ohlcv = result?.indicators?.quote?.[0] || {};
-            if (timestamps.length >= 50) {
-                const bars = [];
-                for (let k = 0; k < timestamps.length; k++) {
-                    const c = ohlcv.close?.[k];
-                    if (c == null || c <= 0)
-                        continue;
-                    bars.push({
-                        date: new Date(timestamps[k] * 1000),
-                        open: ohlcv.open?.[k] || c,
-                        high: ohlcv.high?.[k] || c,
-                        low: ohlcv.low?.[k] || c,
-                        close: c,
-                        volume: ohlcv.volume?.[k] || 0,
-                    });
-                }
+                const bars = quotes
+                    .filter((q) => q.close != null && q.close > 0)
+                    .map((q) => ({
+                    date: new Date(q.date),
+                    open: q.open || q.close,
+                    high: q.high || q.close,
+                    low: q.low || q.close,
+                    close: q.close,
+                    volume: q.volume || 0,
+                }));
                 if (bars.length >= 50) {
-                    console.log(`[YF-RAW] Direct chart API: ${bars.length} bars for ${symbol}`);
+                    // Success — reset block detection
+                    yahooConsecutiveFailures = 0;
+                    yahooBlockDetected = false;
                     try {
                         (0, history_store_1.setCachedBars)(symbol, bars.map((b) => ({
                             date: b.date.toISOString().split('T')[0], open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume,
@@ -460,11 +408,76 @@ async function fetchOHLC(symbol, period = '1y') {
                     return bars;
                 }
             }
+            catch (err) {
+                const msg = err?.message || 'Unknown';
+                const isFetchFailed = msg.includes('fetch failed') || msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT') || msg.includes('Yahoo timeout');
+                if (isFetchFailed) {
+                    yahooConsecutiveFailures++;
+                    if (yahooConsecutiveFailures >= YAHOO_BLOCK_THRESHOLD) {
+                        yahooBlockDetected = true;
+                        console.warn(`[YF] Yahoo block detected after ${yahooConsecutiveFailures} consecutive failures — skipping Yahoo for remaining symbols`);
+                    }
+                }
+                if (attempt < maxRetries && !isFetchFailed) {
+                    await new Promise(r => setTimeout(r, attempt * 2000));
+                    continue;
+                }
+                break;
+            }
         }
     }
-    catch (rawErr) {
-        // Raw Yahoo also failed — continue to GuruFocus
-    }
+    // ── FALLBACK 2: Raw Yahoo chart API (bypasses yahoo-finance2 library patterns) ──
+    // Also skip if Yahoo is blocked
+    if (!yahooBlockDetected)
+        try {
+            const endTs = Math.floor(Date.now() / 1000);
+            const startTs = endTs - (years * 365.25 * 86400);
+            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${Math.floor(startTs)}&period2=${endTs}&interval=1d`;
+            const chartResp = await Promise.race([
+                fetch(chartUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+                        'Accept': 'application/json',
+                    },
+                }),
+                new Promise((_, rej) => setTimeout(() => rej(new Error('raw_yahoo_timeout')), 8000)), // 8s (was 12s)
+            ]);
+            if (chartResp.ok) {
+                const chartData = await chartResp.json();
+                const result = chartData?.chart?.result?.[0];
+                const timestamps = result?.timestamp || [];
+                const ohlcv = result?.indicators?.quote?.[0] || {};
+                if (timestamps.length >= 50) {
+                    const bars = [];
+                    for (let k = 0; k < timestamps.length; k++) {
+                        const c = ohlcv.close?.[k];
+                        if (c == null || c <= 0)
+                            continue;
+                        bars.push({
+                            date: new Date(timestamps[k] * 1000),
+                            open: ohlcv.open?.[k] || c,
+                            high: ohlcv.high?.[k] || c,
+                            low: ohlcv.low?.[k] || c,
+                            close: c,
+                            volume: ohlcv.volume?.[k] || 0,
+                        });
+                    }
+                    if (bars.length >= 50) {
+                        console.log(`[YF-RAW] Direct chart API: ${bars.length} bars for ${symbol}`);
+                        try {
+                            (0, history_store_1.setCachedBars)(symbol, bars.map((b) => ({
+                                date: b.date.toISOString().split('T')[0], open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume,
+                            })));
+                        }
+                        catch { }
+                        return bars;
+                    }
+                }
+            }
+        }
+        catch (rawErr) {
+            // Raw Yahoo also failed — continue to GuruFocus
+        }
     // ── FALLBACK 3: GuruFocus (close-only, no volume — but better than nothing) ──
     try {
         const gfUrl = `https://api.gurufocus.com/public/user/${GURUFOCUS_API_KEY}/stock/${encodeURIComponent(symbol)}/price`;
@@ -995,22 +1008,35 @@ async function refreshMorningLens() {
     console.log('[LENS] Starting Morning Lens data refresh...');
     const errors = [];
     const startTime = Date.now();
-    // Fetch OHLC in small batches with generous delays to avoid Yahoo Finance rate limits
-    // Railway shared IPs get throttled harder — conservative settings are critical
+    // Reset Yahoo block detection at start of each refresh
+    yahooConsecutiveFailures = 0;
+    yahooBlockDetected = false;
+    // Fetch OHLC in batches — ADAPTIVE delays (0 for cache hits, 2s for live)
     const allBars = new Map();
-    const BATCH_SIZE = 2; // Only 2 concurrent (was 3 — less pressure on Yahoo)
-    const BATCH_DELAY_MS = 3000; // 3s between batches (was 2s)
+    const BATCH_SIZE = 4; // Increased from 2: cache hits are instant
     const failedSymbols = [];
-    // Shuffle instrument order so the same symbols don't always land at the tail
-    // where rate-limiting is worst. Fisher-Yates shuffle on a copy.
+    // Pre-check which symbols are cached to estimate timing
+    let cachedCount = 0;
+    for (const inst of INSTRUMENTS) {
+        const age = (0, history_store_1.getBarCacheAge)(inst.symbol);
+        if (age !== null && age < 43200)
+            cachedCount++;
+    }
+    const cacheRatio = cachedCount / INSTRUMENTS.length;
+    console.log(`[LENS] Pre-check: ${cachedCount}/${INSTRUMENTS.length} instruments cached (${(cacheRatio * 100).toFixed(0)}%)`);
+    // Don't shuffle when mostly cached — order doesn't matter for cache hits
     const shuffled = [...INSTRUMENTS];
-    for (let si = shuffled.length - 1; si > 0; si--) {
-        const sj = Math.floor(Math.random() * (si + 1));
-        [shuffled[si], shuffled[sj]] = [shuffled[sj], shuffled[si]];
+    if (cacheRatio < 0.5) {
+        for (let si = shuffled.length - 1; si > 0; si--) {
+            const sj = Math.floor(Math.random() * (si + 1));
+            [shuffled[si], shuffled[sj]] = [shuffled[sj], shuffled[si]];
+        }
     }
     for (let i = 0; i < shuffled.length; i += BATCH_SIZE) {
         const batch = shuffled.slice(i, i + BATCH_SIZE);
+        const batchStart = Date.now();
         const batchResults = await Promise.allSettled(batch.map(inst => fetchOHLC(inst.symbol, '1y').then(bars => ({ symbol: inst.symbol, bars }))));
+        const batchElapsed = Date.now() - batchStart;
         for (let j = 0; j < batchResults.length; j++) {
             const result = batchResults[j];
             const symbol = batch[j]?.symbol || '?';
@@ -1023,32 +1049,33 @@ async function refreshMorningLens() {
                 failedSymbols.push(symbol);
             }
         }
-        // Delay between batches
+        // ADAPTIVE DELAY: skip if batch was fast (all cache hits), delay if live fetches
         if (i + BATCH_SIZE < shuffled.length) {
-            await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+            if (batchElapsed > 500) {
+                // Batch involved live fetches — delay to avoid rate limiting
+                await new Promise(r => setTimeout(r, 2000));
+            }
+            // Cache hits are instant — no delay needed
         }
     }
-    // RETRY PASS: Re-attempt failed symbols individually with longer delays
-    // This catches rate-limit failures that resolve after a cooldown
-    if (failedSymbols.length > 0 && failedSymbols.length < INSTRUMENTS.length * 0.8) {
+    // RETRY PASS: Only if Yahoo isn't blocked and failures are under 80%
+    if (failedSymbols.length > 0 && failedSymbols.length < INSTRUMENTS.length * 0.5 && !yahooBlockDetected) {
         console.log(`[LENS] Retry pass: ${failedSymbols.length} failed symbols...`);
-        await new Promise(r => setTimeout(r, 15000)); // 15s cooldown before retries (was 10s)
+        await new Promise(r => setTimeout(r, 10000));
         for (const sym of failedSymbols) {
+            if (yahooBlockDetected)
+                break; // Stop retrying if block detected mid-retry
             try {
                 const bars = await fetchOHLC(sym, '1y');
                 if (bars.length > 0) {
                     allBars.set(sym, bars);
-                    // Remove from errors
                     const idx = errors.findIndex(e => e.startsWith(sym + ':'));
                     if (idx >= 0)
                         errors.splice(idx, 1);
-                    console.log(`[LENS] Retry succeeded: ${sym} (${bars.length} bars)`);
                 }
             }
-            catch (e) {
-                // Still failed — leave in errors
-            }
-            await new Promise(r => setTimeout(r, 5000)); // 5s between individual retries
+            catch (e) { }
+            await new Promise(r => setTimeout(r, 3000));
         }
     }
     const fetchDuration = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -1250,9 +1277,11 @@ function loadSeedDataIfNeeded() {
             if (age !== null)
                 cachedCount++;
         }
+        seedDiagnostics.existingCached = cachedCount;
         // If we already have > 50% cached, skip seeding
         if (cachedCount >= INSTRUMENTS.length * 0.5) {
             console.log(`[SEED] SQLite cache has ${cachedCount}/${INSTRUMENTS.length} instruments — skipping seed`);
+            seedDiagnostics.loaded = true;
             return cachedCount;
         }
         // Look for seed file in multiple locations (handles different build layouts)
@@ -1262,24 +1291,55 @@ function loadSeedDataIfNeeded() {
             path.join(process.cwd(), 'server', 'data', 'seed-bars.json'),
             '/app/server/data/seed-bars.json', // Railway container
         ];
+        seedDiagnostics.pathsTried = seedPaths.map(p => `${p} (exists: ${fs.existsSync(p)})`);
+        // Log __dirname and cwd for debugging
+        console.log(`[SEED] __dirname: ${__dirname}`);
+        console.log(`[SEED] process.cwd(): ${process.cwd()}`);
+        console.log(`[SEED] Searching paths: ${seedPaths.join(', ')}`);
         let seedData = null;
         for (const sp of seedPaths) {
             try {
-                if (fs.existsSync(sp)) {
+                const exists = fs.existsSync(sp);
+                console.log(`[SEED] Checking ${sp} — exists: ${exists}`);
+                if (exists) {
                     const raw = fs.readFileSync(sp, 'utf-8');
                     seedData = JSON.parse(raw);
-                    console.log(`[SEED] Loaded seed file from ${sp} (${Object.keys(seedData).length} instruments)`);
+                    seedDiagnostics.seedPath = sp;
+                    seedDiagnostics.seedSymbols = Object.keys(seedData).length;
+                    console.log(`[SEED] ✓ Found seed file at ${sp} (${Object.keys(seedData).length} instruments, ${(raw.length / 1024 / 1024).toFixed(2)} MB)`);
                     break;
                 }
             }
-            catch { }
+            catch (readErr) {
+                console.error(`[SEED] Error reading ${sp}: ${readErr?.message}`);
+                seedDiagnostics.errors.push(`Read ${sp}: ${readErr?.message}`);
+            }
         }
         if (!seedData) {
-            console.warn('[SEED] No seed file found — instruments will load slowly via live fetches');
+            console.warn('[SEED] ✗ No seed file found at any path — instruments will load slowly via live fetches');
+            // List what's actually in the data directory for debugging
+            try {
+                const dataDir = path.join(__dirname, '..', 'data');
+                if (fs.existsSync(dataDir)) {
+                    const files = fs.readdirSync(dataDir);
+                    console.log(`[SEED] Files in ${dataDir}: ${files.join(', ')}`);
+                }
+                else {
+                    console.log(`[SEED] Data dir ${dataDir} does not exist`);
+                }
+            }
+            catch { }
+            try {
+                const parentDir = path.join(__dirname, '..');
+                const files = fs.readdirSync(parentDir);
+                console.log(`[SEED] Files in ${parentDir}: ${files.join(', ')}`);
+            }
+            catch { }
             return cachedCount;
         }
         // Load each instrument into SQLite cache
         let seeded = 0;
+        let seedErrors = 0;
         for (const [symbol, compactBars] of Object.entries(seedData)) {
             // Skip if already cached (don't overwrite fresher data)
             const existing = (0, history_store_1.getBarCacheAge)(symbol);
@@ -1299,14 +1359,30 @@ function loadSeedDataIfNeeded() {
                     (0, history_store_1.setCachedBars)(symbol, bars);
                     seeded++;
                 }
-                catch { }
+                catch (setErr) {
+                    seedErrors++;
+                    if (seedErrors <= 3) {
+                        console.error(`[SEED] setCachedBars failed for ${symbol}: ${setErr?.message}`);
+                        seedDiagnostics.errors.push(`setCachedBars ${symbol}: ${setErr?.message}`);
+                    }
+                }
             }
         }
-        console.log(`[SEED] ✓ Loaded ${seeded} instruments from seed data into SQLite cache`);
+        seedDiagnostics.seeded = seeded;
+        seedDiagnostics.loaded = seeded > 0;
+        console.log(`[SEED] ✓ Loaded ${seeded} instruments from seed data (${seedErrors} errors)`);
+        // Verify a few instruments actually cached
+        const testSymbols = ['SPY', 'QQQ', 'IWM', 'XLK', 'GLD'];
+        for (const sym of testSymbols) {
+            const age = (0, history_store_1.getBarCacheAge)(sym);
+            const cached = (0, history_store_1.getCachedBars)(sym);
+            console.log(`[SEED] Verify ${sym}: age=${age !== null ? Math.round(age) + 'min' : 'null'}, bars=${cached?.bars?.length || 0}`);
+        }
         return cachedCount + seeded;
     }
     catch (seedErr) {
         console.error(`[SEED] Error loading seed: ${seedErr?.message}`);
+        seedDiagnostics.errors.push(`Top-level: ${seedErr?.message}`);
         return 0;
     }
 }
@@ -1857,6 +1933,9 @@ router.get('/lens/debug', (req, res) => {
             : instrumentSnapshots.size >= INSTRUMENTS.length * 0.5 ? 'DEGRADED'
                 : instrumentSnapshots.size > 0 ? 'POOR'
                     : 'NO DATA',
+        seedDiagnostics,
+        yahooBlockDetected,
+        yahooConsecutiveFailures,
     });
 });
 // Force refresh
