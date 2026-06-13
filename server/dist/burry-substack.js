@@ -130,18 +130,22 @@ const KNOWN_TICKERS = new Set([
     // Longs
     'ADBE', 'BABA', 'PYPL', 'VEEV', 'ZTS', 'SFM', 'LULU', 'FMCC', 'FNMA',
     'GME', 'EBAY', 'JD', 'PDD', 'BIDU', 'TCEHY',
-    // Shorts / Puts
-    'PLTR', 'NVDA', 'ORCL', 'QQQ', 'SOXX', 'SPY',
+    'MELI', 'BRKR', 'BRKRP', 'FISV', 'MSCI', 'ADSK', 'SLM', 'FOUR',
+    // Shorts / Puts / Outright shorts
+    'PLTR', 'NVDA', 'ORCL', 'QQQ', 'SOXX', 'SPY', 'TSLA', 'INTC',
     // Software series coverage
     'CRM', 'NOW', 'WDAY', 'HUBS', 'SNOW', 'DDOG', 'CRWD', 'ZS', 'PANW',
     'TEAM', 'MDB', 'NET', 'CFLT', 'MNDY', 'BILL', 'PCOR', 'ESTC', 'GTLB',
     'DOCN', 'PD', 'FROG', 'APPF', 'TENB', 'QLYS', 'RPD', 'VRNS', 'S',
+    'INTU', 'PAYC', 'VRSK', 'MSFT',
     // Memory / Semi
     'MU', 'DRAM', 'SMH', 'AMAT',
     // Healthcare
     'HCA', 'MOH',
     // Defense (PLTR comps)
     'LMT', 'GD', 'NOC',
+    // Macro / Others
+    'ADP', 'W', 'AGO', 'CRVW',
     // Other mentioned
     'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'AMD', 'INTC', 'AVGO',
     'CSCO', 'SLM', 'FOUR', 'VIAV',
@@ -353,6 +357,13 @@ function extractKeyThemes(content) {
         ['corporate_governance', 'buyback|management|ceo|board|compensation|stock.based'],
         ['options_strategy', 'puts|calls|strike|expiry|roll|maturity|options'],
         ['iv15_valuation', 'iv15|intrinsic value|overvalued|undervalued|fair value'],
+        ['tokenmaxxing', 'tokenmaxxing|token.?maxxing|quota.driven|leaderboard.driven|overconsumption'],
+        ['compression', 'compression|compress|seat.loss|internalize|replaced by ai|killed.*code'],
+        ['bezzle', 'bezzle|galbraith|wealth effect|psychic wealth'],
+        ['private_credit', 'private credit|covenant.lite|shadow lend|structured credit|saaspocalypse'],
+        ['geopolitical', 'iran|war|oil|geopolit|conflict|tariff|sanctions'],
+        ['gamestop', 'gamestop|gme|ryan cohen|instant berkshire|ebay deal'],
+        ['offshore_finance', 'offshore|bermuda|cayman|reinsur|athene|apollo.*debt|abs|data.center.*backed'],
     ];
     for (const [theme, pattern] of themePatterns) {
         const regex = new RegExp(pattern, 'i');
@@ -401,6 +412,13 @@ function storePost(post) {
     const tickers = extractTickersMentioned(post.content);
     const themes = extractKeyThemes(post.content);
     const wordCount = post.content.split(/\s+/).length;
+    // Pre-delete child records if this slug already exists (INSERT OR REPLACE
+    // deletes then inserts, which fails on FK constraints without CASCADE)
+    const existingPost = d.prepare('SELECT id FROM burry_posts WHERE slug = ?').get(post.slug);
+    if (existingPost) {
+        d.prepare('DELETE FROM burry_positions WHERE post_id = ?').run(existingPost.id);
+        d.prepare('DELETE FROM burry_historical_refs WHERE post_id = ?').run(existingPost.id);
+    }
     const result = d.prepare(`
     INSERT OR REPLACE INTO burry_posts
       (slug, title, subtitle, post_date, url, content_text, post_type,
