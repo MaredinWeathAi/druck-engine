@@ -4999,6 +4999,101 @@ function analyzeTickerFn() {
       html += '</div>';
     }
 
+    // ═══ BURRY'S VIEW (siloed reference) ═══
+    if (d.burryInsight && (d.burryInsight.hasPosition || d.burryInsight.totalMentions > 0 || d.burryInsight.narrative)) {
+      var bi = d.burryInsight;
+      var burryBorder = '#e879f9'; // purple to distinguish from Druckenmiller (blue accent)
+      html += '<div class="card" style="padding:16px;margin-bottom:12px;border-left:3px solid ' + burryBorder + ';background:rgba(232,121,249,0.03)">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+      html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:' + burryBorder + '">Burry\'s view — Cassandra Unchained</div>';
+      // Position badge
+      if (bi.hasPosition) {
+        var dirColor = bi.latestDirection === 'long' ? '#1D9E75' : bi.latestDirection === 'short' ? '#E24B4A' : 'var(--dim)';
+        html += '<span style="padding:3px 10px;border-radius:5px;font-size:11px;font-weight:500;background:' + dirColor + '18;color:' + dirColor + ';border:1px solid ' + dirColor + '44">' + (bi.latestDirection || '').toUpperCase() + ' POSITION</span>';
+      } else {
+        html += '<span style="padding:3px 10px;border-radius:5px;font-size:10px;color:var(--dim);background:var(--card);border:1px solid var(--border)">No active position</span>';
+      }
+      html += '</div>';
+
+      // Position details
+      if (bi.hasPosition) {
+        html += '<div style="padding:10px 12px;background:var(--card);border-radius:6px;margin-bottom:10px">';
+        html += '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px">';
+        if (bi.latestAction) html += '<div><span style="color:var(--dim)">Action:</span> <span style="font-weight:500">' + bi.latestAction + '</span></div>';
+        if (bi.latestPrice) html += '<div><span style="color:var(--dim)">Price:</span> <span style="font-weight:500">$' + bi.latestPrice + '</span></div>';
+        if (bi.instrumentType && bi.instrumentType !== 'stock') html += '<div><span style="color:var(--dim)">Instrument:</span> <span style="font-weight:500">' + bi.instrumentType + '</span></div>';
+        if (bi.optionDetails) html += '<div><span style="color:var(--dim)">Details:</span> <span style="font-weight:500">' + bi.optionDetails + '</span></div>';
+        if (bi.latestDate) html += '<div><span style="color:var(--dim)">Date:</span> <span style="font-weight:500">' + bi.latestDate + '</span></div>';
+        html += '</div>';
+        if (bi.rationale) {
+          html += '<div style="font-size:11px;color:var(--text);margin-top:6px;line-height:1.5;opacity:0.85"><span style="color:var(--dim)">Rationale:</span> ' + bi.rationale + '</div>';
+        }
+        // Position history timeline
+        if (bi.positionHistory && bi.positionHistory.length > 1) {
+          html += '<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px">';
+          html += '<div style="font-size:10px;color:var(--dim);margin-bottom:4px">Position history (' + bi.positionHistory.length + ' actions)</div>';
+          bi.positionHistory.forEach(function(ph) {
+            var phDirColor = ph.direction === 'long' ? '#1D9E75' : '#E24B4A';
+            html += '<div style="font-size:11px;color:var(--text);padding:1px 0"><span style="color:var(--dim)">' + ph.postDate + ':</span> <span style="color:' + phDirColor + ';font-weight:500">' + ph.action + '</span>' + (ph.price ? ' @$' + ph.price : '') + ' <span style="color:var(--dim)">(' + ph.instrumentType + ')</span></div>';
+          });
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      // Burry narrative (LLM-powered)
+      if (bi.narrative && bi.narrative.length > 30) {
+        var burryParas = bi.narrative.split(/\n\n+/);
+        burryParas.forEach(function(p) {
+          if (p.trim()) html += '<div style="font-size:13px;color:var(--text);margin-bottom:10px;line-height:1.6">' + p.trim() + '</div>';
+        });
+      }
+
+      // Post mentions
+      if (bi.postMentions && bi.postMentions.length > 0) {
+        html += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">';
+        html += '<div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:' + burryBorder + ';margin-bottom:6px">Mentioned in ' + bi.totalMentions + ' post' + (bi.totalMentions !== 1 ? 's' : '') + '</div>';
+        bi.postMentions.slice(0, 5).forEach(function(pm) {
+          var sentColor = pm.sentiment === 'bullish' ? '#1D9E75' : pm.sentiment === 'bearish' ? '#E24B4A' : 'var(--dim)';
+          html += '<div style="font-size:11px;color:var(--text);padding:2px 0">';
+          html += '<span style="color:var(--dim)">' + pm.postDate + '</span> ';
+          html += '"' + pm.title + '" ';
+          html += '<span style="color:' + sentColor + ';font-size:10px">' + (pm.sentiment || '') + '</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      // Author comments about this ticker
+      if (bi.authorComments && bi.authorComments.length > 0) {
+        html += '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">';
+        html += '<div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:' + burryBorder + ';margin-bottom:6px">Burry\'s comments (' + bi.authorComments.length + ')</div>';
+        bi.authorComments.slice(0, 4).forEach(function(ac) {
+          html += '<div style="padding:6px 10px;background:var(--surface);border-radius:5px;margin-bottom:4px;border-left:2px solid ' + burryBorder + '44">';
+          if (ac.isReply && ac.subscriberQuestion) {
+            html += '<div style="font-size:10px;color:var(--dim);margin-bottom:2px;font-style:italic">Q: "' + ac.subscriberQuestion.substring(0, 120) + (ac.subscriberQuestion.length > 120 ? '...' : '') + '"</div>';
+          }
+          html += '<div style="font-size:11px;color:var(--text);line-height:1.5">' + ac.text.substring(0, 250) + (ac.text.length > 250 ? '...' : '') + '</div>';
+          html += '<div style="font-size:9px;color:var(--dim);margin-top:2px">' + ac.date + ' — on "' + ac.postTitle + '"</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      // Related themes
+      if (bi.relatedThemes && bi.relatedThemes.length > 0) {
+        html += '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px">';
+        bi.relatedThemes.forEach(function(th) {
+          html += '<span style="padding:2px 8px;border-radius:4px;font-size:10px;background:' + burryBorder + '12;color:' + burryBorder + ';border:1px solid ' + burryBorder + '33">' + th.theme.replace(/_/g, ' ') + ' (' + th.count + ')</span>';
+        });
+        html += '</div>';
+      }
+
+      // Silo disclaimer
+      html += '<div style="margin-top:10px;font-size:9px;color:var(--dim);opacity:0.6">Siloed reference — Burry\'s analysis is independent from the Druckenmiller framework above.</div>';
+      html += '</div>';
+    }
+
     // ═══ REASONING ═══
     if (v.reasoning && v.reasoning.length > 0) {
       html += '<div class="card" style="padding:12px 16px;margin-bottom:12px">';

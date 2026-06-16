@@ -18,6 +18,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.initBurryTables = initBurryTables;
 exports.startRSSPolling = startRSSPolling;
 exports.stopRSSPolling = stopRSSPolling;
+exports.getBurryTickerInsight = getBurryTickerInsight;
 const express_1 = require("express");
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 const path_1 = __importDefault(require("path"));
@@ -1396,5 +1397,114 @@ router.get('/burry/comments', (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+async function getBurryTickerInsight(symbol) {
+    const upper = symbol.toUpperCase();
+    let d;
+    try {
+        d = getDb();
+    }
+    catch {
+        return emptyBurryInsight(upper, 'Burry database not initialized.');
+    }
+    // Check if Burry tables exist / have data
+    try {
+        const cnt = d.prepare('SELECT COUNT(*) as cnt FROM burry_posts').get().cnt;
+        if (cnt === 0)
+            return emptyBurryInsight(upper, 'No Burry posts ingested yet.');
+    }
+    catch {
+        return emptyBurryInsight(upper, 'Burry tables not initialized.');
+    }
+    // 1. Positions for this ticker
+    const positions = d.prepare(`
+    SELECT bp.action, bp.direction, bp.price, bp.position_size,
+           bp.instrument_type, bp.option_details, bp.rationale,
+           p.post_date, p.title as post_title
+    FROM burry_positions bp
+    JOIN burry_posts p ON bp.post_id = p.id
+    WHERE bp.ticker = ?
+    ORDER BY p.post_date DESC
+  `).all(upper);
+    // 2. Posts mentioning this ticker
+    const mentions = d.prepare(`
+    SELECT title, post_date, sentiment, post_type
+    FROM burry_posts
+    WHERE tickers_mentioned LIKE ?
+    ORDER BY post_date DESC
+    LIMIT 10
+  `).all(`%"${upper}"%`);
+    // 3. Burry's author comments mentioning this ticker
+    let comments = [];
+    try {
+        comments = d.prepare(`
+      SELECT bc.comment_text, bc.comment_date, bc.is_author_reply,
+             bc.subscriber_question, bp.title as post_title
+      FROM burry_comments bc
+      JOIN burry_posts bp ON bc.post_id = bp.id
+      WHERE (bc.is_author_comment = 1 OR bc.is_author_reply = 1)
+        AND (bc.tickers_mentioned LIKE ? OR bc.comment_text LIKE ?)
+      ORDER BY bc.comment_date DESC
+      LIMIT 8
+    `).all(`%"${upper}"%`, `%${upper}%`);
+    }
+    catch { /* comments table may not exist on older deploys */ }
+    // 4. Themes related to this ticker
+    let themes = [];
+    try {
+        themes = d.prepare(`
+      SELECT theme_name, mention_count, last_mentioned
+      FROM burry_themes
+      WHERE status = 'active' AND related_tickers LIKE ?
+      ORDER BY mention_count DESC
+      LIMIT 6
+    `).all(`%${upper}%`);
+    }
+    catch { }
+    // 5. LLM narrative (uses 15-min cache internally)
+    let narrative = '';
+    try {
+        narrative = await generateLLMBurryNarrative(upper);
+    }
+    catch {
+        narrative = generateTickerNarrative(upper, getBurryCurrentState());
+    }
+    const latest = positions[0] || null;
+    return {
+        symbol: upper,
+        hasPosition: positions.length > 0,
+        latestDirection: latest?.direction || null,
+        latestAction: latest?.action || null,
+        latestPrice: latest?.price || null,
+        latestDate: latest?.post_date || null,
+        instrumentType: latest?.instrument_type || null,
+        optionDetails: latest?.option_details || null,
+        rationale: latest?.rationale || null,
+        positionHistory: positions.map((p) => ({
+            action: p.action, direction: p.direction, price: p.price,
+            instrumentType: p.instrument_type, optionDetails: p.option_details,
+            postDate: p.post_date, postTitle: p.post_title,
+        })),
+        postMentions: mentions.map((m) => ({
+            title: m.title, postDate: m.post_date, sentiment: m.sentiment, postType: m.post_type,
+        })),
+        totalMentions: mentions.length,
+        authorComments: comments.map((c) => ({
+            text: c.comment_text, date: c.comment_date, postTitle: c.post_title,
+            isReply: !!c.is_author_reply, subscriberQuestion: c.subscriber_question || null,
+        })),
+        relatedThemes: themes.map((t) => ({
+            theme: t.theme_name, count: t.mention_count, lastSeen: t.last_mentioned,
+        })),
+        narrative,
+    };
+}
+function emptyBurryInsight(symbol, reason) {
+    return {
+        symbol, hasPosition: false, latestDirection: null, latestAction: null,
+        latestPrice: null, latestDate: null, instrumentType: null, optionDetails: null,
+        rationale: null, positionHistory: [], postMentions: [], totalMentions: 0,
+        authorComments: [], relatedThemes: [], narrative: reason,
+    };
+}
 exports.default = router;
 //# sourceMappingURL=burry-substack.js.map

@@ -11,6 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getBurryTickerInsight } from './burry-substack';
 
 // ── LLM PROVIDER ABSTRACTION ──
 // Auto-detects Anthropic vs OpenAI key and routes accordingly
@@ -3402,10 +3403,11 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
   }
 
   try {
-    // Fetch stock data + SPY benchmark in parallel
-    const [stockBars, spyBars] = await Promise.all([
+    // Fetch stock data + SPY benchmark + Burry insight in parallel
+    const [stockBars, spyBars, burryInsight] = await Promise.all([
       fetchTickerBars(symbol, 2),
       fetchTickerBars('SPY', 2),
+      getBurryTickerInsight(symbol).catch(() => null),
     ]);
 
     if (stockBars.length < 50) {
@@ -3567,6 +3569,9 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
       sizingRegime,
 
       sectorDetected: sectorName,
+
+      // Burry Lens — siloed read-only reference from Substack analysis
+      burryInsight: burryInsight || null,
 
       // Narrative (LLM with rule-based fallback when LLM is unavailable)
       narrative: await (async () => {
