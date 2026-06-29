@@ -11,6 +11,8 @@ import industryRouter from './industry-drivers';
 import alertRouter from './alert-system';
 import geoEventsRouter, { setGeoEventKeys } from './geo-events';
 import burrySubstackRouter, { initBurryTables, startRSSPolling } from './burry-substack';
+import { computeVolumeBreakdown, computeWatchlistVolumeBadge } from './volume-analysis';
+import { fetchTickerBars } from './morning-lens';
 import {
   initDatabase, getDbStats, getSymbolHistory, getSymbolPhaseTimeline,
   getSymbolTransitions, getRecentTransitions, getLatestSnapshots,
@@ -781,9 +783,9 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '15.5.0',
-    build: '2026-06-16T18:45:00Z',
-    BUILD_CANARY: 'DYNAMIC_VERSION_DISPLAY',
+    version: '16.0.0',
+    build: '2026-06-29T14:00:00Z',
+    BUILD_CANARY: 'INSTITUTIONAL_VOLUME_BREAKDOWN',
     name: 'Druck Engine — Structural Regime Intelligence',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
@@ -1941,6 +1943,35 @@ app.use('/api/alerts', alertRouter);
 app.use('/api/geo-events', geoEventsRouter);
 app.use('/api', burrySubstackRouter);
 
+// ─── VOLUME ANALYSIS ROUTES ───
+app.get('/api/volume/:symbol', async (req, res) => {
+  try {
+    const symbol = decodeURIComponent(req.params.symbol).toUpperCase();
+    const bars = await fetchTickerBars(symbol, 2);
+    if (bars.length < 50) {
+      return res.status(404).json({ error: `Insufficient data for ${symbol}` });
+    }
+    const result = await computeVolumeBreakdown(symbol, bars);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Volume analysis failed' });
+  }
+});
+
+app.get('/api/volume/badge/:symbol', async (req, res) => {
+  try {
+    const symbol = decodeURIComponent(req.params.symbol).toUpperCase();
+    const bars = await fetchTickerBars(symbol, 2);
+    if (bars.length < 50) {
+      return res.json({ symbol, turnoverPct: null, badgeColor: 'gray', badgeLabel: '—' });
+    }
+    const badge = await computeWatchlistVolumeBadge(symbol, bars);
+    res.json(badge);
+  } catch (err: any) {
+    res.json({ symbol: req.params.symbol, turnoverPct: null, badgeColor: 'gray', badgeLabel: '?' });
+  }
+});
+
 // Start Burry Substack RSS polling
 startRSSPolling();
 
@@ -1959,7 +1990,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v15.5.0 — Structural Regime Intelligence + Dynamic Version Display`);
+  console.log(`\n  DRUCK ENGINE v16.0.0 — Structural Regime Intelligence + Institutional Volume Breakdown`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);

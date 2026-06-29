@@ -1,3 +1,4 @@
+import { OHLCVBar } from './inflection-engine';
 declare const router: import("express-serve-static-core").Router;
 interface Instrument {
     symbol: string;
@@ -12,6 +13,7 @@ interface Instrument {
 }
 declare const INSTRUMENTS: Instrument[];
 declare function refreshMorningLens(): Promise<void>;
+declare function fetchTickerBars(symbol: string, years?: number): Promise<OHLCVBar[]>;
 export default router;
-export { INSTRUMENTS, refreshMorningLens };
+export { INSTRUMENTS, refreshMorningLens, fetchTickerBars };
 //# sourceMappingURL=morning-lens.d.ts.map

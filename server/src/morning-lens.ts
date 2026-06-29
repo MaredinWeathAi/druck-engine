@@ -12,6 +12,7 @@ import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getBurryTickerInsight } from './burry-substack';
+import { computeVolumeBreakdown } from './volume-analysis';
 
 // ── LLM PROVIDER ABSTRACTION ──
 // Auto-detects Anthropic vs OpenAI key and routes accordingly
@@ -3404,11 +3405,18 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
 
   try {
     // Fetch stock data + SPY benchmark + Burry insight in parallel
+    const stockBarsPromise = fetchTickerBars(symbol, 2);
     const [stockBars, spyBars, burryInsight] = await Promise.all([
-      fetchTickerBars(symbol, 2),
+      stockBarsPromise,
       fetchTickerBars('SPY', 2),
       getBurryTickerInsight(symbol).catch(() => null),
     ]);
+
+    // Volume breakdown runs after bars are available (needs them as input)
+    const volumeBreakdown = await computeVolumeBreakdown(symbol, stockBars).catch((err: any) => {
+      console.error(`[TICKER] Volume breakdown failed for ${symbol}: ${err?.message?.slice(0, 80)}`);
+      return null;
+    });
 
     if (stockBars.length < 50) {
       return res.status(404).json({ error: `Insufficient data for ${symbol} (got ${stockBars.length} bars, need 50+)` });
@@ -3572,6 +3580,9 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
 
       // Burry Lens — siloed read-only reference from Substack analysis
       burryInsight: burryInsight || null,
+
+      // Institutional Volume Breakdown — Burry-informed shareholder turnover
+      volumeBreakdown: volumeBreakdown || null,
 
       // Narrative (LLM with rule-based fallback when LLM is unavailable)
       narrative: await (async () => {
@@ -4092,7 +4103,7 @@ router.get('/lens/model-performance', async (req: Request, res: Response) => {
 });
 
 export default router;
-export { INSTRUMENTS, refreshMorningLens };
+export { INSTRUMENTS, refreshMorningLens, fetchTickerBars };
 
 // CACHE WARMING — manually trigger Yahoo OHLCV fetch for all tickers
 router.post('/lens/warm-cache', async (_req: Request, res: Response) => {

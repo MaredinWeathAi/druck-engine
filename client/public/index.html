@@ -1019,11 +1019,12 @@ button:disabled{opacity:0.5;cursor:not-allowed}
               <th>Up/Down Vol</th>
               <th>vs 200d</th>
               <th>Failed BD</th>
+              <th title="Shareholder Turnover — cumulative volume / shares outstanding since peak">TO%</th>
               <th style="max-width:250px">Druckenmiller Opinion</th>
             </tr>
           </thead>
           <tbody id="wl-tbody">
-            <tr><td colspan="11" style="text-align:center;padding:30px;color:var(--dim)">Add tickers above to build your watchlist</td></tr>
+            <tr><td colspan="12" style="text-align:center;padding:30px;color:var(--dim)">Add tickers above to build your watchlist</td></tr>
           </tbody>
         </table>
       </div>
@@ -4847,21 +4848,21 @@ function renderWatchlistTable() {
     if (!d) {
       html += '<tr><td><button onclick="removeFromWatchlist(\'' + sym + '\')" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:10px">✕</button></td>';
       html += '<td style="font-weight:700;color:var(--accent)">' + sym + '</td>';
-      html += '<td colspan="8" style="color:var(--dim);font-size:11px">Not yet analyzed</td></tr>';
+      html += '<td colspan="9" style="color:var(--dim);font-size:11px">Not yet analyzed</td></tr>';
       return;
     }
 
     if (d.loading) {
       html += '<tr><td><button onclick="removeFromWatchlist(\'' + sym + '\')" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:10px">✕</button></td>';
       html += '<td style="font-weight:700;color:var(--accent)">' + sym + '</td>';
-      html += '<td colspan="8" style="color:var(--dim);font-size:11px">Analyzing...</td></tr>';
+      html += '<td colspan="9" style="color:var(--dim);font-size:11px">Analyzing...</td></tr>';
       return;
     }
 
     if (d.error) {
       html += '<tr><td><button onclick="removeFromWatchlist(\'' + sym + '\')" style="border:none;background:none;color:var(--dim);cursor:pointer;font-size:10px">✕</button></td>';
       html += '<td style="font-weight:700;color:var(--accent)">' + sym + '</td>';
-      html += '<td colspan="9" style="color:#E24B4A;font-size:11px">' + d.error + '</td></tr>';
+      html += '<td colspan="10" style="color:#E24B4A;font-size:11px">' + d.error + '</td></tr>';
       return;
     }
 
@@ -4910,6 +4911,13 @@ function renderWatchlistTable() {
     html += '<td style="font-size:11px;color:' + extColor + '">' + (a.priceVs200d !== null ? (a.priceVs200d > 0 ? '+' : '') + a.priceVs200d.toFixed(1) + '%' : '—') + '</td>';
     var fbColor = fb.count >= 2 ? '#1D9E75' : fb.count >= 1 ? '#BA7517' : 'var(--dim)';
     html += '<td style="font-size:12px;font-weight:500;color:' + fbColor + '">' + (fb.count !== undefined ? fb.count : '—') + '</td>';
+    // Shareholder Turnover badge
+    var volBk = d.volumeBreakdown;
+    var toVal = volBk && volBk.shareholderTurnover ? volBk.shareholderTurnover.turnoverPct : null;
+    var toColor = toVal !== null ? (toVal >= 200 ? '#1D9E75' : toVal >= 100 ? '#f59e0b' : '#E24B4A') : 'var(--dim)';
+    var toLabel = toVal !== null ? toVal + '%' : '—';
+    var toTitle = toVal !== null ? 'Shareholder turnover: ' + toVal + '% | ' + (volBk.shareholderTurnover.turnoverLabel || '') + ' | Peak: $' + (volBk.peak ? volBk.peak.price : '?') + ' | Decline: ' + (volBk.peak ? volBk.peak.declineFromPeak : '?') + '%' : 'No significant decline detected';
+    html += '<td title="' + toTitle.replace(/"/g, '&quot;') + '"><span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600;background:' + toColor + '18;color:' + toColor + '">' + toLabel + '</span></td>';
     html += '<td style="font-size:10px;color:var(--dim);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + opinion.replace(/"/g, '&quot;') + '">' + opinion + '</td>';
     html += '</tr>';
   });
@@ -5102,6 +5110,144 @@ function analyzeTickerFn() {
 
       // Silo disclaimer
       html += '<div style="margin-top:10px;font-size:9px;color:var(--dim);opacity:0.6">Siloed reference — Burry\'s analysis is independent from the Druckenmiller framework above.</div>';
+      html += '</div>';
+    }
+
+    // ═══ INSTITUTIONAL VOLUME BREAKDOWN ═══
+    if (d.volumeBreakdown && d.volumeBreakdown.peak) {
+      var vb = d.volumeBreakdown;
+      var volAccent = '#3b82f6'; // blue accent
+      var signalColors = {
+        DISTRIBUTION: '#E24B4A', CAPITULATION: '#ff6b35', ABSORPTION: '#f59e0b',
+        BOTTOMING: '#1D9E75', NEUTRAL: 'var(--dim)', UNKNOWN: 'var(--dim)'
+      };
+      var sigColor = signalColors[vb.interpretation.signal] || 'var(--dim)';
+      var phaseColors = {
+        ACTIVE_DECLINE: '#E24B4A', STABILIZING: '#f59e0b', RECOVERING: '#1D9E75',
+        NEW_HIGHS: '#3b82f6', NO_DECLINE: 'var(--dim)'
+      };
+      var phColor = phaseColors[vb.pricePhase] || 'var(--dim)';
+
+      html += '<div class="card" style="padding:16px;margin-bottom:12px;border-left:3px solid ' + volAccent + ';background:rgba(59,130,246,0.03)">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+      html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:' + volAccent + '">Institutional Volume Breakdown</div>';
+
+      // Signal badge
+      html += '<span style="padding:3px 10px;border-radius:5px;font-size:11px;font-weight:600;background:' + sigColor + '18;color:' + sigColor + ';border:1px solid ' + sigColor + '44">' + vb.interpretation.signal + '</span>';
+      html += '</div>';
+
+      // Peak & Decline info row
+      html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">';
+      html += '<div style="flex:1;min-width:120px;padding:8px 12px;background:var(--card);border-radius:6px">';
+      html += '<div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:0.3px">Peak</div>';
+      html += '<div style="font-size:14px;font-weight:600;color:var(--text)">$' + vb.peak.price.toFixed(2) + '</div>';
+      html += '<div style="font-size:10px;color:var(--dim)">' + vb.peak.date + ' (' + vb.peak.daysSincePeak + 'd ago)</div>';
+      html += '</div>';
+      html += '<div style="flex:1;min-width:120px;padding:8px 12px;background:var(--card);border-radius:6px">';
+      html += '<div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:0.3px">Decline from Peak</div>';
+      html += '<div style="font-size:14px;font-weight:600;color:#E24B4A">' + vb.peak.declineFromPeak.toFixed(1) + '%</div>';
+      html += '<div style="font-size:10px;color:' + phColor + '">' + vb.pricePhase.replace(/_/g, ' ') + '</div>';
+      html += '</div>';
+
+      // Shareholder Turnover (PRIMARY METRIC)
+      if (vb.shareholderTurnover) {
+        var st = vb.shareholderTurnover;
+        var toColor = st.turnoverPct >= 200 ? '#1D9E75' : st.turnoverPct >= 100 ? '#f59e0b' : '#E24B4A';
+        html += '<div style="flex:1;min-width:120px;padding:8px 12px;background:var(--card);border-radius:6px;border:1px solid ' + toColor + '33">';
+        html += '<div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:0.3px">Shareholder Turnover</div>';
+        html += '<div style="font-size:18px;font-weight:700;color:' + toColor + '">' + st.turnoverPct + '%</div>';
+        html += '<div style="font-size:10px;color:' + toColor + ';font-weight:500">' + st.turnoverLabel + '</div>';
+        if (st.floatTurnoverPct) {
+          html += '<div style="font-size:9px;color:var(--dim);margin-top:2px">Float: ' + st.floatTurnoverPct + '% TO</div>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+
+      // Interpretation narrative
+      html += '<div style="padding:10px 12px;background:var(--surface);border-radius:6px;margin-bottom:10px;border-left:2px solid ' + sigColor + '">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
+      html += '<div style="font-size:10px;font-weight:500;text-transform:uppercase;color:' + sigColor + '">' + vb.interpretation.signal + ' — ' + vb.interpretation.confidence + ' Confidence</div>';
+      html += '</div>';
+      html += '<div style="font-size:12px;color:var(--text);line-height:1.6">' + vb.interpretation.narrative + '</div>';
+      html += '</div>';
+
+      // Volume-Confirmed Entry Signal
+      if (vb.volumeConfirmedEntry) {
+        var vce = vb.volumeConfirmedEntry;
+        var vceBg = vce.triggered ? 'rgba(29,158,117,0.08)' : 'transparent';
+        var vceBorder = vce.triggered ? '#1D9E75' : 'var(--border)';
+        var vceIcon = vce.triggered ? '&#x2714;' : '&#x25CB;';
+        html += '<div style="padding:8px 12px;background:' + vceBg + ';border:1px solid ' + vceBorder + '44;border-radius:6px;margin-bottom:10px">';
+        html += '<div style="font-size:10px;font-weight:500;text-transform:uppercase;color:' + (vce.triggered ? '#1D9E75' : 'var(--dim)') + ';margin-bottom:3px">' + vceIcon + ' Volume-Confirmed Entry</div>';
+        html += '<div style="font-size:11px;color:var(--text);line-height:1.5">' + vce.reason + '</div>';
+        html += '</div>';
+      }
+
+      // Volume Character details
+      if (vb.volumeCharacter) {
+        var vc = vb.volumeCharacter;
+        html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
+        var volRelColor = vc.volumeVs50dAvg > 1.3 ? '#1D9E75' : vc.volumeVs50dAvg < 0.8 ? '#E24B4A' : 'var(--text)';
+        html += '<div style="padding:4px 10px;background:var(--card);border-radius:4px;font-size:11px">';
+        html += '<span style="color:var(--dim)">20d/50d: </span><span style="color:' + volRelColor + ';font-weight:500">' + vc.volumeVs50dAvg.toFixed(2) + 'x</span>';
+        html += '</div>';
+        html += '<div style="padding:4px 10px;background:var(--card);border-radius:4px;font-size:11px">';
+        html += '<span style="color:var(--dim)">Avg 20d: </span><span style="font-weight:500">' + (vc.avgDailyVolume20d / 1e6).toFixed(1) + 'M</span>';
+        html += '</div>';
+        html += '<div style="padding:4px 10px;background:var(--card);border-radius:4px;font-size:11px">';
+        html += '<span style="color:var(--dim)">Trend: </span><span style="font-weight:500;color:' + (vc.volumeTrend === 'rising' ? '#1D9E75' : vc.volumeTrend === 'falling' ? '#E24B4A' : 'var(--text)') + '">' + vc.volumeTrend + '</span>';
+        html += '</div>';
+        if (vc.sustainedElevatedDays > 0) {
+          html += '<div style="padding:4px 10px;background:var(--card);border-radius:4px;font-size:11px">';
+          html += '<span style="color:var(--dim)">Elevated: </span><span style="font-weight:500;color:#f59e0b">' + vc.sustainedElevatedDays + ' days</span>';
+          html += '</div>';
+        }
+        html += '</div>';
+
+        // Volume spikes
+        if (vc.recentVolumeSpikes && vc.recentVolumeSpikes.length > 0) {
+          html += '<div style="border-top:1px solid var(--border);padding-top:8px;margin-bottom:8px">';
+          html += '<div style="font-size:10px;font-weight:500;text-transform:uppercase;color:var(--dim);margin-bottom:4px">Recent Volume Spikes</div>';
+          vc.recentVolumeSpikes.forEach(function(sp) {
+            var spColor = sp.priceChange >= 0 ? '#1D9E75' : '#E24B4A';
+            var spTypeColor = sp.type === 'CLIMAX_DOWN' ? '#E24B4A' : sp.type === 'CLIMAX_UP' ? '#1D9E75' : sp.type === 'EXHAUSTION' ? '#f59e0b' : 'var(--text)';
+            html += '<div style="font-size:11px;padding:1px 0">';
+            html += '<span style="color:var(--dim)">' + sp.date + '</span> ';
+            html += '<span style="color:' + spColor + ';font-weight:500">' + (sp.priceChange >= 0 ? '+' : '') + sp.priceChange.toFixed(1) + '%</span> ';
+            html += '<span style="color:var(--text)">' + sp.volumeVsAvg + 'x vol</span> ';
+            html += '<span style="font-size:9px;color:' + spTypeColor + '">' + sp.type.replace(/_/g, ' ') + '</span>';
+            html += '</div>';
+          });
+          html += '</div>';
+        }
+      }
+
+      // Abnormal events
+      if (vb.abnormalEvents && vb.abnormalEvents.length > 0) {
+        html += '<div style="border-top:1px solid var(--border);padding-top:8px">';
+        html += '<div style="font-size:10px;font-weight:500;text-transform:uppercase;color:var(--dim);margin-bottom:4px">Abnormal Volume Events (' + vb.abnormalEvents.length + ')</div>';
+        vb.abnormalEvents.slice(-5).forEach(function(ae) {
+          var aeColor = ae.priceChange >= 0 ? '#1D9E75' : '#E24B4A';
+          html += '<div style="font-size:11px;padding:1px 0">';
+          html += '<span style="color:var(--dim)">' + ae.date + '</span> ';
+          html += '<span style="color:' + aeColor + '">' + (ae.priceChange >= 0 ? '+' : '') + ae.priceChange.toFixed(1) + '%</span> ';
+          html += '<span style="color:var(--text)">' + ae.volumeVsAvg + 'x</span> ';
+          html += '<span style="font-size:9px;color:var(--dim)">' + ae.classification.replace(/_/g, ' ') + '</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      // Share structure
+      if (vb.sharesOutstanding) {
+        html += '<div style="margin-top:8px;font-size:9px;color:var(--dim);opacity:0.6">';
+        html += 'Shares outstanding: ' + (vb.sharesOutstanding / 1e9).toFixed(2) + 'B';
+        if (vb.floatShares) html += ' | Float: ' + (vb.floatShares / 1e9).toFixed(2) + 'B';
+        html += ' | Burry-informed: shareholder turnover is the primary metric — new owners at lower prices = steadier hands.';
+        html += '</div>';
+      }
+
       html += '</div>';
     }
 

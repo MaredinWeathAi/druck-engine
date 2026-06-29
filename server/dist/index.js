@@ -49,6 +49,8 @@ const industry_drivers_1 = __importDefault(require("./industry-drivers"));
 const alert_system_1 = __importDefault(require("./alert-system"));
 const geo_events_1 = __importStar(require("./geo-events"));
 const burry_substack_1 = __importStar(require("./burry-substack"));
+const volume_analysis_1 = require("./volume-analysis");
+const morning_lens_2 = require("./morning-lens");
 const history_store_1 = require("./history-store");
 // mtrp-client bridge removed — Market Intel lives entirely in Druck Engine
 const app = (0, express_1.default)();
@@ -744,9 +746,9 @@ app.get('/api/health', (_req, res) => {
     recalcDerived();
     res.json({
         status: 'ok',
-        version: '15.5.0',
-        build: '2026-06-16T18:45:00Z',
-        BUILD_CANARY: 'DYNAMIC_VERSION_DISPLAY',
+        version: '16.0.0',
+        build: '2026-06-29T14:00:00Z',
+        BUILD_CANARY: 'INSTITUTIONAL_VOLUME_BREAKDOWN',
         name: 'Druck Engine — Structural Regime Intelligence',
         timestamp: new Date().toISOString(),
         fred_key: !!FRED_API_KEY,
@@ -1828,6 +1830,35 @@ app.use('/api/industry', industry_drivers_1.default);
 app.use('/api/alerts', alert_system_1.default);
 app.use('/api/geo-events', geo_events_1.default);
 app.use('/api', burry_substack_1.default);
+// ─── VOLUME ANALYSIS ROUTES ───
+app.get('/api/volume/:symbol', async (req, res) => {
+    try {
+        const symbol = decodeURIComponent(req.params.symbol).toUpperCase();
+        const bars = await (0, morning_lens_2.fetchTickerBars)(symbol, 2);
+        if (bars.length < 50) {
+            return res.status(404).json({ error: `Insufficient data for ${symbol}` });
+        }
+        const result = await (0, volume_analysis_1.computeVolumeBreakdown)(symbol, bars);
+        res.json(result);
+    }
+    catch (err) {
+        res.status(500).json({ error: err?.message || 'Volume analysis failed' });
+    }
+});
+app.get('/api/volume/badge/:symbol', async (req, res) => {
+    try {
+        const symbol = decodeURIComponent(req.params.symbol).toUpperCase();
+        const bars = await (0, morning_lens_2.fetchTickerBars)(symbol, 2);
+        if (bars.length < 50) {
+            return res.json({ symbol, turnoverPct: null, badgeColor: 'gray', badgeLabel: '—' });
+        }
+        const badge = await (0, volume_analysis_1.computeWatchlistVolumeBadge)(symbol, bars);
+        res.json(badge);
+    }
+    catch (err) {
+        res.json({ symbol: req.params.symbol, turnoverPct: null, badgeColor: 'gray', badgeLabel: '?' });
+    }
+});
 // Start Burry Substack RSS polling
 (0, burry_substack_1.startRSSPolling)();
 // Initialize geo-event keys
@@ -1842,7 +1873,7 @@ app.get('*', (req, res) => {
     }
 });
 app.listen(PORT, () => {
-    console.log(`\n  DRUCK ENGINE v15.5.0 — Structural Regime Intelligence + Dynamic Version Display`);
+    console.log(`\n  DRUCK ENGINE v16.0.0 — Structural Regime Intelligence + Institutional Volume Breakdown`);
     console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
     if (FRED_API_KEY)
         console.log(`  FRED API: Configured (4-hour cache)`);

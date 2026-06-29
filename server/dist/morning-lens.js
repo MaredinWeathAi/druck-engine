@@ -44,6 +44,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.INSTRUMENTS = void 0;
 exports.refreshMorningLens = refreshMorningLens;
+exports.fetchTickerBars = fetchTickerBars;
 const express_1 = require("express");
 const yahoo_finance2_1 = __importDefault(require("yahoo-finance2"));
 const sdk_1 = __importDefault(require("@anthropic-ai/sdk"));
@@ -51,6 +52,7 @@ const openai_1 = __importDefault(require("openai"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const burry_substack_1 = require("./burry-substack");
+const volume_analysis_1 = require("./volume-analysis");
 // ── LLM PROVIDER ABSTRACTION ──
 // Auto-detects Anthropic vs OpenAI key and routes accordingly
 // Tracks consecutive failures to avoid hammering a broken API
@@ -3151,11 +3153,17 @@ router.get('/lens/ticker/:symbol', async (req, res) => {
     }
     try {
         // Fetch stock data + SPY benchmark + Burry insight in parallel
+        const stockBarsPromise = fetchTickerBars(symbol, 2);
         const [stockBars, spyBars, burryInsight] = await Promise.all([
-            fetchTickerBars(symbol, 2),
+            stockBarsPromise,
             fetchTickerBars('SPY', 2),
             (0, burry_substack_1.getBurryTickerInsight)(symbol).catch(() => null),
         ]);
+        // Volume breakdown runs after bars are available (needs them as input)
+        const volumeBreakdown = await (0, volume_analysis_1.computeVolumeBreakdown)(symbol, stockBars).catch((err) => {
+            console.error(`[TICKER] Volume breakdown failed for ${symbol}: ${err?.message?.slice(0, 80)}`);
+            return null;
+        });
         if (stockBars.length < 50) {
             return res.status(404).json({ error: `Insufficient data for ${symbol} (got ${stockBars.length} bars, need 50+)` });
         }
@@ -3288,6 +3296,8 @@ router.get('/lens/ticker/:symbol', async (req, res) => {
             sectorDetected: sectorName,
             // Burry Lens — siloed read-only reference from Substack analysis
             burryInsight: burryInsight || null,
+            // Institutional Volume Breakdown — Burry-informed shareholder turnover
+            volumeBreakdown: volumeBreakdown || null,
             // Narrative (LLM with rule-based fallback when LLM is unavailable)
             narrative: await (async () => {
                 const dataObj = {
