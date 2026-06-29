@@ -1010,16 +1010,16 @@ button:disabled{opacity:0.5;cursor:not-allowed}
           <thead>
             <tr>
               <th style="width:30px"></th>
-              <th>Ticker</th>
-              <th>Price</th>
-              <th>Phase</th>
-              <th>Verdict</th>
-              <th>Archetype</th>
-              <th>Sizing</th>
-              <th>Up/Down Vol</th>
-              <th>vs 200d</th>
-              <th>Failed BD</th>
-              <th title="Shareholder Turnover — cumulative volume / shares outstanding since peak">TO%</th>
+              <th data-wl-sort="ticker" style="cursor:pointer">Ticker <span class="sort-arrow"></span></th>
+              <th data-wl-sort="price" style="cursor:pointer">Price <span class="sort-arrow"></span></th>
+              <th data-wl-sort="phase" style="cursor:pointer">Phase <span class="sort-arrow"></span></th>
+              <th data-wl-sort="verdict" style="cursor:pointer">Verdict <span class="sort-arrow"></span></th>
+              <th data-wl-sort="archetype" style="cursor:pointer">Archetype <span class="sort-arrow"></span></th>
+              <th data-wl-sort="sizing" style="cursor:pointer">Sizing <span class="sort-arrow"></span></th>
+              <th data-wl-sort="udVol" style="cursor:pointer">Up/Down Vol <span class="sort-arrow"></span></th>
+              <th data-wl-sort="vs200d" style="cursor:pointer">vs 200d <span class="sort-arrow"></span></th>
+              <th data-wl-sort="failedBd" style="cursor:pointer">Failed BD <span class="sort-arrow"></span></th>
+              <th data-wl-sort="turnover" style="cursor:pointer" title="Shareholder Turnover — cumulative volume / shares outstanding since peak">TO% <span class="sort-arrow"></span></th>
               <th style="max-width:250px">Druckenmiller Opinion</th>
             </tr>
           </thead>
@@ -4525,6 +4525,37 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// ═══ Watchlist Sort ═══
+var wlSortKey = null;
+var wlSortAsc = true;
+
+function sortWatchlist(key) {
+  if (wlSortKey === key) {
+    wlSortAsc = !wlSortAsc;
+  } else {
+    wlSortKey = key;
+    wlSortAsc = (key === 'ticker' || key === 'verdict' || key === 'archetype');
+  }
+  document.querySelectorAll('#wl-table th[data-wl-sort]').forEach(function(th) {
+    var arrow = th.querySelector('.sort-arrow');
+    if (arrow) {
+      if (th.getAttribute('data-wl-sort') === key) {
+        arrow.textContent = wlSortAsc ? ' ▲' : ' ▼';
+      } else {
+        arrow.textContent = '';
+      }
+    }
+  });
+  renderWatchlistTable();
+}
+
+document.addEventListener('click', function(e) {
+  var th = e.target.closest('th[data-wl-sort]');
+  if (th && th.closest('#wl-table')) {
+    sortWatchlist(th.getAttribute('data-wl-sort'));
+  }
+});
+
 function switchFsBucket(bucket) {
   fsBucket = bucket;
   document.querySelectorAll('#fs-bucket-tabs .bucket-tab').forEach(function(t) {
@@ -4836,6 +4867,28 @@ function renderWatchlistTable() {
   if (tickers.length === 0) {
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--dim)">Add tickers above to build your watchlist</td></tr>';
     return;
+  }
+
+  // Sort tickers if a sort key is active
+  if (wlSortKey && tickers.length > 1) {
+    tickers.sort(function(aSym, bSym) {
+      var aD = wlData[aSym] || {};
+      var bD = wlData[bSym] || {};
+      var av, bv;
+      if (wlSortKey === 'ticker') { av = aSym; bv = bSym; }
+      else if (wlSortKey === 'price') { av = aD.price || 0; bv = bD.price || 0; }
+      else if (wlSortKey === 'phase') { av = (aD.phase || {}).phaseNum || 99; bv = (bD.phase || {}).phaseNum || 99; }
+      else if (wlSortKey === 'verdict') { av = (aD.verdict || {}).verdict || 'zzz'; bv = (bD.verdict || {}).verdict || 'zzz'; }
+      else if (wlSortKey === 'archetype') { av = (aD.verdict || {}).archetype || 'zzz'; bv = (bD.verdict || {}).archetype || 'zzz'; }
+      else if (wlSortKey === 'sizing') { var srOrder = { BACK_UP_TRUCK: 1, WAIT_AND_SEE: 2, TRIM: 3, LIQUIDATE: 4 }; av = srOrder[(aD.sizingRegime || {}).regime] || 99; bv = srOrder[(bD.sizingRegime || {}).regime] || 99; }
+      else if (wlSortKey === 'udVol') { av = (aD.volumeDemand || {}).upDownRatio || 0; bv = (bD.volumeDemand || {}).upDownRatio || 0; }
+      else if (wlSortKey === 'vs200d') { av = (aD.anchors || {}).priceVs200d !== null && (aD.anchors || {}).priceVs200d !== undefined ? (aD.anchors || {}).priceVs200d : -9999; bv = (bD.anchors || {}).priceVs200d !== null && (bD.anchors || {}).priceVs200d !== undefined ? (bD.anchors || {}).priceVs200d : -9999; }
+      else if (wlSortKey === 'failedBd') { av = (aD.failedBreakdowns || {}).count || 0; bv = (bD.failedBreakdowns || {}).count || 0; }
+      else if (wlSortKey === 'turnover') { var aVb = aD.volumeBreakdown; var bVb = bD.volumeBreakdown; av = aVb && aVb.shareholderTurnover ? aVb.shareholderTurnover.turnoverPct : -1; bv = bVb && bVb.shareholderTurnover ? bVb.shareholderTurnover.turnoverPct : -1; }
+      else return 0;
+      if (typeof av === 'string') return wlSortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+      return wlSortAsc ? av - bv : bv - av;
+    });
   }
 
   var phColors = { 1: '#0ea5e9', 2: '#1D9E75', 3: '#f97316', 4: '#e879f9', 5: '#E24B4A' };
