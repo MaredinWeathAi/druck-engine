@@ -1484,6 +1484,8 @@ async function refreshMorningLens(): Promise<void> {
 // On Railway, Yahoo blocks our IP. The SQLite cache is empty on first deploy.
 // This loads seed-bars.json (generated from a non-blocked IP) into SQLite
 // so that fetchOHLC() can serve data from cache immediately.
+// IMPORTANT: seed-bars.json contains BOTH instrument ETFs AND individual stocks.
+// Always attempt seeding for any symbol not yet in SQLite.
 function loadSeedDataIfNeeded(): number {
   try {
     // Count how many instruments already have cache
@@ -1493,13 +1495,6 @@ function loadSeedDataIfNeeded(): number {
       if (age !== null) cachedCount++;
     }
     seedDiagnostics.existingCached = cachedCount;
-
-    // If we already have > 50% cached, skip seeding
-    if (cachedCount >= INSTRUMENTS.length * 0.5) {
-      console.log(`[SEED] SQLite cache has ${cachedCount}/${INSTRUMENTS.length} instruments — skipping seed`);
-      seedDiagnostics.loaded = true;
-      return cachedCount;
-    }
 
     // Look for seed file in multiple locations (handles different build layouts)
     const seedPaths = [
@@ -1554,23 +1549,22 @@ function loadSeedDataIfNeeded(): number {
       return cachedCount;
     }
 
-    // Load each instrument into SQLite cache
+    // Load ALL symbols from seed file into SQLite cache (instruments + stocks)
     let seeded = 0;
     let seedErrors = 0;
+    let skippedCached = 0;
     for (const [symbol, compactBars] of Object.entries(seedData)) {
       // Skip if already cached (don't overwrite fresher data)
       const existing = getBarCacheAge(symbol);
-      if (existing !== null) continue;
+      if (existing !== null) { skippedCached++; continue; }
 
-      // Expand compact format [date, open, high, low, close, volume] to objects
-      const bars = compactBars.map((b: any) => ({
-        date: b[0],
-        open: b[1],
-        high: b[2],
-        low: b[3],
-        close: b[4],
-        volume: b[5] || 0,
-      }));
+      // Handle both compact array format [date, o, h, l, c, v] and object format {date, open, ...}
+      const bars = compactBars.map((b: any) => {
+        if (Array.isArray(b)) {
+          return { date: b[0], open: b[1], high: b[2], low: b[3], close: b[4], volume: b[5] || 0 };
+        }
+        return { date: b.date, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume || 0 };
+      });
 
       if (bars.length >= 20) {
         try {
@@ -1587,11 +1581,11 @@ function loadSeedDataIfNeeded(): number {
     }
 
     seedDiagnostics.seeded = seeded;
-    seedDiagnostics.loaded = seeded > 0;
-    console.log(`[SEED] ✓ Loaded ${seeded} instruments from seed data (${seedErrors} errors)`);
+    seedDiagnostics.loaded = seeded > 0 || skippedCached > 0;
+    console.log(`[SEED] ✓ Loaded ${seeded} symbols from seed data (${skippedCached} already cached, ${seedErrors} errors)`);
 
-    // Verify a few instruments actually cached
-    const testSymbols = ['SPY', 'QQQ', 'IWM', 'XLK', 'GLD'];
+    // Verify a few instruments AND stocks actually cached
+    const testSymbols = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'TSLA'];
     for (const sym of testSymbols) {
       const age = getBarCacheAge(sym);
       const cached = getCachedBars(sym);
@@ -2261,19 +2255,28 @@ async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCV
     console.log(`[TICKER] In-memory cache for ${symbol} has no volume data — re-fetching`);
   }
 
-  // Check PERSISTENT SQLite cache (survives deploys) — use if <7 days old AND has volume
+  // Check PERSISTENT SQLite cache (survives deploys)
+  // Strategy: use fresh cache (<7 days with volume) immediately.
+  // If cache exists but is stale or lacks volume, try Yahoo first, then fall back to stale cache.
+  let staleCacheBackup: OHLCVBar[] | null = null;
   try {
     const ageMin = getBarCacheAge(symbol);
-    if (ageMin !== null && ageMin < 10080) { // 7 days (10080 minutes)
+    if (ageMin !== null) {
       const dbCached = getCachedBars(symbol);
       if (dbCached && dbCached.bars.length >= 50) {
         const hasVolume = dbCached.bars.some((b: any) => (b.volume || 0) > 0);
-        if (hasVolume) {
+        if (ageMin < 10080 && hasVolume) {
+          // Fresh cache with volume — use immediately
           tickerBarCache.set(symbol, { bars: dbCached.bars, fetchedAt: Date.now() - (ageMin * 60 * 1000) });
           return dbCached.bars;
         }
-        // Cache exists but has no volume — fall through to re-fetch
-        console.log(`[TICKER] SQLite cache for ${symbol} has no volume data — re-fetching from Yahoo`);
+        // Stale or no-volume cache — save as backup, try live sources first
+        staleCacheBackup = dbCached.bars;
+        if (ageMin < 10080 && !hasVolume) {
+          console.log(`[TICKER] SQLite cache for ${symbol} has no volume data — re-fetching from Yahoo`);
+        } else {
+          console.log(`[TICKER] SQLite cache for ${symbol} is stale (${Math.round(ageMin / 60)}h old) — trying live sources first`);
+        }
       }
     }
   } catch {}
@@ -2367,15 +2370,14 @@ async function fetchTickerBars(symbol: string, years: number = 2): Promise<OHLCV
   }
 
   // ═══ LAST RESORT: serve stale cache regardless of age — old data beats no data ═══
-  try {
-    const dbCached = getCachedBars(symbol);
-    if (dbCached && dbCached.bars.length >= 50) {
-      const ageMin = getBarCacheAge(symbol);
-      console.warn(`[TICKER] Serving STALE cache for ${symbol} (${Math.round((ageMin || 0) / 60)}h old) — all live sources failed`);
-      tickerBarCache.set(symbol, { bars: dbCached.bars, fetchedAt: Date.now() - (24 * 60 * 60 * 1000) });
-      return dbCached.bars;
-    }
-  } catch {}
+  // Use the backup we saved earlier, or try the DB one more time
+  const staleData = staleCacheBackup || (() => { try { return getCachedBars(symbol)?.bars || null; } catch { return null; } })();
+  if (staleData && staleData.length >= 50) {
+    const ageMin = getBarCacheAge(symbol);
+    console.warn(`[TICKER] Serving STALE cache for ${symbol} (${Math.round((ageMin || 0) / 60)}h old) — all live sources failed`);
+    tickerBarCache.set(symbol, { bars: staleData, fetchedAt: Date.now() - (24 * 60 * 60 * 1000) });
+    return staleData;
+  }
 
   console.error(`[TICKER] All sources failed for ${symbol} — no cache available`);
   return [];

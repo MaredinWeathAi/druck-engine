@@ -783,9 +783,9 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '16.0.0',
-    build: '2026-06-29T14:00:00Z',
-    BUILD_CANARY: 'INSTITUTIONAL_VOLUME_BREAKDOWN',
+    version: '16.1.0',
+    build: '2026-06-29T22:00:00Z',
+    BUILD_CANARY: 'EXPANDED_SEED_DATA_209_SYMBOLS',
     name: 'Druck Engine — Structural Regime Intelligence',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
@@ -1990,7 +1990,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v16.0.0 — Structural Regime Intelligence + Institutional Volume Breakdown`);
+  console.log(`\n  DRUCK ENGINE v16.1.0 — Structural Regime Intelligence + Expanded Seed Data (209 symbols)`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);
