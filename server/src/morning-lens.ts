@@ -11,7 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import * as fs from 'fs';
 import * as path from 'path';
-import { getBurryTickerInsight } from './burry-substack';
+import { getBurryTickerInsight, evaluateBurryFramework } from './burry-substack';
 import { computeVolumeBreakdown } from './volume-analysis';
 
 // ── LLM PROVIDER ABSTRACTION ──
@@ -3508,6 +3508,21 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
 
     const phaseInfo = phaseResult ? phaseDisplayMap[phaseResult.phase.phase] || { num: 0, short: '?' } : null;
 
+    // Burry Framework Evaluation — applies Burry's analytical principles to this stock
+    const burryFramework = await evaluateBurryFramework({
+      symbol,
+      price,
+      priceVs200d: ta.priceVsSma200,
+      pctFrom52wHigh: pctFrom52wHigh,
+      upDownRatio,
+      sma50Above200: ta.sma50Above200,
+      rsi14: ta.rsi14,
+      volumeBreakdown: volumeBreakdown,
+    }).catch((err: any) => {
+      console.error(`[TICKER] Burry framework eval failed for ${symbol}: ${err?.message?.slice(0, 80)}`);
+      return null;
+    });
+
     // Build the response and cache it
     const responseData: any = {
       symbol,
@@ -3582,6 +3597,9 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
 
       // Burry Lens — siloed read-only reference from Substack analysis
       burryInsight: burryInsight || null,
+
+      // Burry Framework Evaluation — applies his analytical principles to this stock
+      burryFramework: burryFramework || null,
 
       // Institutional Volume Breakdown — Burry-informed shareholder turnover
       volumeBreakdown: volumeBreakdown || null,

@@ -5166,6 +5166,148 @@ function analyzeTickerFn() {
       html += '</div>';
     }
 
+    // ═══ BURRY FRAMEWORK EVALUATOR (Deep Analytical Assessment) ═══
+    if (d.burryFramework) {
+      var bf = d.burryFramework;
+      var bfBorder = '#a855f7'; // deeper purple for framework (vs #e879f9 for mentions)
+      var verdictColors = {
+        ATTRACTIVE: '#1D9E75', INTERESTING: '#22c55e', NEUTRAL: '#f59e0b',
+        UNATTRACTIVE: '#E24B4A', AVOID: '#dc2626'
+      };
+      var verdictEmoji = {
+        ATTRACTIVE: '◆', INTERESTING: '▲', NEUTRAL: '●',
+        UNATTRACTIVE: '▼', AVOID: '✕'
+      };
+      var vColor = verdictColors[bf.overallVerdict] || 'var(--dim)';
+
+      html += '<div class="card" style="padding:16px;margin-bottom:12px;border-left:3px solid ' + bfBorder + ';background:rgba(168,85,247,0.03)">';
+
+      // Header row: title + verdict badge
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+      html += '<div style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:' + bfBorder + '">Burry Framework Evaluator</div>';
+      html += '<div style="display:flex;align-items:center;gap:8px">';
+      html += '<span style="font-size:20px;font-weight:700;color:' + vColor + '">' + bf.overallScore + '</span>';
+      html += '<span style="padding:3px 10px;border-radius:5px;font-size:11px;font-weight:600;background:' + vColor + '18;color:' + vColor + ';border:1px solid ' + vColor + '44">' + (verdictEmoji[bf.overallVerdict] || '') + ' ' + bf.overallVerdict + '</span>';
+      html += '</div></div>';
+
+      // Hard sells — big red warning if any
+      if (bf.hardSells && bf.hardSells.length > 0) {
+        html += '<div style="padding:10px 12px;background:#dc262612;border:1px solid #dc262644;border-radius:6px;margin-bottom:12px">';
+        html += '<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#dc2626;margin-bottom:4px">⚠ HARD SELL TRIGGERED</div>';
+        bf.hardSells.forEach(function(hs) {
+          html += '<div style="font-size:12px;color:#dc2626;font-weight:500">' + hs + '</div>';
+        });
+        html += '</div>';
+      }
+
+      // Summary
+      if (bf.summary) {
+        html += '<div style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:14px;padding:10px 12px;background:var(--card);border-radius:6px;border-left:2px solid ' + bfBorder + '44">' + bf.summary + '</div>';
+      }
+
+      // Data availability warning
+      if (!bf.dataAvailable) {
+        html += '<div style="font-size:10px;color:#f59e0b;margin-bottom:10px;padding:6px 10px;background:#f59e0b12;border-radius:4px;border:1px solid #f59e0b33">⚡ GuruFocus data unavailable — scores based on technical/volume data only (partial assessment)</div>';
+      }
+
+      // 7 Dimension Score Bars
+      html += '<div style="margin-bottom:14px">';
+      html += '<div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:8px">Dimension Scores</div>';
+
+      var dimensions = [
+        { key: 'valuation', label: 'Valuation', weight: '25%', data: bf.valuation },
+        { key: 'balanceSheet', label: 'Balance Sheet', weight: '20%', data: bf.balanceSheet },
+        { key: 'volumeSignal', label: 'Volume Signal', weight: '15%', data: bf.volumeSignal },
+        { key: 'contrarianOpportunity', label: 'Contrarian Opp.', weight: '15%', data: bf.contrarianOpportunity },
+        { key: 'moat', label: 'Moat Durability', weight: '10%', data: bf.moat },
+        { key: 'sbcDilution', label: 'SBC / Dilution', weight: '10%', data: bf.sbcDilution },
+        { key: 'capitalCycle', label: 'Capital Cycle', weight: '5%', data: bf.capitalCycle }
+      ];
+
+      dimensions.forEach(function(dim) {
+        if (!dim.data) return;
+        var score = dim.data.score || 0;
+        var barColor = score >= 70 ? '#1D9E75' : score >= 50 ? '#22c55e' : score >= 35 ? '#f59e0b' : '#E24B4A';
+        var detail = dim.data.detail || dim.data.grade || '';
+        var isHardSell = dim.key === 'balanceSheet' && dim.data.hardSellTriggered;
+
+        html += '<div style="margin-bottom:6px">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">';
+        html += '<div style="font-size:11px;color:var(--text);font-weight:500">' + dim.label + ' <span style="font-size:9px;color:var(--dim);font-weight:400">(' + dim.weight + ')</span>';
+        if (isHardSell) html += ' <span style="color:#dc2626;font-size:9px;font-weight:600">HARD SELL</span>';
+        html += '</div>';
+
+        // Stone classification badge for moat
+        if (dim.key === 'moat' && dim.data.stone) {
+          var stoneColors = { Granite: '#1D9E75', Marble: '#22c55e', Limestone: '#f59e0b', Sandstone: '#E24B4A', Chalk: '#dc2626' };
+          html += '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:' + (stoneColors[dim.data.stone] || 'var(--dim)') + '18;color:' + (stoneColors[dim.data.stone] || 'var(--dim)') + ';font-weight:500">' + dim.data.stone + '</span>';
+        }
+
+        html += '<span style="font-size:11px;color:' + barColor + ';font-weight:600">' + score + '</span>';
+        html += '</div>';
+
+        // Score bar
+        html += '<div style="width:100%;height:6px;background:var(--surface);border-radius:3px;overflow:hidden">';
+        html += '<div style="width:' + Math.min(score, 100) + '%;height:100%;background:' + barColor + ';border-radius:3px;transition:width 0.3s"></div>';
+        html += '</div>';
+
+        // Detail text
+        if (detail) {
+          html += '<div style="font-size:10px;color:var(--dim);margin-top:1px;line-height:1.4">' + detail + '</div>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+
+      // Red Flags / Green Flags side by side
+      if ((bf.redFlags && bf.redFlags.length > 0) || (bf.greenFlags && bf.greenFlags.length > 0)) {
+        html += '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">';
+
+        if (bf.greenFlags && bf.greenFlags.length > 0) {
+          html += '<div style="flex:1;min-width:140px;padding:8px 10px;background:#1D9E7508;border:1px solid #1D9E7533;border-radius:6px">';
+          html += '<div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#1D9E75;margin-bottom:4px">Green Flags</div>';
+          bf.greenFlags.forEach(function(gf) {
+            html += '<div style="font-size:11px;color:var(--text);padding:1px 0;line-height:1.4">+ ' + gf + '</div>';
+          });
+          html += '</div>';
+        }
+
+        if (bf.redFlags && bf.redFlags.length > 0) {
+          html += '<div style="flex:1;min-width:140px;padding:8px 10px;background:#E24B4A08;border:1px solid #E24B4A33;border-radius:6px">';
+          html += '<div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#E24B4A;margin-bottom:4px">Red Flags</div>';
+          bf.redFlags.forEach(function(rf) {
+            html += '<div style="font-size:11px;color:var(--text);padding:1px 0;line-height:1.4">− ' + rf + '</div>';
+          });
+          html += '</div>';
+        }
+
+        html += '</div>';
+      }
+
+      // Principles Triggered
+      if (bf.principlesTriggered && bf.principlesTriggered.length > 0) {
+        html += '<div style="margin-bottom:10px">';
+        html += '<div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:' + bfBorder + ';margin-bottom:6px">Burry Principles Triggered</div>';
+        bf.principlesTriggered.forEach(function(pt) {
+          var ptColor = pt.applies === 'BULLISH' ? '#1D9E75' : pt.applies === 'BEARISH' ? '#E24B4A' : 'var(--dim)';
+          html += '<div style="padding:5px 10px;background:var(--surface);border-radius:5px;margin-bottom:3px;border-left:2px solid ' + ptColor + '">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+          html += '<span style="font-size:11px;color:var(--text);font-weight:500">' + pt.principle + '</span>';
+          html += '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:' + ptColor + '18;color:' + ptColor + ';font-weight:500">' + pt.applies + '</span>';
+          html += '</div>';
+          if (pt.quote) {
+            html += '<div style="font-size:10px;color:var(--dim);margin-top:2px;font-style:italic;line-height:1.4">"' + pt.quote + '"</div>';
+          }
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      // Silo disclaimer
+      html += '<div style="margin-top:10px;font-size:9px;color:var(--dim);opacity:0.6">Siloed reference — Burry\'s analytical framework applied independently from the Druckenmiller framework above.</div>';
+      html += '</div>';
+    }
+
     // ═══ INSTITUTIONAL VOLUME BREAKDOWN ═══
     if (d.volumeBreakdown && d.volumeBreakdown.peak) {
       var vb = d.volumeBreakdown;

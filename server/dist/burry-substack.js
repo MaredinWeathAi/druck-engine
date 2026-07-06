@@ -18,6 +18,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.initBurryTables = initBurryTables;
 exports.startRSSPolling = startRSSPolling;
 exports.stopRSSPolling = stopRSSPolling;
+exports.evaluateBurryFramework = evaluateBurryFramework;
 exports.getBurryTickerInsight = getBurryTickerInsight;
 const express_1 = require("express");
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
@@ -1397,6 +1398,579 @@ router.get('/burry/comments', (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+// ═══════════════════════════════════════════════════════════════════
+// BURRY FRAMEWORK EVALUATOR — Apply Burry's analytical principles
+// to ANY stock, not just ones he explicitly mentions.
+//
+// Derived from exhaustive analysis of all 64 Substack posts + 715
+// author comments from "Cassandra Unchained" (Nov 2025 – Jun 2026).
+//
+// Key dimensions scored:
+//   1. Valuation (P/S percentile, P/E vs historical, IV15 proxy)
+//   2. SBC & Dilution (share count trend, buyback effectiveness)
+//   3. Balance Sheet (Debt/EBITDA, interest coverage — HARD SELLS)
+//   4. Moat Durability (Stone Classification + AI threat tier)
+//   5. Volume Signal (shareholder turnover — Burry's key technical)
+//   6. Contrarian Opportunity (whale-fall, mean reversion potential)
+//   7. Capital Cycle Position (where in capex boom/bust)
+//
+// SILO: This module reads data passed in; it does NOT import from
+// morning-lens.ts or any other analysis module.
+// ═══════════════════════════════════════════════════════════════════
+const GF_API_KEY = process.env.GURUFOCUS_API_KEY || '026d8ee9d10c778c6656d672b5ff1e71:544e1fff1953fece457d6152f3239e74';
+// ─── STONE CLASSIFICATION (Moat Durability) ───
+// Burry's framework: Granite > Marble > Limestone > Sandstone > Chalk
+const STONE_MAP = {
+    // Granite: Regulatory/mission-critical moats
+    'Healthcare': { stone: 'Granite', score: 90 },
+    'Biotech/Pharma': { stone: 'Marble', score: 75 },
+    'Insurance': { stone: 'Marble', score: 75 },
+    'Utilities': { stone: 'Granite', score: 85 },
+    // Marble: Strong brand/switching costs
+    'Consumer Staples': { stone: 'Marble', score: 70 },
+    'Aerospace & Defense': { stone: 'Marble', score: 75 },
+    'Banks': { stone: 'Limestone', score: 60 },
+    'Financials': { stone: 'Limestone', score: 60 },
+    'Transports': { stone: 'Limestone', score: 55 },
+    'Industrials': { stone: 'Limestone', score: 55 },
+    // Limestone: Competitive but defensible
+    'Materials': { stone: 'Limestone', score: 50 },
+    'Energy': { stone: 'Limestone', score: 50 },
+    'Real Estate': { stone: 'Limestone', score: 55 },
+    'Consumer Discretionary': { stone: 'Sandstone', score: 40 },
+    'Retail': { stone: 'Sandstone', score: 35 },
+    'Communications': { stone: 'Sandstone', score: 40 },
+    // Sandstone/Chalk: Disruption-vulnerable
+    'Software': { stone: 'Sandstone', score: 30 },
+    'Technology': { stone: 'Sandstone', score: 35 },
+    'Semiconductors': { stone: 'Limestone', score: 50 }, // Burry sees these as cyclical, not chalk
+};
+// ─── AI COMPETITIVE THREAT (AICT) Tiers ───
+// Tier 1 = Existential, Tier 5 = Minimal
+const AICT_MAP = {
+    'Software': 2, // Severe — AI directly disrupts seat-based models
+    'Technology': 2,
+    'Communications': 3,
+    'Retail': 3,
+    'Consumer Discretionary': 3,
+    'Semiconductors': 3, // Cyclical risk, not displacement
+    'Banks': 3,
+    'Financials': 3,
+    'Industrials': 4,
+    'Transports': 4,
+    'Materials': 4,
+    'Energy': 4,
+    'Real Estate': 4,
+    'Healthcare': 4,
+    'Biotech/Pharma': 4,
+    'Insurance': 4,
+    'Consumer Staples': 5,
+    'Utilities': 5,
+    'Aerospace & Defense': 5,
+};
+// ─── CAPITAL CYCLE — Sectors currently in capex boom (per Burry's 2025-2026 analysis) ───
+const CAPEX_BOOM_SECTORS = new Set(['Semiconductors', 'Technology', 'Software', 'Communications']);
+async function fetchGFSummary(symbol) {
+    try {
+        const url = `https://api.gurufocus.com/public/user/${GF_API_KEY}/stock/${encodeURIComponent(symbol)}/summary`;
+        const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (!resp.ok)
+            return null;
+        return await resp.json();
+    }
+    catch {
+        return null;
+    }
+}
+async function evaluateBurryFramework(input) {
+    const { symbol, price, priceVs200d, pctFrom52wHigh, upDownRatio, sma50Above200, rsi14, volumeBreakdown } = input;
+    // Fetch fundamentals from GuruFocus
+    const gf = await fetchGFSummary(symbol);
+    const dataAvailable = gf !== null;
+    const ratios = gf?.summary?.ratio || {};
+    const general = gf?.summary?.general || {};
+    const sector = general.supersector || general.sector || '';
+    const group = general.group || general.subindustry || '';
+    // Detect normalized sector name for stone/AICT mapping
+    const sectorName = detectSectorName(sector, group);
+    // ═══ 1. VALUATION SCORE ═══
+    const pe = parseFloat(ratios['P/E(ttm)']?.value) || null;
+    const peLow = parseFloat(ratios['P/E(ttm)']?.his?.low) || null;
+    const peHigh = parseFloat(ratios['P/E(ttm)']?.his?.high) || null;
+    const peMed = parseFloat(ratios['P/E(ttm)']?.his?.med) || null;
+    const fwdPe = parseFloat(ratios['Forward P/E']?.value) || null;
+    const ps = parseFloat(ratios['P/S']?.value) || null;
+    const psLow = parseFloat(ratios['P/S']?.his?.low) || null;
+    const psHigh = parseFloat(ratios['P/S']?.his?.high) || null;
+    const pb = parseFloat(ratios['P/B']?.value) || null;
+    const pbLow = parseFloat(ratios['P/B']?.his?.low) || null;
+    const fcfYield = parseFloat(ratios['FCF Yield (%)']?.value) || null;
+    const evEbitda = parseFloat(ratios['EV-to-EBITDA']?.value) || null;
+    let valScore = 50; // default neutral
+    const valMetrics = { pe, fwdPe, ps, pb, fcfYield, evEbitda };
+    const valNotes = [];
+    if (ps !== null && psLow !== null && psHigh !== null && psHigh > psLow) {
+        const psPctile = ((ps - psLow) / (psHigh - psLow)) * 100;
+        valMetrics.psPercentile = Math.round(psPctile);
+        // Burry: "P/S at 10-year lows" = very attractive
+        if (psPctile < 10) {
+            valScore += 25;
+            valNotes.push('P/S near 10-year LOW — Burry sweet spot');
+        }
+        else if (psPctile < 25) {
+            valScore += 15;
+            valNotes.push('P/S in bottom quartile of historical range');
+        }
+        else if (psPctile > 80) {
+            valScore -= 20;
+            valNotes.push('P/S near historical HIGH — expensive');
+        }
+        else if (psPctile > 60) {
+            valScore -= 10;
+            valNotes.push('P/S above historical median');
+        }
+    }
+    if (pe !== null && peMed !== null) {
+        if (pe < peMed * 0.7) {
+            valScore += 15;
+            valNotes.push('P/E well below historical median');
+        }
+        else if (pe > peMed * 1.3) {
+            valScore -= 15;
+            valNotes.push('P/E well above historical median');
+        }
+        valMetrics.peMed = peMed;
+    }
+    if (fwdPe !== null) {
+        if (fwdPe < 12) {
+            valScore += 10;
+            valNotes.push('Forward P/E < 12 — cheap');
+        }
+        else if (fwdPe < 18) {
+            valScore += 5;
+        }
+        else if (fwdPe > 35) {
+            valScore -= 15;
+            valNotes.push('Forward P/E > 35 — expensive by Burry standards');
+        }
+        else if (fwdPe > 25) {
+            valScore -= 5;
+        }
+    }
+    if (fcfYield !== null) {
+        if (fcfYield > 8) {
+            valScore += 10;
+            valNotes.push('FCF yield > 8% — strong cash generation');
+        }
+        else if (fcfYield > 5) {
+            valScore += 5;
+        }
+        else if (fcfYield < 1) {
+            valScore -= 10;
+            valNotes.push('FCF yield < 1% — poor cash generation');
+        }
+    }
+    // Burry: "Samsung at tangible book value — historically been a floor"
+    if (pb !== null && pbLow !== null) {
+        if (pb <= pbLow * 1.1) {
+            valScore += 15;
+            valNotes.push('Trading near tangible book floor — Burry pattern');
+        }
+    }
+    valScore = Math.max(0, Math.min(100, valScore));
+    const valGrade = valScore >= 75 ? 'Deep Value' : valScore >= 60 ? 'Value' : valScore >= 40 ? 'Fair' : valScore >= 25 ? 'Rich' : 'Expensive';
+    // ═══ 2. BALANCE SHEET HEALTH ═══
+    const debtEbitda = parseFloat(ratios['Debt-to-EBITDA']?.value) || null;
+    const interestCov = parseFloat(ratios['Interest Coverage']?.value) || null;
+    const debtEquity = parseFloat(ratios['Debt-to-Equity']?.value) || null;
+    const currentRatio = parseFloat(ratios['Current Ratio']?.value) || null;
+    let bsScore = 60; // default moderately healthy
+    const bsMetrics = { debtEbitda, interestCov, debtEquity, currentRatio };
+    const bsNotes = [];
+    const hardSells = [];
+    // Burry HARD SELL: "Never compatible with >5x Debt/EBITDA"
+    if (debtEbitda !== null) {
+        if (debtEbitda > 5.0) {
+            bsScore = 0;
+            hardSells.push(`HARD SELL: Debt/EBITDA = ${debtEbitda.toFixed(1)}x (Burry threshold: 5.0x max — "When these thresholds are breached, sell immediately")`);
+            bsNotes.push('CRITICAL: Exceeds Burry\'s absolute Debt/EBITDA limit');
+        }
+        else if (debtEbitda > 3.5) {
+            bsScore -= 15;
+            bsNotes.push(`Debt/EBITDA ${debtEbitda.toFixed(1)}x — approaching Burry concern zone`);
+        }
+        else if (debtEbitda < 1.5) {
+            bsScore += 15;
+            bsNotes.push('Low leverage — Burry prefers "little debt"');
+        }
+        else if (debtEbitda < 2.5) {
+            bsScore += 5;
+        }
+    }
+    // Burry HARD SELL: "Never ok with interest coverage under 4.0x"
+    if (interestCov !== null) {
+        if (interestCov < 4.0 && interestCov > 0) {
+            bsScore = Math.min(bsScore, 10);
+            hardSells.push(`HARD SELL: Interest Coverage = ${interestCov.toFixed(1)}x (Burry threshold: 4.0x min — non-negotiable)`);
+            bsNotes.push('CRITICAL: Below Burry\'s absolute interest coverage floor');
+        }
+        else if (interestCov > 10) {
+            bsScore += 10;
+            bsNotes.push('Strong interest coverage — ample debt service capacity');
+        }
+    }
+    if (currentRatio !== null) {
+        if (currentRatio < 0.8) {
+            bsScore -= 10;
+            bsNotes.push('Weak current ratio — liquidity concern');
+        }
+        else if (currentRatio > 2.0) {
+            bsScore += 5;
+        }
+    }
+    bsScore = Math.max(0, Math.min(100, bsScore));
+    const bsGrade = hardSells.length > 0 ? 'FAIL — Hard Sell' : bsScore >= 70 ? 'Strong' : bsScore >= 50 ? 'Adequate' : bsScore >= 30 ? 'Weak' : 'Dangerous';
+    // ═══ 3. SBC & DILUTION ═══
+    // Burry's "Tragic Algebra of SBC" — even 1% dilution dramatically reduces intrinsic value
+    const sbcRevenue = parseFloat(ratios['SBC (% of Revenue)']?.value) || null;
+    const sharesGrowth = parseFloat(ratios['Shares Outstanding Growth (%)']?.value) || null;
+    const buybackYield = parseFloat(ratios['Buyback Ratio (%)']?.value) || null;
+    let sbcScore = 60;
+    const sbcMetrics = { sbcRevenue, sharesGrowth, buybackYield };
+    const sbcNotes = [];
+    if (sbcRevenue !== null) {
+        if (sbcRevenue > 15) {
+            sbcScore -= 30;
+            sbcNotes.push(`SBC = ${sbcRevenue.toFixed(1)}% of revenue — Burry: "Growth at any cost and SBC at any price is not the path"`);
+        }
+        else if (sbcRevenue > 8) {
+            sbcScore -= 15;
+            sbcNotes.push(`SBC = ${sbcRevenue.toFixed(1)}% of revenue — material dilution`);
+        }
+        else if (sbcRevenue > 3) {
+            sbcScore -= 5;
+        }
+        else if (sbcRevenue < 1) {
+            sbcScore += 15;
+            sbcNotes.push('Minimal SBC — Burry prefers companies without significant dilution');
+        }
+    }
+    if (sharesGrowth !== null) {
+        if (sharesGrowth > 2) {
+            sbcScore -= 20;
+            sbcNotes.push(`Share count GROWING ${sharesGrowth.toFixed(1)}%/yr despite potential buybacks — "buybacks to nowhere"`);
+        }
+        else if (sharesGrowth > 0.5) {
+            sbcScore -= 10;
+            sbcNotes.push('Share count still rising — buybacks not offsetting dilution');
+        }
+        else if (sharesGrowth < -2) {
+            sbcScore += 15;
+            sbcNotes.push('Meaningful share count reduction — effective capital return');
+        }
+        else if (sharesGrowth < 0) {
+            sbcScore += 5;
+        }
+    }
+    sbcScore = Math.max(0, Math.min(100, sbcScore));
+    // ═══ 4. MOAT DURABILITY (Stone Classification + AICT) ═══
+    const stoneData = STONE_MAP[sectorName] || { stone: 'Limestone', score: 50 };
+    const aictTier = AICT_MAP[sectorName] || 3;
+    let moatScore = stoneData.score;
+    // Adjust moat score by AICT tier
+    if (aictTier <= 2)
+        moatScore -= 15; // Severe/existential AI threat
+    else if (aictTier >= 5)
+        moatScore += 10; // AI is additive
+    moatScore = Math.max(0, Math.min(100, moatScore));
+    const moatDetail = `${stoneData.stone} moat (${sectorName}) — AICT Tier ${aictTier}: ${aictTier <= 2 ? 'AI poses significant competitive threat' : aictTier >= 4 ? 'Low AI disruption risk — regulatory/switching cost moats protect' : 'Moderate AI impact — company can adapt'}`;
+    // ═══ 5. VOLUME SIGNAL ═══
+    let volScore = 50;
+    let volDetail = '';
+    const to = volumeBreakdown?.shareholderTurnover;
+    const decline = volumeBreakdown?.peak?.declineFromPeak;
+    if (to && to.turnoverPct > 0) {
+        // Burry: 3-5x turnover sets up potential bottoms
+        if (to.turnoverPct >= 300) {
+            volScore = 90;
+            volDetail = `Turnover ${to.turnoverPct}% — Burry: "between 3-5x turnover sets up potential bottom" — ROTATION WELL PAST COMPLETE`;
+        }
+        else if (to.turnoverPct >= 200) {
+            volScore = 80;
+            volDetail = `Turnover ${to.turnoverPct}% — rotation complete, new shareholder base established`;
+        }
+        else if (to.turnoverPct >= 100) {
+            volScore = 65;
+            volDetail = `Turnover ${to.turnoverPct}% — rotation progressing, not yet complete`;
+        }
+        else {
+            volScore = 40;
+            volDetail = `Turnover ${to.turnoverPct}% — early rotation, weak hands still present`;
+        }
+    }
+    else if (decline !== undefined && decline < -5) {
+        volDetail = `Stock in decline (${decline?.toFixed(1)}% from peak) but no significant turnover data`;
+        volScore = 35;
+    }
+    else {
+        volDetail = 'No significant decline pattern — turnover analysis not applicable';
+        volScore = 50;
+    }
+    // Combine with up/down volume ratio
+    if (upDownRatio !== null) {
+        if (upDownRatio > 1.5) {
+            volScore = Math.min(100, volScore + 10);
+            volDetail += '. Heavy accumulation volume (Burry bullish signal)';
+        }
+        else if (upDownRatio < 0.7) {
+            volScore = Math.max(0, volScore - 10);
+            volDetail += '. Distribution volume dominates';
+        }
+    }
+    // ═══ 6. CONTRARIAN OPPORTUNITY ═══
+    let contrScore = 50;
+    let contrDetail = '';
+    const contrNotes = [];
+    // "Whale fall" — quality stocks dragged down by sector panic
+    if (pctFrom52wHigh !== null && pctFrom52wHigh < -30) {
+        contrScore += 20;
+        contrNotes.push(`${pctFrom52wHigh.toFixed(0)}% below 52-week high — potential whale-fall opportunity`);
+    }
+    else if (pctFrom52wHigh !== null && pctFrom52wHigh < -15) {
+        contrScore += 10;
+        contrNotes.push(`${pctFrom52wHigh.toFixed(0)}% below 52-week high — meaningful pullback`);
+    }
+    else if (pctFrom52wHigh !== null && pctFrom52wHigh > -3) {
+        contrScore -= 15;
+        contrNotes.push('Near all-time highs — no contrarian edge');
+    }
+    // RSI-based oversold/overbought
+    if (rsi14 !== null) {
+        if (rsi14 < 30) {
+            contrScore += 15;
+            contrNotes.push(`RSI ${rsi14.toFixed(0)} — oversold, contrarian buy signal`);
+        }
+        else if (rsi14 > 70) {
+            contrScore -= 10;
+            contrNotes.push(`RSI ${rsi14.toFixed(0)} — overbought, Burry would wait`);
+        }
+    }
+    // Below 200d = potential mean reversion candidate
+    if (priceVs200d !== null && priceVs200d < -15) {
+        contrScore += 10;
+        contrNotes.push('Well below 200d MA — mean reversion territory');
+    }
+    contrScore = Math.max(0, Math.min(100, contrScore));
+    contrDetail = contrNotes.length > 0 ? contrNotes.join('. ') : 'No strong contrarian signals either way';
+    // ═══ 7. CAPITAL CYCLE POSITION ═══
+    const inCapexBoom = CAPEX_BOOM_SECTORS.has(sectorName);
+    let cycleScore = 50;
+    let cyclePosition = 'Mid-cycle';
+    let cycleDetail = '';
+    if (inCapexBoom) {
+        // Burry: "Stock market peaks occur MIDWAY through investment booms, not at end"
+        cycleScore = 25;
+        cyclePosition = 'Late Capex Boom';
+        cycleDetail = 'Sector in active capex boom — Burry (via Chancellor): "Stock market peaks occur MIDWAY through investment booms." High risk of peak-cycle pricing.';
+    }
+    else {
+        // Non-boom sectors are relatively safer on capital cycle basis
+        cycleScore = 60;
+        cyclePosition = 'Normal Cycle';
+        cycleDetail = 'Sector not in capex boom territory — no capital cycle red flag';
+    }
+    // ═══ AGGREGATE PRINCIPLES TRIGGERED ═══
+    const principlesTriggered = [];
+    const redFlags = [];
+    const greenFlags = [];
+    // IV15 proxy: if FCF yield > 8% and forward P/E < 18, plausible 15%+ returns
+    if (fcfYield !== null && fcfYield > 8 && fwdPe !== null && fwdPe < 18) {
+        principlesTriggered.push({
+            principle: 'IV15 Standard (proxy)',
+            applies: 'BULLISH',
+            quote: '"Any stock I own must offer, with a good degree of predictability, 15% or more annual returns for a long period of time."',
+        });
+        greenFlags.push('Plausible 15%+ annual returns based on FCF yield and forward P/E');
+    }
+    // "Large, well-established businesses with significant owners earnings, little debt, and large buybacks"
+    if (debtEbitda !== null && debtEbitda < 2.5 && sharesGrowth !== null && sharesGrowth < -1) {
+        principlesTriggered.push({
+            principle: 'Ideal Company Profile',
+            applies: 'BULLISH',
+            quote: '"Large, well-established businesses with significant owners earnings, little debt, and large buybacks"',
+        });
+        greenFlags.push('Low debt + active share reduction — matches Burry\'s ideal profile');
+    }
+    // SBC concern
+    if (sbcRevenue !== null && sbcRevenue > 10) {
+        principlesTriggered.push({
+            principle: 'Tragic Algebra of SBC',
+            applies: 'BEARISH',
+            quote: '"Even sub-1% dilution dramatically reduces present value. Growth at any cost and SBC at any price is not the path to acceptable long-term returns."',
+        });
+        redFlags.push(`SBC at ${sbcRevenue.toFixed(1)}% of revenue — Burry's "Tragic Algebra" applies`);
+    }
+    // Capital cycle warning
+    if (inCapexBoom) {
+        principlesTriggered.push({
+            principle: 'Capital Cycle Theory',
+            applies: 'BEARISH',
+            quote: '"Stock market peaks occur MIDWAY through investment booms, not at end." — Edward Chancellor\'s Capital Account, cited repeatedly by Burry',
+        });
+        redFlags.push('Sector in capex boom — peak-cycle pricing risk');
+    }
+    // Contrarian whale fall
+    if (pctFrom52wHigh !== null && pctFrom52wHigh < -25 && moatScore >= 50) {
+        principlesTriggered.push({
+            principle: 'Whale Fall',
+            applies: 'BULLISH',
+            quote: '"These stocks are part of the mass whale fall happening away from the main spectacle. In 1999 this happened too."',
+        });
+        greenFlags.push('Quality stock significantly below highs — potential whale-fall opportunity');
+    }
+    // Volume turnover bottoming signal
+    if (to && to.turnoverPct >= 200 && decline !== undefined && decline < -20) {
+        principlesTriggered.push({
+            principle: 'Shareholder Turnover Bottoming',
+            applies: 'BULLISH',
+            quote: '"Shares traded 3.93x total outstanding since falling below [level] — between 3-5x turnover sets up potential bottom"',
+        });
+        greenFlags.push(`${to.turnoverPct}% shareholder turnover during decline — Burry bottoming signal`);
+    }
+    // Declining volume on rallies = bearish
+    if (upDownRatio !== null && upDownRatio < 0.7 && priceVs200d !== null && priceVs200d > 10) {
+        principlesTriggered.push({
+            principle: 'Exhausted Buying',
+            applies: 'BEARISH',
+            quote: '"Declining volume during price advances = bearish — everyone that can buy has bought"',
+        });
+        redFlags.push('Price extended above 200d MA on declining volume — buying exhaustion');
+    }
+    // Near tangible book value
+    if (pb !== null && pbLow !== null && pb <= pbLow * 1.15) {
+        principlesTriggered.push({
+            principle: 'Tangible Book Floor',
+            applies: 'BULLISH',
+            quote: '"Samsung at tangible book value — historically been a floor"',
+        });
+        greenFlags.push('Trading near historical P/B floor — Burry sees this as a floor');
+    }
+    // ═══ OVERALL SCORE ═══
+    // Weights: Valuation 25%, Balance Sheet 20%, Volume 15%, Contrarian 15%, Moat 10%, SBC 10%, Capital Cycle 5%
+    const overall = Math.round(valScore * 0.25 +
+        bsScore * 0.20 +
+        volScore * 0.15 +
+        contrScore * 0.15 +
+        moatScore * 0.10 +
+        sbcScore * 0.10 +
+        cycleScore * 0.05);
+    // Hard sells override everything
+    let overallVerdict;
+    if (hardSells.length > 0) {
+        overallVerdict = 'AVOID';
+    }
+    else if (overall >= 72) {
+        overallVerdict = 'ATTRACTIVE';
+    }
+    else if (overall >= 58) {
+        overallVerdict = 'INTERESTING';
+    }
+    else if (overall >= 42) {
+        overallVerdict = 'NEUTRAL';
+    }
+    else if (overall >= 28) {
+        overallVerdict = 'UNATTRACTIVE';
+    }
+    else {
+        overallVerdict = 'AVOID';
+    }
+    // Generate summary
+    const summaryParts = [];
+    if (hardSells.length > 0) {
+        summaryParts.push(`AUTOMATIC AVOID: ${hardSells[0].split('(')[0].trim()}.`);
+    }
+    else {
+        summaryParts.push(`Burry Framework Score: ${overall}/100 (${overallVerdict}).`);
+    }
+    if (greenFlags.length > 0)
+        summaryParts.push(greenFlags[0] + '.');
+    if (redFlags.length > 0)
+        summaryParts.push('Concern: ' + redFlags[0] + '.');
+    if (!dataAvailable)
+        summaryParts.push('Note: GuruFocus data unavailable — scores are based on technical/volume data only.');
+    return {
+        overallVerdict,
+        overallScore: hardSells.length > 0 ? Math.min(overall, 15) : overall,
+        summary: summaryParts.join(' '),
+        valuation: { score: valScore, grade: valGrade, detail: valNotes.join('. ') || 'Insufficient valuation data', metrics: valMetrics },
+        balanceSheet: { score: bsScore, grade: bsGrade, detail: bsNotes.join('. ') || 'Insufficient balance sheet data', hardSellTriggered: hardSells.length > 0, metrics: bsMetrics },
+        moat: { stone: stoneData.stone, aictTier, detail: moatDetail, score: moatScore },
+        volumeSignal: { score: volScore, detail: volDetail || 'No volume signal' },
+        contrarianOpportunity: { score: contrScore, detail: contrDetail },
+        capitalCycle: { position: cyclePosition, detail: cycleDetail, score: cycleScore },
+        sbcDilution: { score: sbcScore, detail: sbcNotes.join('. ') || 'No SBC data available', metrics: sbcMetrics },
+        principlesTriggered,
+        hardSells,
+        redFlags,
+        greenFlags,
+        dataAvailable,
+    };
+}
+function detectSectorName(sector, group) {
+    const s = (sector || '').toLowerCase();
+    const g = (group || '').toLowerCase();
+    if (g.includes('semiconductor') || g.includes('chip'))
+        return 'Semiconductors';
+    if (g.includes('software') || g.includes('saas'))
+        return 'Software';
+    if (g.includes('airline'))
+        return 'Airlines';
+    if (g.includes('bank') || g.includes('savings') || g.includes('lending'))
+        return 'Banks';
+    if (g.includes('biotech') || g.includes('pharma'))
+        return 'Biotech/Pharma';
+    if (g.includes('insurance'))
+        return 'Insurance';
+    if (g.includes('oil') || g.includes('gas') || g.includes('energy'))
+        return 'Energy';
+    if (g.includes('retail') || g.includes('store'))
+        return 'Retail';
+    if (g.includes('medical') || g.includes('health') || g.includes('hospital'))
+        return 'Healthcare';
+    if (g.includes('transport') || g.includes('railroad') || g.includes('freight'))
+        return 'Transports';
+    if (g.includes('chemical') || g.includes('material') || g.includes('metal') || g.includes('mining'))
+        return 'Materials';
+    if (g.includes('reit') || g.includes('real estate'))
+        return 'Real Estate';
+    if (g.includes('utility') || g.includes('electric') || g.includes('water'))
+        return 'Utilities';
+    if (g.includes('food') || g.includes('beverage') || g.includes('consumer staple'))
+        return 'Consumer Staples';
+    if (g.includes('aerospace') || g.includes('defense'))
+        return 'Aerospace & Defense';
+    if (g.includes('media') || g.includes('telecom') || g.includes('communication'))
+        return 'Communications';
+    if (s.includes('technology') || s.includes('tech'))
+        return 'Technology';
+    if (s.includes('financial'))
+        return 'Financials';
+    if (s.includes('health'))
+        return 'Healthcare';
+    if (s.includes('energy'))
+        return 'Energy';
+    if (s.includes('industrial'))
+        return 'Industrials';
+    if (s.includes('consumer') && s.includes('disc'))
+        return 'Consumer Discretionary';
+    if (s.includes('consumer') && s.includes('stap'))
+        return 'Consumer Staples';
+    if (s.includes('material'))
+        return 'Materials';
+    if (s.includes('communication'))
+        return 'Communications';
+    return 'Broad Market';
+}
 async function getBurryTickerInsight(symbol) {
     const upper = symbol.toUpperCase();
     let d;

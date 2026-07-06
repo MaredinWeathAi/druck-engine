@@ -2,6 +2,79 @@ declare const router: import("express-serve-static-core").Router;
 export declare function initBurryTables(): void;
 export declare function startRSSPolling(): void;
 export declare function stopRSSPolling(): void;
+export interface BurryFrameworkInput {
+    symbol: string;
+    price: number;
+    priceVs200d: number | null;
+    pctFrom52wHigh: number | null;
+    upDownRatio: number | null;
+    sma50Above200: boolean;
+    rsi14: number | null;
+    volumeBreakdown: {
+        shareholderTurnover?: {
+            turnoverPct: number;
+            turnoverLabel: string;
+            [key: string]: any;
+        } | null;
+        peak?: {
+            declineFromPeak: number;
+            [key: string]: any;
+        } | null;
+        [key: string]: any;
+    } | null;
+}
+export interface BurryFrameworkResult {
+    overallVerdict: 'ATTRACTIVE' | 'INTERESTING' | 'NEUTRAL' | 'UNATTRACTIVE' | 'AVOID';
+    overallScore: number;
+    summary: string;
+    valuation: {
+        score: number;
+        grade: string;
+        detail: string;
+        metrics: Record<string, any>;
+    };
+    balanceSheet: {
+        score: number;
+        grade: string;
+        detail: string;
+        hardSellTriggered: boolean;
+        metrics: Record<string, any>;
+    };
+    moat: {
+        stone: string;
+        aictTier: number;
+        detail: string;
+        score: number;
+    };
+    volumeSignal: {
+        score: number;
+        detail: string;
+    };
+    contrarianOpportunity: {
+        score: number;
+        detail: string;
+    };
+    capitalCycle: {
+        position: string;
+        detail: string;
+        score: number;
+    };
+    sbcDilution: {
+        score: number;
+        detail: string;
+        metrics: Record<string, any>;
+    };
+    principlesTriggered: Array<{
+        principle: string;
+        applies: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+        quote: string;
+    }>;
+    hardSells: string[];
+    redFlags: string[];
+    greenFlags: string[];
+    dataAvailable: boolean;
+}
+export declare function evaluateBurryFramework(input: BurryFrameworkInput): Promise<BurryFrameworkResult>;
 export interface BurryTickerInsight {
     symbol: string;
     hasPosition: boolean;
