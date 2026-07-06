@@ -32,7 +32,7 @@ async function getShareStructureFromGF(symbol) {
     const GF_API_KEY = process.env.GURUFOCUS_API_KEY || '026d8ee9d10c778c6656d672b5ff1e71:544e1fff1953fece457d6152f3239e74';
     try {
         const resp = await fetch(`https://api.gurufocus.com/public/user/${GF_API_KEY}/stock/${symbol}/summary`, {
-            signal: AbortSignal.timeout(8000),
+            signal: AbortSignal.timeout(5000),
         });
         if (!resp.ok)
             return { sharesOutstanding: null, floatShares: null };
@@ -59,29 +59,27 @@ async function getShareStructure(symbol) {
     if (cached && Date.now() - cached.fetchedAt < SHARE_CACHE_TTL) {
         return { sharesOutstanding: cached.sharesOutstanding, floatShares: cached.floatShares };
     }
-    // Try Yahoo first
+    // GuruFocus first (works reliably from cloud), Yahoo as fallback
     let so = null;
     let fl = null;
-    try {
-        const q = await Promise.race([
-            yahooFinance.quoteSummary(symbol, { modules: ['defaultKeyStatistics'] }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
-        ]);
-        so = q?.defaultKeyStatistics?.sharesOutstanding || null;
-        fl = q?.defaultKeyStatistics?.floatShares || null;
-        if (so)
-            console.log(`[VOL] Yahoo share structure for ${symbol}: SO=${(so / 1e6).toFixed(1)}M, Float=${fl ? (fl / 1e6).toFixed(1) + 'M' : 'null'}`);
+    const gf = await getShareStructureFromGF(symbol);
+    if (gf.sharesOutstanding) {
+        so = gf.sharesOutstanding;
+        fl = gf.floatShares;
     }
-    catch (err) {
-        console.error(`[VOL] Yahoo share structure failed for ${symbol}: ${err?.message?.slice(0, 60)}`);
-    }
-    // Fallback to GuruFocus if Yahoo failed
+    // Try Yahoo only if GuruFocus failed (rare)
     if (!so) {
-        const gf = await getShareStructureFromGF(symbol);
-        if (gf.sharesOutstanding) {
-            so = gf.sharesOutstanding;
-            fl = gf.floatShares || fl;
+        try {
+            const q = await Promise.race([
+                yahooFinance.quoteSummary(symbol, { modules: ['defaultKeyStatistics'] }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
+            ]);
+            so = q?.defaultKeyStatistics?.sharesOutstanding || null;
+            fl = q?.defaultKeyStatistics?.floatShares || fl;
+            if (so)
+                console.log(`[VOL] Yahoo share structure for ${symbol}: SO=${(so / 1e6).toFixed(1)}M`);
         }
+        catch (_) { /* Yahoo fails on cloud — expected */ }
     }
     if (so) {
         shareStructureCache.set(symbol, {
