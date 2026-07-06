@@ -482,6 +482,48 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 /* View-all link */
 .cc-viewall{font-size:11px;color:var(--dim);cursor:pointer;font-weight:600;text-decoration:none}
 .cc-viewall:hover{color:var(--accent)}
+
+/* ═══ CREDIT MARKET DASHBOARD ═══ */
+.credit-section{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px}
+.credit-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.credit-header h3{font-size:16px;color:var(--accent);display:flex;align-items:center;gap:10px}
+.credit-health-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:16px;font-size:12px;font-weight:700;letter-spacing:.5px}
+.credit-spread-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+@media(max-width:900px){.credit-spread-grid{grid-template-columns:1fr}}
+.credit-spread-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;position:relative;overflow:hidden}
+.credit-spread-card .spread-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin-bottom:6px}
+.credit-spread-card .spread-value{font-size:28px;font-weight:800;margin-bottom:4px}
+.credit-spread-card .spread-unit{font-size:12px;font-weight:600;color:var(--dim)}
+.credit-spread-card .spread-zone{font-size:11px;font-weight:600;margin-bottom:6px}
+.credit-spread-card .spread-changes{display:flex;gap:12px;font-size:11px;color:var(--dim)}
+.credit-spread-card .spread-changes .chg{font-weight:600}
+.credit-spread-card .spread-changes .chg.pos{color:#f97316}
+.credit-spread-card .spread-changes .chg.neg{color:#0ea5e9}
+.credit-spread-card .spread-trend{position:absolute;top:10px;right:12px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.5px}
+.credit-risk-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+@media(max-width:900px){.credit-risk-row{grid-template-columns:1fr}}
+.credit-risk-gauge{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;text-align:center}
+.credit-risk-gauge .gauge-score{font-size:48px;font-weight:800;line-height:1}
+.credit-risk-gauge .gauge-label{font-size:13px;font-weight:700;margin-top:4px}
+.credit-risk-gauge .gauge-sub{font-size:10px;color:var(--dim);margin-top:4px}
+.credit-risk-gauge .gauge-bar{height:6px;border-radius:3px;background:var(--border);margin-top:10px;overflow:hidden}
+.credit-risk-gauge .gauge-fill{height:100%;border-radius:3px;transition:width .5s}
+.credit-divergence{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;display:flex;flex-direction:column;justify-content:center}
+.credit-divergence .div-status{font-size:12px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.credit-divergence .div-message{font-size:12px;color:#94a3b8;line-height:1.6}
+.credit-ai-basket{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px}
+.credit-ai-basket h4{font-size:13px;color:var(--accent);margin-bottom:10px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.credit-ai-basket .basket-avg{font-size:12px;font-weight:700}
+.credit-ai-table{width:100%;border-collapse:collapse;font-size:12px}
+.credit-ai-table th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--dim);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+.credit-ai-table td{padding:6px 8px;border-bottom:1px solid rgba(30,41,59,.5)}
+.credit-ai-table tr:last-child td{border-bottom:none}
+.credit-ai-table .co-symbol{font-weight:700;color:var(--accent)}
+.credit-ai-table .co-score{font-weight:700;font-size:13px}
+.credit-ai-table .co-bar{height:4px;border-radius:2px;background:var(--border);width:60px;display:inline-block;vertical-align:middle;margin-left:6px}
+.credit-ai-table .co-bar-fill{height:100%;border-radius:2px}
+.credit-summary{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:12px;color:#94a3b8;line-height:1.7}
+.credit-summary .sum-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin-bottom:6px}
 </style>
 </head>
 <body>
@@ -679,23 +721,22 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         </div>
       </div>
 
-      <!-- Two-column: Aria Brief (left) + Headlines (right) -->
-      <div class="cc-top" style="margin-top:16px">
-        <div class="cc-left">
-          <!-- Aria Morning Brief -->
-          <div class="cc-aria">
-            <h3><span style="font-size:18px">🤖</span> Aria's Morning Brief</h3>
-            <div class="cc-aria-body" id="cc-aria-body">Loading narrative...</div>
-            <div class="cc-aria-ts" id="cc-aria-ts"></div>
-          </div>
+      <!-- Aria Brief (full width — Headlines removed per user request) -->
+      <div style="margin-top:16px">
+        <!-- Aria Morning Brief -->
+        <div class="cc-aria">
+          <h3><span style="font-size:18px">🤖</span> Aria's Morning Brief</h3>
+          <div class="cc-aria-body" id="cc-aria-body">Loading narrative...</div>
+          <div class="cc-aria-ts" id="cc-aria-ts"></div>
+        </div>
 
-          <!-- Signal Strip -->
-          <div class="card" style="padding:12px 16px">
+        <!-- Signal Strip + Death Nails row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+          <div class="card" style="padding:12px 16px;margin:0">
             <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-bottom:8px">Market Signals</div>
             <div class="cc-signals" id="cc-signal-strip"></div>
           </div>
 
-          <!-- Death Nails compact -->
           <div class="death-nails-banner dn-0" id="cc-dn-banner" style="margin:0">
             <div class="dn-count" id="cc-dn-count">—</div>
             <div>
@@ -703,17 +744,6 @@ button:disabled{opacity:0.5;cursor:not-allowed}
               <div class="dn-detail" id="cc-dn-detail"></div>
             </div>
             <div class="dn-nails" id="cc-dn-nails"></div>
-          </div>
-        </div>
-
-        <div class="cc-right">
-          <!-- Headline Feed — compact -->
-          <div class="cc-headlines" id="cc-headlines">
-            <h3>
-              <span><span style="font-size:14px">⚡</span> Live Headlines</span>
-              <span class="cc-viewall" onclick="showPage('intelfeed')">View All →</span>
-            </h3>
-            <div id="cc-headline-list">Loading headlines...</div>
           </div>
         </div>
       </div>
@@ -735,6 +765,93 @@ button:disabled{opacity:0.5;cursor:not-allowed}
 
     <!-- Dashboard Page -->
     <div class="page" id="page-dashboard">
+
+      <!-- ═══ CREDIT MARKET DASHBOARD (Top Priority) ═══ -->
+      <div class="credit-section" id="credit-dashboard">
+        <div class="credit-header">
+          <h3><span style="font-size:20px">💳</span> Credit Market Monitor</h3>
+          <div class="credit-health-badge" id="credit-health-badge">Loading...</div>
+        </div>
+
+        <!-- Spread Cards Row -->
+        <div class="credit-spread-grid">
+          <div class="credit-spread-card" id="credit-ig-card">
+            <div class="spread-label">Investment Grade OAS</div>
+            <div class="spread-value" id="credit-ig-value">—</div>
+            <div class="spread-zone" id="credit-ig-zone">Loading...</div>
+            <div class="spread-changes">
+              <span>1W: <span class="chg" id="credit-ig-1w">—</span></span>
+              <span>1M: <span class="chg" id="credit-ig-1m">—</span></span>
+            </div>
+            <div class="spread-trend" id="credit-ig-trend"></div>
+          </div>
+          <div class="credit-spread-card" id="credit-hy-card">
+            <div class="spread-label">High Yield OAS</div>
+            <div class="spread-value" id="credit-hy-value">—</div>
+            <div class="spread-zone" id="credit-hy-zone">Loading...</div>
+            <div class="spread-changes">
+              <span>1W: <span class="chg" id="credit-hy-1w">—</span></span>
+              <span>1M: <span class="chg" id="credit-hy-1m">—</span></span>
+            </div>
+            <div class="spread-trend" id="credit-hy-trend"></div>
+          </div>
+          <div class="credit-spread-card" id="credit-ccc-card">
+            <div class="spread-label">CCC & Lower OAS</div>
+            <div class="spread-value" id="credit-ccc-value">—</div>
+            <div class="spread-zone" id="credit-ccc-zone">Loading...</div>
+            <div class="spread-changes">
+              <span>1W: <span class="chg" id="credit-ccc-1w">—</span></span>
+              <span>1M: <span class="chg" id="credit-ccc-1m">—</span></span>
+            </div>
+            <div class="spread-trend" id="credit-ccc-trend"></div>
+          </div>
+        </div>
+
+        <!-- Risk Score + Divergence Row -->
+        <div class="credit-risk-row">
+          <div class="credit-risk-gauge">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin-bottom:8px">Credit Risk Score</div>
+            <div class="gauge-score" id="credit-risk-score">—</div>
+            <div class="gauge-label" id="credit-risk-label">Loading</div>
+            <div class="gauge-sub">IG 30% · HY 30% · CCC 20% · AI Basket 20%</div>
+            <div class="gauge-bar"><div class="gauge-fill" id="credit-risk-bar" style="width:0%"></div></div>
+          </div>
+          <div class="credit-divergence">
+            <div class="div-status" id="credit-div-status">Checking divergence...</div>
+            <div class="div-message" id="credit-div-message"></div>
+          </div>
+        </div>
+
+        <!-- AI Credit Basket -->
+        <div class="credit-ai-basket">
+          <h4>
+            <span><span style="font-size:14px">🤖</span> AI Credit Basket (Balance Sheet Health)</span>
+            <span class="basket-avg" id="credit-ai-avg">—</span>
+          </h4>
+          <table class="credit-ai-table">
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th>Interest Cov.</th>
+                <th>Debt/EBITDA</th>
+                <th>Z-Score</th>
+                <th>Cash/Debt</th>
+                <th>Health Score</th>
+              </tr>
+            </thead>
+            <tbody id="credit-ai-tbody">
+              <tr><td colspan="6" style="text-align:center;color:var(--dim)">Loading AI credit basket...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Daily Summary -->
+        <div class="credit-summary">
+          <div class="sum-title">Daily Credit Summary</div>
+          <div id="credit-summary-text">Loading credit analysis...</div>
+        </div>
+      </div>
+
       <div class="action-banner" id="signal-dashboard">
         <div class="action-dot"></div>
         <div class="action-signal">Loading...</div>
@@ -1493,7 +1610,123 @@ function applySignals(data) {
 }
 
 // Dashboard
+// ═══ CREDIT MARKET DASHBOARD LOADER ═══
+function loadCreditDashboard() {
+  apiCall('/api/credit').then(function(d) {
+    if (!d || d.error) {
+      document.getElementById('credit-health-badge').textContent = 'No Data';
+      return;
+    }
+
+    // Health badge
+    var badge = document.getElementById('credit-health-badge');
+    badge.textContent = d.healthEmoji + ' ' + d.healthStatus;
+    var badgeColors = {
+      'Healthy': { bg: 'rgba(29,158,117,.15)', color: '#1D9E75' },
+      'Early Warning': { bg: 'rgba(245,158,11,.15)', color: '#f59e0b' },
+      'Credit Deteriorating': { bg: 'rgba(249,115,22,.15)', color: '#f97316' },
+      'Credit Crisis': { bg: 'rgba(220,38,38,.15)', color: '#dc2626' }
+    };
+    var bc = badgeColors[d.healthStatus] || badgeColors['Healthy'];
+    badge.style.background = bc.bg;
+    badge.style.color = bc.color;
+
+    // Spread cards helper
+    function renderSpread(prefix, spread) {
+      document.getElementById('credit-' + prefix + '-value').innerHTML = spread.current.toFixed(0) + ' <span class="spread-unit">bp</span>';
+      document.getElementById('credit-' + prefix + '-value').style.color = spread.zoneColor;
+
+      document.getElementById('credit-' + prefix + '-zone').textContent = spread.zone;
+      document.getElementById('credit-' + prefix + '-zone').style.color = spread.zoneColor;
+
+      var w = spread.weekChange;
+      var m = spread.monthChange;
+      var w1 = document.getElementById('credit-' + prefix + '-1w');
+      w1.textContent = (w > 0 ? '+' : '') + w.toFixed(0) + ' bp';
+      w1.className = 'chg ' + (w > 3 ? 'pos' : w < -3 ? 'neg' : '');
+      var m1 = document.getElementById('credit-' + prefix + '-1m');
+      m1.textContent = (m > 0 ? '+' : '') + m.toFixed(0) + ' bp';
+      m1.className = 'chg ' + (m > 5 ? 'pos' : m < -5 ? 'neg' : '');
+
+      var trend = document.getElementById('credit-' + prefix + '-trend');
+      var trendColors = {
+        'TIGHTENING': { bg: 'rgba(14,165,233,.15)', color: '#0ea5e9', label: '↓ Tightening' },
+        'STABLE': { bg: 'rgba(100,116,139,.15)', color: '#94a3b8', label: '→ Stable' },
+        'WIDENING': { bg: 'rgba(249,115,22,.15)', color: '#f97316', label: '↑ Widening' },
+        'WIDENING_FAST': { bg: 'rgba(220,38,38,.15)', color: '#dc2626', label: '⚠ Widening Fast' }
+      };
+      var tc = trendColors[spread.trend] || trendColors['STABLE'];
+      trend.textContent = tc.label;
+      trend.style.background = tc.bg;
+      trend.style.color = tc.color;
+    }
+
+    renderSpread('ig', d.igOAS);
+    renderSpread('hy', d.hyOAS);
+    renderSpread('ccc', d.cccOAS);
+
+    // Credit Risk Score
+    document.getElementById('credit-risk-score').textContent = d.creditRiskScore;
+    document.getElementById('credit-risk-score').style.color = d.creditRiskColor;
+    document.getElementById('credit-risk-label').textContent = d.creditRiskLabel;
+    document.getElementById('credit-risk-label').style.color = d.creditRiskColor;
+    var bar = document.getElementById('credit-risk-bar');
+    bar.style.width = d.creditRiskScore + '%';
+    bar.style.background = d.creditRiskColor;
+
+    // Divergence
+    var divStatus = document.getElementById('credit-div-status');
+    var divMsg = document.getElementById('credit-div-message');
+    if (d.divergence.detected) {
+      var sevColors = { 'WATCH': '#f59e0b', 'WARNING': '#f97316', 'CRITICAL': '#dc2626' };
+      var sevEmojis = { 'WATCH': '👁️', 'WARNING': '⚠️', 'CRITICAL': '🚨' };
+      divStatus.innerHTML = (sevEmojis[d.divergence.severity] || '⚠️') + ' <span style="color:' + (sevColors[d.divergence.severity] || '#f59e0b') + '">' + d.divergence.severity + ' — Divergence Detected</span>';
+      divMsg.textContent = d.divergence.message;
+    } else {
+      divStatus.innerHTML = '✅ <span style="color:#1D9E75">No Divergence</span>';
+      divMsg.textContent = d.divergence.message;
+    }
+
+    // AI Credit Basket
+    var avgEl = document.getElementById('credit-ai-avg');
+    if (d.aiBasket && d.aiBasket.companies.length > 0) {
+      var avgColor = d.aiBasket.avgScore >= 80 ? '#1D9E75' : d.aiBasket.avgScore >= 60 ? '#f59e0b' : '#f97316';
+      avgEl.innerHTML = 'Avg: <span style="color:' + avgColor + '">' + d.aiBasket.avgScore + '/100</span>';
+
+      var tbody = document.getElementById('credit-ai-tbody');
+      var rows = '';
+      d.aiBasket.companies.sort(function(a, b) { return b.creditHealthScore - a.creditHealthScore; });
+      d.aiBasket.companies.forEach(function(co) {
+        var sc = co.creditHealthScore;
+        var barColor = sc >= 80 ? '#1D9E75' : sc >= 60 ? '#22c55e' : sc >= 40 ? '#f59e0b' : '#f97316';
+        rows += '<tr>';
+        rows += '<td><span class="co-symbol">' + co.symbol + '</span> <span style="color:var(--dim);font-size:11px">' + co.name + '</span></td>';
+        rows += '<td>' + (co.interestCoverage !== null ? co.interestCoverage.toFixed(1) + 'x' : '—') + '</td>';
+        rows += '<td>' + (co.debt2ebitda !== null ? co.debt2ebitda.toFixed(2) + 'x' : '—') + '</td>';
+        rows += '<td>' + (co.zscore !== null ? co.zscore.toFixed(1) : '—') + '</td>';
+        rows += '<td>' + (co.cash2debt !== null ? co.cash2debt.toFixed(2) + 'x' : '—') + '</td>';
+        rows += '<td><span class="co-score" style="color:' + barColor + '">' + sc + '</span>';
+        rows += '<span class="co-bar"><span class="co-bar-fill" style="width:' + sc + '%;background:' + barColor + '"></span></span></td>';
+        rows += '</tr>';
+      });
+      tbody.innerHTML = rows;
+    } else {
+      avgEl.textContent = 'No data';
+    }
+
+    // Summary
+    document.getElementById('credit-summary-text').textContent = d.summary;
+
+  }).catch(function(err) {
+    console.warn('[CREDIT UI] Load failed:', err);
+    document.getElementById('credit-health-badge').textContent = 'Error';
+  });
+}
+
 function loadDashboard() {
+  // Load credit dashboard first (top of page)
+  loadCreditDashboard();
+
   apiCall('/api/trifecta').then(function(data) {
     var tri = data.trifecta_score;
     var m1 = data.modules.m1_liquidity;

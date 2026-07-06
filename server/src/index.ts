@@ -12,6 +12,7 @@ import alertRouter from './alert-system';
 import geoEventsRouter, { setGeoEventKeys } from './geo-events';
 import burrySubstackRouter, { initBurryTables, startRSSPolling } from './burry-substack';
 import { computeVolumeBreakdown, computeWatchlistVolumeBadge } from './volume-analysis';
+import { fetchCreditDashboard } from './credit-analysis';
 import { fetchTickerBars } from './morning-lens';
 import {
   initDatabase, getDbStats, getSymbolHistory, getSymbolPhaseTimeline,
@@ -783,9 +784,9 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '16.2.0',
+    version: '16.3.0',
     build: '2026-07-06T20:00:00Z',
-    BUILD_CANARY: 'BURRY_FRAMEWORK_EVALUATOR',
+    BUILD_CANARY: 'CREDIT_MARKET_DASHBOARD',
     name: 'Druck Engine — Structural Regime Intelligence',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
@@ -1943,6 +1944,19 @@ app.use('/api/alerts', alertRouter);
 app.use('/api/geo-events', geoEventsRouter);
 app.use('/api', burrySubstackRouter);
 
+// ─── CREDIT MARKET ROUTE ───
+app.get('/api/credit', async (_req, res) => {
+  try {
+    const data = await fetchCreditDashboard(FRED_API_KEY, GURUFOCUS_API_KEY);
+    if (!data) {
+      return res.status(503).json({ error: 'Credit data not available — FRED key may be missing' });
+    }
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Credit analysis failed' });
+  }
+});
+
 // ─── VOLUME ANALYSIS ROUTES ───
 app.get('/api/volume/:symbol', async (req, res) => {
   try {
@@ -1990,7 +2004,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v16.2.0 — Structural Regime Intelligence + Burry Framework Evaluator`);
+  console.log(`\n  DRUCK ENGINE v16.3.0 — Structural Regime Intelligence + Credit Market Dashboard`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);
