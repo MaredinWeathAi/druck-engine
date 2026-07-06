@@ -28,34 +28,74 @@ catch {
 }
 const shareStructureCache = new Map();
 const SHARE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+async function getShareStructureFromGF(symbol) {
+    const GF_API_KEY = process.env.GURUFOCUS_API_KEY || '026d8ee9d10c778c6656d672b5ff1e71:544e1fff1953fece457d6152f3239e74';
+    try {
+        const resp = await fetch(`https://api.gurufocus.com/public/user/${GF_API_KEY}/stock/${symbol}/summary`, {
+            signal: AbortSignal.timeout(8000),
+        });
+        if (!resp.ok)
+            return { sharesOutstanding: null, floatShares: null };
+        const data = await resp.json();
+        const cd = data?.summary?.company_data;
+        if (!cd)
+            return { sharesOutstanding: null, floatShares: null };
+        // GuruFocus returns shares in millions — convert to actual count
+        const soMillions = parseFloat(cd.shareso || cd.shares || '0');
+        const flMillions = parseFloat(cd.float || '0');
+        const so = soMillions > 0 ? Math.round(soMillions * 1e6) : null;
+        const fl = flMillions > 0 ? Math.round(flMillions * 1e6) : null;
+        console.log(`[VOL] GuruFocus share structure for ${symbol}: SO=${so ? (so / 1e6).toFixed(1) + 'M' : 'null'}, Float=${fl ? (fl / 1e6).toFixed(1) + 'M' : 'null'}`);
+        return { sharesOutstanding: so, floatShares: fl };
+    }
+    catch (err) {
+        console.error(`[VOL] GuruFocus share fallback failed for ${symbol}: ${err?.message?.slice(0, 60)}`);
+        return { sharesOutstanding: null, floatShares: null };
+    }
+}
 async function getShareStructure(symbol) {
     // Check cache
     const cached = shareStructureCache.get(symbol);
     if (cached && Date.now() - cached.fetchedAt < SHARE_CACHE_TTL) {
         return { sharesOutstanding: cached.sharesOutstanding, floatShares: cached.floatShares };
     }
+    // Try Yahoo first
+    let so = null;
+    let fl = null;
     try {
         const q = await Promise.race([
             yahooFinance.quoteSummary(symbol, { modules: ['defaultKeyStatistics'] }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000)),
         ]);
-        const so = q?.defaultKeyStatistics?.sharesOutstanding || null;
-        const fl = q?.defaultKeyStatistics?.floatShares || null;
+        so = q?.defaultKeyStatistics?.sharesOutstanding || null;
+        fl = q?.defaultKeyStatistics?.floatShares || null;
+        if (so)
+            console.log(`[VOL] Yahoo share structure for ${symbol}: SO=${(so / 1e6).toFixed(1)}M, Float=${fl ? (fl / 1e6).toFixed(1) + 'M' : 'null'}`);
+    }
+    catch (err) {
+        console.error(`[VOL] Yahoo share structure failed for ${symbol}: ${err?.message?.slice(0, 60)}`);
+    }
+    // Fallback to GuruFocus if Yahoo failed
+    if (!so) {
+        const gf = await getShareStructureFromGF(symbol);
+        if (gf.sharesOutstanding) {
+            so = gf.sharesOutstanding;
+            fl = gf.floatShares || fl;
+        }
+    }
+    if (so) {
         shareStructureCache.set(symbol, {
             sharesOutstanding: so,
             floatShares: fl,
             fetchedAt: Date.now(),
         });
-        console.log(`[VOL] Share structure for ${symbol}: SO=${so ? (so / 1e6).toFixed(1) + 'M' : 'null'}, Float=${fl ? (fl / 1e6).toFixed(1) + 'M' : 'null'}`);
-        return { sharesOutstanding: so, floatShares: fl };
     }
-    catch (err) {
-        console.error(`[VOL] Failed to fetch share structure for ${symbol}: ${err?.message?.slice(0, 80)}`);
+    else {
         // Return cached even if stale
         if (cached)
             return { sharesOutstanding: cached.sharesOutstanding, floatShares: cached.floatShares };
-        return { sharesOutstanding: null, floatShares: null };
     }
+    return { sharesOutstanding: so, floatShares: fl };
 }
 // ── PEAK DETECTION ──
 // Find the highest price point in the bar history and measure decline from it
