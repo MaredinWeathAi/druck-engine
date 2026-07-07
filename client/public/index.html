@@ -3412,7 +3412,7 @@ function renderInstrumentTable(bucket) {
     var udColor = 'var(--dim)';
     var udDisplay = '—';
 
-    html += '<tr onclick="openEtfDetail(\'' + inst.symbol + '\')" style="cursor:pointer" title="Click for detail">';
+    html += '<tr onclick="document.getElementById(\'ticker-input\').value=\'' + inst.symbol + '\';showPage(\'ticker\');analyzeTickerFn()" style="cursor:pointer" title="Click for Ticker Analysis">';
     html += '<td style="font-weight:700;color:var(--accent)">' + inst.symbol + '</td>';
     html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">' + (inst.name || '') + '</td>';
     html += '<td style="font-size:12px">$' + (price ? price.toFixed(2) : '—') + '</td>';
