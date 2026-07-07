@@ -1856,11 +1856,11 @@ async function evaluateBurryFramework(input) {
         greenFlags.push('Trading near historical P/B floor — Burry sees this as a floor');
     }
     // ═══ OVERALL SCORE ═══
-    // Weights: Valuation 25%, Balance Sheet 20%, Volume 15%, Contrarian 15%, Moat 10%, SBC 10%, Capital Cycle 5%
+    // Weights: Valuation 25%, Volume 25%, Contrarian 15%, Balance Sheet 10%, Moat 10%, SBC 10%, Capital Cycle 5%
     const overall = Math.round(valScore * 0.25 +
-        bsScore * 0.20 +
-        volScore * 0.15 +
+        volScore * 0.25 +
         contrScore * 0.15 +
+        bsScore * 0.10 +
         moatScore * 0.10 +
         sbcScore * 0.10 +
         cycleScore * 0.05);
