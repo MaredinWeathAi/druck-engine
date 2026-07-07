@@ -1787,14 +1787,21 @@ export async function evaluateBurryFramework(input: BurryFrameworkInput): Promis
   if (fwdPe !== null) {
     if (fwdPe < 12) { valScore += 10; valNotes.push('Forward P/E < 12 — cheap'); }
     else if (fwdPe < 18) { valScore += 5; }
+    else if (fwdPe > 50) { valScore -= 25; valNotes.push(`Forward P/E ${fwdPe.toFixed(0)}x — pricing in perfection. Burry: "I don't pay for hope"`); }
     else if (fwdPe > 35) { valScore -= 15; valNotes.push('Forward P/E > 35 — expensive by Burry standards'); }
-    else if (fwdPe > 25) { valScore -= 5; }
+    else if (fwdPe > 25) { valScore -= 10; valNotes.push('Forward P/E > 25 — above Burry comfort zone'); }
+  }
+
+  // Absolute P/E ceiling — Burry is a value investor, 50x+ trailing P/E is absurd territory
+  if (pe !== null && pe > 50) {
+    valScore -= 15;
+    valNotes.push(`Trailing P/E ${pe.toFixed(0)}x — extreme multiple, Burry would never initiate a long here`);
   }
 
   if (fcfYield !== null) {
     if (fcfYield > 8) { valScore += 10; valNotes.push('FCF yield > 8% — strong cash generation'); }
     else if (fcfYield > 5) { valScore += 5; }
-    else if (fcfYield < 1) { valScore -= 10; valNotes.push('FCF yield < 1% — poor cash generation'); }
+    else if (fcfYield < 1) { valScore -= 15; valNotes.push('FCF yield < 1% — near-disqualifier for a value investor'); }
   }
 
   // Burry: "Samsung at tangible book value — historically been a floor"
@@ -1857,7 +1864,7 @@ export async function evaluateBurryFramework(input: BurryFrameworkInput): Promis
   if (sbcRevenue !== null) {
     if (sbcRevenue > 15) { sbcScore -= 30; sbcNotes.push(`SBC = ${sbcRevenue.toFixed(1)}% of revenue — Burry: "Growth at any cost and SBC at any price is not the path"`); }
     else if (sbcRevenue > 8) { sbcScore -= 15; sbcNotes.push(`SBC = ${sbcRevenue.toFixed(1)}% of revenue — material dilution`); }
-    else if (sbcRevenue > 3) { sbcScore -= 5; }
+    else if (sbcRevenue > 3) { sbcScore -= 10; sbcNotes.push(`SBC = ${sbcRevenue.toFixed(1)}% of revenue — Burry: "Tragic Algebra" applies even at moderate levels`); }
     else if (sbcRevenue < 1) { sbcScore += 15; sbcNotes.push('Minimal SBC — Burry prefers companies without significant dilution'); }
   }
 
@@ -1899,14 +1906,21 @@ export async function evaluateBurryFramework(input: BurryFrameworkInput): Promis
     volDetail = `Stock in decline (${decline?.toFixed(1)}% from peak) but no significant turnover data`;
     volScore = 35;
   } else {
-    volDetail = 'No significant decline pattern — turnover analysis not applicable';
-    volScore = 50;
+    // No decline pattern — but context matters
+    if (pctFrom52wHigh !== null && pctFrom52wHigh > -5) {
+      // Stock near ATH with no washout = no buying opportunity for Burry
+      volScore = 30;
+      volDetail = 'Near highs with no washout — Burry waits for capitulation, not momentum. No turnover reset = weak hands still holding';
+    } else {
+      volDetail = 'No significant decline pattern — turnover analysis not applicable';
+      volScore = 50;
+    }
   }
 
   // Combine with up/down volume ratio
   if (upDownRatio !== null) {
     if (upDownRatio > 1.5) { volScore = Math.min(100, volScore + 10); volDetail += '. Heavy accumulation volume (Burry bullish signal)'; }
-    else if (upDownRatio < 0.7) { volScore = Math.max(0, volScore - 10); volDetail += '. Distribution volume dominates'; }
+    else if (upDownRatio < 0.7) { volScore = Math.max(0, volScore - 20); volDetail += '. Distribution volume dominates — smart money exiting'; }
   }
 
   // ═══ 6. CONTRARIAN OPPORTUNITY ═══
@@ -1915,27 +1929,40 @@ export async function evaluateBurryFramework(input: BurryFrameworkInput): Promis
   const contrNotes: string[] = [];
 
   // "Whale fall" — quality stocks dragged down by sector panic
+  const nearATH = pctFrom52wHigh !== null && pctFrom52wHigh > -3;
   if (pctFrom52wHigh !== null && pctFrom52wHigh < -30) {
-    contrScore += 20;
+    contrScore += 25;
     contrNotes.push(`${pctFrom52wHigh.toFixed(0)}% below 52-week high — potential whale-fall opportunity`);
   } else if (pctFrom52wHigh !== null && pctFrom52wHigh < -15) {
-    contrScore += 10;
+    contrScore += 15;
     contrNotes.push(`${pctFrom52wHigh.toFixed(0)}% below 52-week high — meaningful pullback`);
-  } else if (pctFrom52wHigh !== null && pctFrom52wHigh > -3) {
-    contrScore -= 15;
-    contrNotes.push('Near all-time highs — no contrarian edge');
+  } else if (nearATH) {
+    contrScore -= 25;
+    contrNotes.push('Near all-time highs — everyone agrees, Burry wants out. "I buy when there is blood in the streets"');
   }
 
-  // RSI-based oversold/overbought
+  // RSI-based oversold/overbought — Burry is a deep contrarian
+  const overbought = rsi14 !== null && rsi14 > 70;
   if (rsi14 !== null) {
-    if (rsi14 < 30) { contrScore += 15; contrNotes.push(`RSI ${rsi14.toFixed(0)} — oversold, contrarian buy signal`); }
-    else if (rsi14 > 70) { contrScore -= 10; contrNotes.push(`RSI ${rsi14.toFixed(0)} — overbought, Burry would wait`); }
+    if (rsi14 < 25) { contrScore += 20; contrNotes.push(`RSI ${rsi14.toFixed(0)} — deeply oversold, peak contrarian buy signal`); }
+    else if (rsi14 < 30) { contrScore += 15; contrNotes.push(`RSI ${rsi14.toFixed(0)} — oversold, contrarian buy signal`); }
+    else if (rsi14 > 80) { contrScore -= 25; contrNotes.push(`RSI ${rsi14.toFixed(0)} — extreme euphoria, crowd mania territory`); }
+    else if (rsi14 > 70) { contrScore -= 15; contrNotes.push(`RSI ${rsi14.toFixed(0)} — overbought, herd is fully loaded`); }
+  }
+
+  // COMPOUND PENALTY: ATH + overbought = maximum consensus, minimum contrarian edge
+  if (nearATH && overbought) {
+    contrScore -= 10;
+    contrNotes.push('ATH + overbought RSI — maximum crowd consensus. Burry bets AGAINST this.');
   }
 
   // Below 200d = potential mean reversion candidate
   if (priceVs200d !== null && priceVs200d < -15) {
-    contrScore += 10;
-    contrNotes.push('Well below 200d MA — mean reversion territory');
+    contrScore += 15;
+    contrNotes.push('Well below 200d MA — mean reversion territory, Burry hunting ground');
+  } else if (priceVs200d !== null && priceVs200d > 20) {
+    contrScore -= 10;
+    contrNotes.push('Extended well above 200d MA — stretched, vulnerable to reversion');
   }
 
   contrScore = Math.max(0, Math.min(100, contrScore));
@@ -1949,9 +1976,9 @@ export async function evaluateBurryFramework(input: BurryFrameworkInput): Promis
 
   if (inCapexBoom) {
     // Burry: "Stock market peaks occur MIDWAY through investment booms, not at end"
-    cycleScore = 25;
+    cycleScore = 15;
     cyclePosition = 'Late Capex Boom';
-    cycleDetail = 'Sector in active capex boom — Burry (via Chancellor): "Stock market peaks occur MIDWAY through investment booms." High risk of peak-cycle pricing.';
+    cycleDetail = 'Sector in active capex boom — Burry (via Chancellor): "Stock market peaks occur MIDWAY through investment booms." Overcapacity risk is building. This is Burry\'s #1 macro concern.';
   } else {
     // Non-boom sectors are relatively safer on capital cycle basis
     cycleScore = 60;
