@@ -2610,34 +2610,38 @@ function loadCommandCenter() {
       ariaTs.textContent = '';
     }
 
-    // 6. Headlines — compact rendering
-    var hlList = document.getElementById('cc-headline-list');
-    var hlData = (headlines && headlines.headlines) ? headlines.headlines : [];
-    if (hlData.length === 0) {
-      hlList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px">No headlines available</div>';
-    } else {
-      var hlHtml = '';
-      for (var i = 0; i < Math.min(hlData.length, 20); i++) {
-        var hl = hlData[i];
-        var dirIcon = hl.direction === 'positive' ? '▲' : hl.direction === 'negative' ? '▼' : '◆';
-        var dirColor = hl.direction === 'positive' ? '#0ea5e9' : hl.direction === 'negative' ? '#f97316' : '#94a3b8';
-        var rxPct = (hl.marketReactionPct != null) ? hl.marketReactionPct : 0;
-        var rxClass = rxPct >= 0 ? 'pos' : 'neg';
-        var rxStr = (rxPct >= 0 ? '+' : '') + rxPct.toFixed(1) + '%';
+    // 6. Headlines — compact rendering (element may not exist if headlines section removed)
+    try {
+      var hlList = document.getElementById('cc-headline-list');
+      if (hlList) {
+        var hlData = (headlines && headlines.headlines) ? headlines.headlines : [];
+        if (hlData.length === 0) {
+          hlList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px">No headlines available</div>';
+        } else {
+          var hlHtml = '';
+          for (var i = 0; i < Math.min(hlData.length, 20); i++) {
+            var hl = hlData[i];
+            var dirIcon = hl.direction === 'positive' ? '▲' : hl.direction === 'negative' ? '▼' : '◆';
+            var dirColor = hl.direction === 'positive' ? '#0ea5e9' : hl.direction === 'negative' ? '#f97316' : '#94a3b8';
+            var rxPct = (hl.marketReactionPct != null) ? hl.marketReactionPct : 0;
+            var rxClass = rxPct >= 0 ? 'pos' : 'neg';
+            var rxStr = (rxPct >= 0 ? '+' : '') + rxPct.toFixed(1) + '%';
 
-        hlHtml += '<div class="cc-hl-item">';
-        hlHtml += '<span class="cc-hl-dir" style="color:' + dirColor + '">' + dirIcon + '</span>';
-        hlHtml += '<span class="cc-hl-ticker">' + hl.ticker + '</span>';
-        hlHtml += '<span class="cc-hl-text">' + hl.headline + '</span>';
-        hlHtml += '<span class="cc-hl-badge ' + hl.impactLevel + '">' + hl.impactLevel + '</span>';
-        hlHtml += '<span class="cc-hl-reaction ' + rxClass + '">' + rxStr + '</span>';
-        hlHtml += '</div>';
+            hlHtml += '<div class="cc-hl-item">';
+            hlHtml += '<span class="cc-hl-dir" style="color:' + dirColor + '">' + dirIcon + '</span>';
+            hlHtml += '<span class="cc-hl-ticker">' + hl.ticker + '</span>';
+            hlHtml += '<span class="cc-hl-text">' + hl.headline + '</span>';
+            hlHtml += '<span class="cc-hl-badge ' + hl.impactLevel + '">' + hl.impactLevel + '</span>';
+            hlHtml += '<span class="cc-hl-reaction ' + rxClass + '">' + rxStr + '</span>';
+            hlHtml += '</div>';
+          }
+          hlList.innerHTML = hlHtml;
+        }
       }
-      hlList.innerHTML = hlHtml;
-    }
+    } catch(e) { console.warn('[CC] Headlines render error:', e); }
 
     // 7. Broad Market Overview
-    if (leading) {
+    try { if (leading) {
       // Index phases
       var indexSyms = ['SPY', 'QQQ', 'IWM', 'DIA'];
       var indexNames = { SPY: 'S&P 500', QQQ: 'Nasdaq 100', IWM: 'Russell 2000', DIA: 'Dow Jones' };
@@ -2715,11 +2719,11 @@ function loadCommandCenter() {
         });
         rotHtml += '</div>';
         document.getElementById('cc-sector-rotation').innerHTML = rotHtml;
-      });
-    }
+      }).catch(function(e) { console.warn('[CC] Instruments render error:', e); });
+    } } catch(e) { console.warn('[CC] Broad Market section error:', e); }
 
     // 8. Macro regime indicators
-    if (macro && macro.indicators) {
+    try { if (macro && macro.indicators) {
       var indicators = macro.indicators;
       var indicatorList = ['pce', 'gdp', 'unemployment', 'cpi_yoy', 'ism_mfg', 'cap_util', 'yield_curve_bps', 'm2_yoy'];
       var meta = {
@@ -2750,10 +2754,10 @@ function loadCommandCenter() {
         regHtml += '</div></div></div>';
       });
       document.getElementById('cc-regime-indicators').innerHTML = regHtml;
-    }
+    } } catch(e) { console.warn('[CC] Macro regime error:', e); }
 
     // 8b. Leading Indicators (Liquidity Flow + Macro Second Derivatives)
-    if (!leading || (leading.liquidity && leading.liquidity.velocity4w === 0 && leading.liquidity.velocity13w === 0 && leading.liquidity.balanceSheet === 0)) {
+    try { if (!leading || (leading.liquidity && leading.liquidity.velocity4w === 0 && leading.liquidity.velocity13w === 0 && leading.liquidity.balanceSheet === 0)) {
       document.getElementById('cc-leading-indicators').innerHTML = '<div style="padding:16px;background:rgba(226,75,74,0.08);border:1px solid rgba(226,75,74,0.25);border-radius:8px;font-size:12px;color:#E24B4A"><b>FRED API key not configured or data unavailable.</b><br><span style="color:var(--color-text-secondary)">Leading indicators require live FRED data. Please update the FRED_API_KEY environment variable in Railway settings to enable liquidity flow and macro momentum tracking.</span></div>';
     }
     if (leading) {
@@ -2817,7 +2821,7 @@ function loadCommandCenter() {
       liHtml += '</div>';
 
       document.getElementById('cc-leading-indicators').innerHTML = liHtml;
-    }
+    } } catch(e) { console.warn('[CC] Leading indicators error:', e); }
 
     // 8c. Economic Cycle Clock + Sector Rotation Map (from cycle-position API)
     apiCall('/api/cycle-position').then(function(cp) {
@@ -2873,28 +2877,30 @@ function loadCommandCenter() {
         mapHtml += '</div></div>';
       });
       document.getElementById('cc-sector-map').innerHTML = mapHtml || '<div style="color:var(--dim)">Loading...</div>';
-    }).catch(function(){});
+    }).catch(function(e) { console.warn('[CC] Cycle position error:', e); });
 
     // 9. Leading Groups
-    var lgGrid = document.getElementById('cc-leading-groups');
-    if (lg && lg.groups) {
-      var lgHtml = '';
-      lg.groups.forEach(function(g) {
-        var statusClass = g.health === 'HEALTHY' ? 'healthy' : g.health === 'BROKEN' ? 'danger' : 'warning';
-        lgHtml += '<div class="regime-card">';
-        lgHtml += '<div class="regime-status-bar ' + statusClass + '"></div>';
-        lgHtml += '<div class="regime-title">' + g.symbol + ' — ' + (g.name || '') + '</div>';
-        lgHtml += '<div class="regime-context">' + (g.trendState || '—') + '</div>';
-        lgHtml += '<div class="regime-readings"><div class="regime-reading">';
-        lgHtml += '<div class="reading-label">Health</div>';
-        lgHtml += '<div class="reading-value ' + statusClass + '">' + (g.health || '—') + '</div>';
-        lgHtml += '</div><div class="regime-reading">';
-        lgHtml += '<div class="reading-label">vs SPY 3M</div>';
-        lgHtml += '<div class="reading-value">' + (g.relPerf3m != null ? (g.relPerf3m > 0 ? '+' : '') + g.relPerf3m.toFixed(1) + '%' : '—') + '</div>';
-        lgHtml += '</div></div></div>';
-      });
-      lgGrid.innerHTML = lgHtml;
-    }
+    try {
+      var lgGrid = document.getElementById('cc-leading-groups');
+      if (lgGrid && lg && lg.groups) {
+        var lgHtml = '';
+        lg.groups.forEach(function(g) {
+          var statusClass = g.health === 'HEALTHY' ? 'healthy' : g.health === 'BROKEN' ? 'danger' : 'warning';
+          lgHtml += '<div class="regime-card">';
+          lgHtml += '<div class="regime-status-bar ' + statusClass + '"></div>';
+          lgHtml += '<div class="regime-title">' + g.symbol + ' — ' + (g.name || '') + '</div>';
+          lgHtml += '<div class="regime-context">' + (g.trendState || '—') + '</div>';
+          lgHtml += '<div class="regime-readings"><div class="regime-reading">';
+          lgHtml += '<div class="reading-label">Health</div>';
+          lgHtml += '<div class="reading-value ' + statusClass + '">' + (g.health || '—') + '</div>';
+          lgHtml += '</div><div class="regime-reading">';
+          lgHtml += '<div class="reading-label">vs SPY 3M</div>';
+          lgHtml += '<div class="reading-value">' + (g.relPerf3m != null ? (g.relPerf3m > 0 ? '+' : '') + g.relPerf3m.toFixed(1) + '%' : '—') + '</div>';
+          lgHtml += '</div></div></div>';
+        });
+        lgGrid.innerHTML = lgHtml;
+      }
+    } catch(e) { console.warn('[CC] Leading groups error:', e); }
 
   }).catch(function(err) {
     console.error('Command Center load error:', err);
