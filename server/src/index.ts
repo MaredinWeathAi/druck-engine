@@ -12,7 +12,7 @@ import alertRouter from './alert-system';
 import geoEventsRouter, { setGeoEventKeys } from './geo-events';
 import burrySubstackRouter, { initBurryTables, startRSSPolling } from './burry-substack';
 import { computeVolumeBreakdown, computeWatchlistVolumeBadge } from './volume-analysis';
-import { fetchCreditDashboard } from './credit-analysis';
+import { fetchCreditDashboard, initCreditTables, getCreditForCommandCenter } from './credit-analysis';
 import { fetchTickerBars } from './morning-lens';
 import {
   initDatabase, getDbStats, getSymbolHistory, getSymbolPhaseTimeline,
@@ -755,7 +755,8 @@ async function refreshLiveData() {
 try {
   initDatabase();
   initBurryTables();
-  console.log('[STARTUP] Historical database + Burry tables initialized');
+  initCreditTables();
+  console.log('[STARTUP] Historical database + Burry + Credit tables initialized');
 
   // Load persisted API key from SQLite (survives deploys)
   if (!anthropicApiKey) {
@@ -784,9 +785,9 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '16.4.0',
-    build: '2026-07-06T20:00:00Z',
-    BUILD_CANARY: 'CC_SECTION_ISOLATION',
+    version: '16.5.0',
+    build: '2026-07-07T12:00:00Z',
+    BUILD_CANARY: 'CREDIT_BELLWETHER_OVERHAUL',
     name: 'Druck Engine — Structural Regime Intelligence',
     timestamp: new Date().toISOString(),
     fred_key: !!FRED_API_KEY,
@@ -1957,6 +1958,15 @@ app.get('/api/credit', async (_req, res) => {
   }
 });
 
+// ─── CREDIT COMMAND CENTER DATA ───
+app.get('/api/credit/cc', (_req, res) => {
+  const data = getCreditForCommandCenter();
+  if (!data) {
+    return res.json({ available: false });
+  }
+  res.json({ available: true, ...data });
+});
+
 // ─── VOLUME ANALYSIS ROUTES ───
 app.get('/api/volume/:symbol', async (req, res) => {
   try {
@@ -2004,7 +2014,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v16.3.0 — Structural Regime Intelligence + Credit Market Dashboard`);
+  console.log(`\n  DRUCK ENGINE v16.5.0 — Structural Regime Intelligence + Credit Bellwether Monitor`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);

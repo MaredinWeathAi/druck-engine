@@ -13,9 +13,10 @@ interface CreditSpreadSeries {
         value: number;
     }[];
 }
-interface AICompanyCredit {
+interface BellwetherCompany {
     symbol: string;
     name: string;
+    sector: string;
     interestCoverage: number | null;
     debt2ebitda: number | null;
     debt2equity: number | null;
@@ -24,24 +25,37 @@ interface AICompanyCredit {
     currentRatio: number | null;
     creditHealthScore: number;
 }
-interface AIBasket {
+interface SectorGroup {
+    name: string;
+    avgScore: number;
+    companies: BellwetherCompany[];
+    weakestLink: string | null;
+}
+interface BellwetherBasket {
     avgScore: number;
     weekChange: number | null;
     monthChange: number | null;
-    companies: AICompanyCredit[];
+    sectorGroups: SectorGroup[];
+    companies: BellwetherCompany[];
     weakestLink: string | null;
     strongestLink: string | null;
+    weakestSector: string | null;
 }
 interface DivergenceAlert {
     detected: boolean;
+    alerts: DivergenceItem[];
+    worstSeverity: 'NONE' | 'WATCH' | 'WARNING' | 'CRITICAL';
+}
+interface DivergenceItem {
+    type: string;
     message: string;
-    severity: 'NONE' | 'WATCH' | 'WARNING' | 'CRITICAL';
+    severity: 'WATCH' | 'WARNING' | 'CRITICAL';
 }
 export interface CreditDashboardData {
     igOAS: CreditSpreadSeries;
     hyOAS: CreditSpreadSeries;
     cccOAS: CreditSpreadSeries;
-    aiBasket: AIBasket;
+    bellwetherBasket: BellwetherBasket;
     divergence: DivergenceAlert;
     creditRiskScore: number;
     creditRiskLabel: string;
@@ -50,7 +64,29 @@ export interface CreditDashboardData {
     healthEmoji: string;
     summary: string;
     lastUpdated: string;
+    aiBasket?: any;
 }
+export declare function initCreditTables(): void;
+export interface CreditCommandCenterData {
+    healthStatus: string;
+    healthEmoji: string;
+    creditRiskScore: number;
+    creditRiskLabel: string;
+    creditRiskColor: string;
+    igCurrent: number;
+    igTrend: string;
+    hyCurrent: number;
+    hyTrend: string;
+    cccCurrent: number;
+    cccTrend: string;
+    basketAvg: number;
+    weakestSector: string | null;
+    divergenceDetected: boolean;
+    divergenceWorstSeverity: string;
+    divergenceTopMessage: string | null;
+    oneLiner: string;
+}
+export declare function getCreditForCommandCenter(): CreditCommandCenterData | null;
 export declare function fetchCreditDashboard(fredKey: string, gfKey: string): Promise<CreditDashboardData | null>;
 export {};
 //# sourceMappingURL=credit-analysis.d.ts.map

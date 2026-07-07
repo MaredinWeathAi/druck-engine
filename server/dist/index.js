@@ -722,7 +722,8 @@ async function refreshLiveData() {
 try {
     (0, history_store_1.initDatabase)();
     (0, burry_substack_1.initBurryTables)();
-    console.log('[STARTUP] Historical database + Burry tables initialized');
+    (0, credit_analysis_1.initCreditTables)();
+    console.log('[STARTUP] Historical database + Burry + Credit tables initialized');
     // Load persisted API key from SQLite (survives deploys)
     if (!anthropicApiKey) {
         const savedKey = (0, history_store_1.getSetting)('anthropic_api_key');
@@ -747,9 +748,9 @@ app.get('/api/health', (_req, res) => {
     recalcDerived();
     res.json({
         status: 'ok',
-        version: '16.4.0',
-        build: '2026-07-06T20:00:00Z',
-        BUILD_CANARY: 'CC_SECTION_ISOLATION',
+        version: '16.5.0',
+        build: '2026-07-07T12:00:00Z',
+        BUILD_CANARY: 'CREDIT_BELLWETHER_OVERHAUL',
         name: 'Druck Engine — Structural Regime Intelligence',
         timestamp: new Date().toISOString(),
         fred_key: !!FRED_API_KEY,
@@ -1844,6 +1845,14 @@ app.get('/api/credit', async (_req, res) => {
         res.status(500).json({ error: err?.message || 'Credit analysis failed' });
     }
 });
+// ─── CREDIT COMMAND CENTER DATA ───
+app.get('/api/credit/cc', (_req, res) => {
+    const data = (0, credit_analysis_1.getCreditForCommandCenter)();
+    if (!data) {
+        return res.json({ available: false });
+    }
+    res.json({ available: true, ...data });
+});
 // ─── VOLUME ANALYSIS ROUTES ───
 app.get('/api/volume/:symbol', async (req, res) => {
     try {
@@ -1887,7 +1896,7 @@ app.get('*', (req, res) => {
     }
 });
 app.listen(PORT, () => {
-    console.log(`\n  DRUCK ENGINE v16.3.0 — Structural Regime Intelligence + Credit Market Dashboard`);
+    console.log(`\n  DRUCK ENGINE v16.5.0 — Structural Regime Intelligence + Credit Bellwether Monitor`);
     console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
     if (FRED_API_KEY)
         console.log(`  FRED API: Configured (4-hour cache)`);

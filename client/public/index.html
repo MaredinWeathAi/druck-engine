@@ -662,6 +662,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
         <div class="cc-stat-pill"><span class="label">Smart Money</span><span class="val neutral" id="cc-sm">—</span></div>
         <div class="cc-stat-pill"><span class="label">Breadth</span><span class="val neutral" id="cc-br">—</span></div>
         <div class="cc-stat-pill"><span class="label">Death Nails</span><span class="val neutral" id="cc-dn">—</span></div>
+        <div class="cc-stat-pill"><span class="label">Credit</span><span class="val neutral" id="cc-credit">—</span></div>
         <div class="cc-stat-pill"><span class="label">Hedge</span><span class="val neutral" id="cc-hedge">—</span></div>
       </div>
 
@@ -684,6 +685,43 @@ button:disabled{opacity:0.5;cursor:not-allowed}
             <div id="cc-sector-rotation" style="font-size:12px;color:var(--dim)">Loading...</div>
           </div>
         </div>
+      </div>
+
+      <!-- Credit Health Card (compact Command Center view) -->
+      <div class="card" id="cc-credit-card" style="margin-top:16px;padding:16px;display:none;cursor:pointer" onclick="showPage('dashboard')">
+        <h3 style="margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+          <span>💳 Credit Health</span>
+          <span class="cc-viewall">Full Dashboard →</span>
+        </h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:start">
+          <!-- Spreads Column -->
+          <div>
+            <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:6px">Credit Spreads</div>
+            <div id="cc-credit-spreads" style="display:grid;gap:4px">
+              <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 6px;border-radius:4px;border-left:3px solid var(--dim)"><span style="color:var(--dim)">IG</span><span>—</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 6px;border-radius:4px;border-left:3px solid var(--dim)"><span style="color:var(--dim)">HY</span><span>—</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 6px;border-radius:4px;border-left:3px solid var(--dim)"><span style="color:var(--dim)">CCC</span><span>—</span></div>
+            </div>
+          </div>
+          <!-- Risk Score Column -->
+          <div style="text-align:center">
+            <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:6px">Risk Score</div>
+            <div id="cc-credit-risk-score" style="font-size:28px;font-weight:700">—</div>
+            <div id="cc-credit-risk-label" style="font-size:10px;font-weight:500">—</div>
+          </div>
+          <!-- Basket + Sector Column -->
+          <div>
+            <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:6px">Bellwether Basket</div>
+            <div id="cc-credit-basket" style="font-size:11px;color:var(--dim)">—</div>
+          </div>
+          <!-- Status / Alert Column -->
+          <div>
+            <div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:6px">Status</div>
+            <div id="cc-credit-status" style="font-size:11px">—</div>
+          </div>
+        </div>
+        <!-- One-liner summary -->
+        <div id="cc-credit-oneliner" style="margin-top:8px;font-size:11px;color:var(--dim);border-top:1px solid var(--border);padding-top:8px"></div>
       </div>
 
       <!-- Leading Indicators + Macro Regime (directly below Broad Market Overview) -->
@@ -813,7 +851,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
             <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin-bottom:8px">Credit Risk Score</div>
             <div class="gauge-score" id="credit-risk-score">—</div>
             <div class="gauge-label" id="credit-risk-label">Loading</div>
-            <div class="gauge-sub">IG 30% · HY 30% · CCC 20% · AI Basket 20%</div>
+            <div class="gauge-sub">IG 30% · HY 30% · CCC 20% · Bellwether Basket 20%</div>
             <div class="gauge-bar"><div class="gauge-fill" id="credit-risk-bar" style="width:0%"></div></div>
           </div>
           <div class="credit-divergence">
@@ -822,15 +860,18 @@ button:disabled{opacity:0.5;cursor:not-allowed}
           </div>
         </div>
 
-        <!-- AI Credit Basket -->
+        <!-- Credit Bellwether Basket -->
         <div class="credit-ai-basket">
           <h4>
-            <span><span style="font-size:14px">🤖</span> AI Credit Basket (Balance Sheet Health)</span>
+            <span><span style="font-size:14px">🏦</span> Credit Bellwether Basket (Balance Sheet Health)</span>
             <span class="basket-avg" id="credit-ai-avg">—</span>
           </h4>
+          <!-- Sector group summary pills -->
+          <div id="credit-sector-groups" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
           <table class="credit-ai-table">
             <thead>
               <tr>
+                <th>Sector</th>
                 <th>Company</th>
                 <th>Interest Cov.</th>
                 <th>Debt/EBITDA</th>
@@ -840,7 +881,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
               </tr>
             </thead>
             <tbody id="credit-ai-tbody">
-              <tr><td colspan="6" style="text-align:center;color:var(--dim)">Loading AI credit basket...</td></tr>
+              <tr><td colspan="7" style="text-align:center;color:var(--dim)">Loading credit bellwether basket...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1681,32 +1722,76 @@ function loadCreditDashboard() {
     bar.style.width = d.creditRiskScore + '%';
     bar.style.background = d.creditRiskColor;
 
-    // Divergence
+    // Divergence (multi-alert)
     var divStatus = document.getElementById('credit-div-status');
     var divMsg = document.getElementById('credit-div-message');
-    if (d.divergence.detected) {
+    if (d.divergence.detected && d.divergence.alerts && d.divergence.alerts.length > 0) {
       var sevColors = { 'WATCH': '#f59e0b', 'WARNING': '#f97316', 'CRITICAL': '#dc2626' };
       var sevEmojis = { 'WATCH': '👁️', 'WARNING': '⚠️', 'CRITICAL': '🚨' };
-      divStatus.innerHTML = (sevEmojis[d.divergence.severity] || '⚠️') + ' <span style="color:' + (sevColors[d.divergence.severity] || '#f59e0b') + '">' + d.divergence.severity + ' — Divergence Detected</span>';
+      var worst = d.divergence.worstSeverity || 'WATCH';
+      divStatus.innerHTML = (sevEmojis[worst] || '⚠️') + ' <span style="color:' + (sevColors[worst] || '#f59e0b') + '">' + worst + ' — ' + d.divergence.alerts.length + ' Divergence' + (d.divergence.alerts.length > 1 ? 's' : '') + ' Detected</span>';
+      var alertHtml = '';
+      d.divergence.alerts.forEach(function(a) {
+        var ac = sevColors[a.severity] || '#f59e0b';
+        alertHtml += '<div style="font-size:11px;padding:4px 8px;margin-top:4px;border-radius:4px;background:' + ac + '10;border-left:3px solid ' + ac + ';color:var(--color-text-primary)">';
+        alertHtml += '<span style="font-weight:600;color:' + ac + '">' + a.severity + '</span> · ' + a.type + ': ' + a.message;
+        alertHtml += '</div>';
+      });
+      divMsg.innerHTML = alertHtml;
+    } else if (d.divergence && d.divergence.detected && d.divergence.message) {
+      // Fallback for old single-alert format
+      var sevColors2 = { 'WATCH': '#f59e0b', 'WARNING': '#f97316', 'CRITICAL': '#dc2626' };
+      divStatus.innerHTML = '⚠️ <span style="color:' + (sevColors2[d.divergence.severity] || '#f59e0b') + '">' + (d.divergence.severity || 'WATCH') + ' — Divergence Detected</span>';
       divMsg.textContent = d.divergence.message;
     } else {
       divStatus.innerHTML = '✅ <span style="color:#1D9E75">No Divergence</span>';
-      divMsg.textContent = d.divergence.message;
+      divMsg.textContent = d.divergence ? (d.divergence.message || 'All credit metrics aligned.') : 'Credit divergence monitor active.';
     }
 
-    // AI Credit Basket
+    // Credit Bellwether Basket (with sector groups)
+    var basket = d.bellwetherBasket || d.aiBasket;
     var avgEl = document.getElementById('credit-ai-avg');
-    if (d.aiBasket && d.aiBasket.companies.length > 0) {
-      var avgColor = d.aiBasket.avgScore >= 80 ? '#1D9E75' : d.aiBasket.avgScore >= 60 ? '#f59e0b' : '#f97316';
-      avgEl.innerHTML = 'Avg: <span style="color:' + avgColor + '">' + d.aiBasket.avgScore + '/100</span>';
+    if (basket && basket.companies && basket.companies.length > 0) {
+      var avgColor = basket.avgScore >= 80 ? '#1D9E75' : basket.avgScore >= 60 ? '#f59e0b' : '#f97316';
+      avgEl.innerHTML = 'Avg: <span style="color:' + avgColor + '">' + basket.avgScore + '/100</span>';
+      if (basket.weakestSector) {
+        avgEl.innerHTML += ' <span style="font-size:10px;color:#f97316;margin-left:8px">Weakest: ' + basket.weakestSector + '</span>';
+      }
 
+      // Sector group pills
+      var sgEl = document.getElementById('credit-sector-groups');
+      if (sgEl && basket.sectorGroups && basket.sectorGroups.length > 0) {
+        var sgHtml = '';
+        basket.sectorGroups.forEach(function(sg) {
+          var sgColor = sg.avgScore >= 80 ? '#1D9E75' : sg.avgScore >= 60 ? '#f59e0b' : sg.avgScore >= 40 ? '#f97316' : '#dc2626';
+          sgHtml += '<div style="padding:6px 12px;border-radius:6px;background:' + sgColor + '12;border:1px solid ' + sgColor + '33;font-size:11px;text-align:center">';
+          sgHtml += '<div style="font-weight:600;color:' + sgColor + '">' + sg.name + '</div>';
+          sgHtml += '<div style="font-size:16px;font-weight:700;color:' + sgColor + ';margin:2px 0">' + sg.avgScore + '</div>';
+          if (sg.weakestLink) sgHtml += '<div style="font-size:9px;color:var(--dim)">Weakest: ' + sg.weakestLink + '</div>';
+          sgHtml += '</div>';
+        });
+        sgEl.innerHTML = sgHtml;
+      }
+
+      // Company table with sector column
       var tbody = document.getElementById('credit-ai-tbody');
       var rows = '';
-      d.aiBasket.companies.sort(function(a, b) { return b.creditHealthScore - a.creditHealthScore; });
-      d.aiBasket.companies.forEach(function(co) {
+      // Sort by sector group, then by score descending within each
+      var sectorOrder = { 'Financials': 0, 'Cyclicals': 1, 'Consumer': 2, 'AI/Tech': 3 };
+      var sorted = basket.companies.slice().sort(function(a, b) {
+        var sa = sectorOrder[a.sector] != null ? sectorOrder[a.sector] : 99;
+        var sb = sectorOrder[b.sector] != null ? sectorOrder[b.sector] : 99;
+        if (sa !== sb) return sa - sb;
+        return b.creditHealthScore - a.creditHealthScore;
+      });
+      var prevSector = '';
+      sorted.forEach(function(co) {
         var sc = co.creditHealthScore;
         var barColor = sc >= 80 ? '#1D9E75' : sc >= 60 ? '#22c55e' : sc >= 40 ? '#f59e0b' : '#f97316';
-        rows += '<tr>';
+        var sectorLabel = co.sector !== prevSector ? co.sector : '';
+        prevSector = co.sector;
+        rows += '<tr' + (sectorLabel ? ' style="border-top:1px solid var(--border)"' : '') + '>';
+        rows += '<td style="font-size:10px;color:var(--dim);font-weight:' + (sectorLabel ? '600' : '400') + '">' + sectorLabel + '</td>';
         rows += '<td><span class="co-symbol">' + co.symbol + '</span> <span style="color:var(--dim);font-size:11px">' + co.name + '</span></td>';
         rows += '<td>' + (co.interestCoverage !== null ? co.interestCoverage.toFixed(1) + 'x' : '—') + '</td>';
         rows += '<td>' + (co.debt2ebitda !== null ? co.debt2ebitda.toFixed(2) + 'x' : '—') + '</td>';
@@ -2489,7 +2574,8 @@ function loadCommandCenter() {
     apiCall('/api/trifecta'),
     apiCall('/api/intel/headlines?limit=25'),
     apiCall('/api/macro'),
-    apiCall('/api/leading-indicators')
+    apiCall('/api/leading-indicators'),
+    apiCall('/api/credit/cc')
   ]).then(function(results) {
     var signals = results[0];
     var dn = results[1];
@@ -2501,6 +2587,7 @@ function loadCommandCenter() {
     var headlines = results[7];
     var macro = results[8];
     var leading = results[9];
+    var creditCC = results[10];
 
     // 1. Phase Transitions
     if (transitions) renderPhaseTransitions(transitions, 'cc-');
@@ -2878,6 +2965,70 @@ function loadCommandCenter() {
       });
       document.getElementById('cc-sector-map').innerHTML = mapHtml || '<div style="color:var(--dim)">Loading...</div>';
     }).catch(function(e) { console.warn('[CC] Cycle position error:', e); });
+
+    // 8d. Credit Health (Command Center compact card)
+    try {
+      if (creditCC && creditCC.available) {
+        var ccCard = document.getElementById('cc-credit-card');
+        ccCard.style.display = 'block';
+
+        // Credit status pill
+        var creditPill = document.getElementById('cc-credit');
+        var pillLabel = creditCC.creditRiskScore;
+        creditPill.textContent = pillLabel;
+        var pillClass = creditCC.healthStatus === 'Healthy' ? 'positive' : creditCC.healthStatus === 'Early Warning' ? 'neutral' : 'negative';
+        creditPill.className = 'val ' + pillClass;
+
+        // Spread rows with trend arrows
+        var trendArrows = { 'TIGHTENING': '↓', 'STABLE': '→', 'WIDENING': '↑', 'WIDENING_FAST': '⚠↑' };
+        var trendColors = { 'TIGHTENING': '#0ea5e9', 'STABLE': '#94a3b8', 'WIDENING': '#f97316', 'WIDENING_FAST': '#dc2626' };
+        var spreads = [
+          { label: 'IG', val: creditCC.igCurrent, trend: creditCC.igTrend },
+          { label: 'HY', val: creditCC.hyCurrent, trend: creditCC.hyTrend },
+          { label: 'CCC', val: creditCC.cccCurrent, trend: creditCC.cccTrend },
+        ];
+        var spreadHtml = '';
+        spreads.forEach(function(s) {
+          var tc = trendColors[s.trend] || '#94a3b8';
+          var ta = trendArrows[s.trend] || '→';
+          spreadHtml += '<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 6px;border-radius:4px;border-left:3px solid ' + tc + '">';
+          spreadHtml += '<span style="color:var(--dim)">' + s.label + '</span>';
+          spreadHtml += '<span><b>' + s.val.toFixed(0) + '</b>bp <span style="color:' + tc + '">' + ta + '</span></span>';
+          spreadHtml += '</div>';
+        });
+        document.getElementById('cc-credit-spreads').innerHTML = spreadHtml;
+
+        // Risk score
+        document.getElementById('cc-credit-risk-score').textContent = creditCC.creditRiskScore;
+        document.getElementById('cc-credit-risk-score').style.color = creditCC.creditRiskColor;
+        document.getElementById('cc-credit-risk-label').textContent = creditCC.creditRiskLabel;
+        document.getElementById('cc-credit-risk-label').style.color = creditCC.creditRiskColor;
+
+        // Basket + weakest sector
+        var basketHtml = '<div style="font-size:18px;font-weight:600;margin-bottom:4px">' + creditCC.basketAvg + '<span style="font-size:11px;color:var(--dim)">/100</span></div>';
+        if (creditCC.weakestSector) {
+          basketHtml += '<div style="font-size:10px;color:#f97316">Weakest: ' + creditCC.weakestSector + '</div>';
+        }
+        document.getElementById('cc-credit-basket').innerHTML = basketHtml;
+
+        // Status / divergence
+        var statusHtml = '';
+        var healthColors = { 'Healthy': '#1D9E75', 'Early Warning': '#f59e0b', 'Credit Deteriorating': '#f97316', 'Credit Crisis': '#dc2626' };
+        var hc = healthColors[creditCC.healthStatus] || '#94a3b8';
+        statusHtml += '<div style="font-size:12px;font-weight:600;color:' + hc + ';margin-bottom:4px">' + creditCC.healthEmoji + ' ' + creditCC.healthStatus + '</div>';
+        if (creditCC.divergenceDetected && creditCC.divergenceTopMessage) {
+          var sevColors = { 'WATCH': '#f59e0b', 'WARNING': '#f97316', 'CRITICAL': '#dc2626' };
+          var dc = sevColors[creditCC.divergenceWorstSeverity] || '#f59e0b';
+          statusHtml += '<div style="font-size:10px;padding:3px 6px;border-radius:4px;background:' + dc + '15;color:' + dc + ';border:1px solid ' + dc + '33;margin-top:4px">';
+          statusHtml += '<b>' + creditCC.divergenceWorstSeverity + '</b> ' + creditCC.divergenceTopMessage;
+          statusHtml += '</div>';
+        }
+        document.getElementById('cc-credit-status').innerHTML = statusHtml;
+
+        // One-liner
+        document.getElementById('cc-credit-oneliner').textContent = creditCC.oneLiner;
+      }
+    } catch(e) { console.warn('[CC] Credit card error:', e); }
 
     // 9. Leading Groups
     try {
