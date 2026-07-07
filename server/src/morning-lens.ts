@@ -4134,8 +4134,15 @@ router.get('/lens/model-performance', async (req: Request, res: Response) => {
   }
 });
 
+// Getter for oil price (CL=F) — used by foreshadow defaults
+function getOilPrice(): number | null {
+  const snap = instrumentSnapshots.get('CL=F');
+  if (snap && snap.daily && snap.daily.price) return snap.daily.price;
+  return null;
+}
+
 export default router;
-export { INSTRUMENTS, refreshMorningLens, fetchTickerBars };
+export { INSTRUMENTS, refreshMorningLens, fetchTickerBars, getOilPrice };
 
 // CACHE WARMING — manually trigger Yahoo OHLCV fetch for all tickers
 router.post('/lens/warm-cache', async (_req: Request, res: Response) => {

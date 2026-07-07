@@ -45,6 +45,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.INSTRUMENTS = void 0;
 exports.refreshMorningLens = refreshMorningLens;
 exports.fetchTickerBars = fetchTickerBars;
+exports.getOilPrice = getOilPrice;
 const express_1 = require("express");
 const yahoo_finance2_1 = __importDefault(require("yahoo-finance2"));
 const sdk_1 = __importDefault(require("@anthropic-ai/sdk"));
@@ -3836,6 +3837,13 @@ router.get('/lens/model-performance', async (req, res) => {
         res.status(500).json({ error: err?.message || 'Performance computation failed' });
     }
 });
+// Getter for oil price (CL=F) — used by foreshadow defaults
+function getOilPrice() {
+    const snap = instrumentSnapshots.get('CL=F');
+    if (snap && snap.daily && snap.daily.price)
+        return snap.daily.price;
+    return null;
+}
 exports.default = router;
 // CACHE WARMING — manually trigger Yahoo OHLCV fetch for all tickers
 router.post('/lens/warm-cache', async (_req, res) => {

@@ -4512,17 +4512,16 @@ var fsModified = false;
 // Fed Policy → rates → dollar (capital flows) → gold (real rates) → credit (borrowing costs)
 // Oil → inflation → feeds back into Fed expectations
 // Growth → earnings → cyclical demand → independent of Fed/Oil
+// Foreshadow macro factor definitions — populated with real data from /api/foreshadow/defaults
 var MACRO_FACTORS = [
-  { id: 'fed', label: 'Fed Policy', min: -3, max: 3, step: 1, default: 0,
-    labels: { '-3': 'Cutting fast', '-2': 'Cutting', '-1': 'Easing bias', '0': 'Neutral', '1': 'Tightening bias', '2': 'Hiking', '3': 'Hiking fast' } },
-  { id: 'oil', label: 'Oil Prices', min: -3, max: 3, step: 1, default: 0,
-    labels: { '-3': 'Collapsing', '-2': 'Falling', '-1': 'Softening', '0': 'Stable', '1': 'Rising', '2': 'Spiking', '3': 'Supply shock' } },
-  { id: 'growth', label: 'Growth', min: -3, max: 3, step: 1, default: 0,
-    labels: { '-3': 'Recession', '-2': 'Contracting', '-1': 'Slowing', '0': 'Trend', '1': 'Accelerating', '2': 'Boom', '3': 'Overheating' } },
+  { id: 'fed', label: 'Fed Funds Rate', min: -5, max: 5, step: 1, default: 0, baseValue: 4.50, stepSize: 0.25, unit: '%', format: 'pct' },
+  { id: 'oil', label: 'Oil (WTI)', min: -5, max: 5, step: 1, default: 0, baseValue: 70, stepSize: 5, unit: '$', format: 'dollar' },
+  { id: 'growth', label: 'GDP Growth', min: -5, max: 5, step: 1, default: 0, baseValue: 2.5, stepSize: 0, unit: '%', format: 'pct' },
 ];
 
-var fsInputs = {};  // current slider values
-var fsDefaults = {}; // "latest data" defaults (reset target)
+var fsInputs = {};  // current slider values (notch positions, -5 to +5)
+var fsDefaults = {}; // default notch positions (always 0 = current reality)
+var fsMacroLoaded = false; // whether real data has been fetched
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DERIVED VARIABLES — computed from the 3 inputs, shown to user
@@ -4530,10 +4529,32 @@ var fsDefaults = {}; // "latest data" defaults (reset target)
 // Fed cutting → dollar weakens, credit eases, gold rises
 // Oil falling → inflation cools, reinforces Fed room to cut
 // Growth rising → supports risk assets, but can push inflation/rates up
+// Helper: get the actual value for a factor at a given notch position
+function getFsActualValue(factorId, notch) {
+  var f = MACRO_FACTORS.find(function(m) { return m.id === factorId; });
+  if (!f) return 0;
+  if (f.id === 'growth') {
+    // Growth: each notch = 10% of current GDP
+    return f.baseValue + notch * f.stepSize;
+  }
+  return f.baseValue + notch * f.stepSize;
+}
+
+// Format the actual value for display
+function formatFsValue(factorId, notch) {
+  var f = MACRO_FACTORS.find(function(m) { return m.id === factorId; });
+  if (!f) return '?';
+  var val = getFsActualValue(factorId, notch);
+  if (f.format === 'dollar') return '$' + val.toFixed(0);
+  if (f.format === 'pct') return val.toFixed(2) + '%';
+  return val.toFixed(1);
+}
+
 function computeDerived() {
-  var fed = fsInputs.fed || 0;
-  var oil = fsInputs.oil || 0;
-  var growth = fsInputs.growth || 0;
+  // Convert notch positions (-5 to +5) to internal scale (-3 to +3) for sensitivity math
+  var fed = (fsInputs.fed || 0) * 0.6;
+  var oil = (fsInputs.oil || 0) * 0.6;
+  var growth = (fsInputs.growth || 0) * 0.6;
 
   // Dollar: driven primarily by rates (Fed), with growth support
   // Fed cutting → dollar weakens; growth strong → dollar support (capital inflows from strong economy)
@@ -4701,11 +4722,35 @@ function loadForeshadow() {
   Promise.all([
     apiCall('/api/lens/instruments'),
     apiCall('/api/lens/valuations'),
+    apiCall('/api/foreshadow/defaults'),
   ]).then(function(results) {
     var instData = results[0];
     var valData = results[1];
+    var defaults = results[2];
     if (instData && instData.instruments) fsData = instData.instruments;
     if (valData && valData.valuations) fsValuations = valData.valuations;
+
+    // Anchor sliders to real data
+    if (defaults) {
+      MACRO_FACTORS.forEach(function(f) {
+        if (f.id === 'fed' && defaults.fedRate != null) {
+          f.baseValue = defaults.fedRate;
+        } else if (f.id === 'oil' && defaults.oilPrice != null) {
+          f.baseValue = defaults.oilPrice;
+        } else if (f.id === 'growth' && defaults.gdpGrowth != null) {
+          f.baseValue = defaults.gdpGrowth;
+          // Growth step = 10% of current GDP value
+          f.stepSize = +(defaults.gdpGrowth * 0.10).toFixed(3);
+        }
+      });
+      fsMacroLoaded = true;
+    }
+
+    // Initialize inputs at 0 (= current reality)
+    MACRO_FACTORS.forEach(function(f) {
+      if (fsInputs[f.id] === undefined) { fsInputs[f.id] = 0; fsDefaults[f.id] = 0; }
+    });
+
     buildMacroSliders();
     renderDerivedPanel();
     renderForeshadowTable();
@@ -4716,36 +4761,57 @@ function buildMacroSliders() {
   var container = document.getElementById('fs-sliders');
   var html = '';
   MACRO_FACTORS.forEach(function(f) {
-    if (fsInputs[f.id] === undefined) { fsInputs[f.id] = f.default; fsDefaults[f.id] = f.default; }
-    var val = fsInputs[f.id];
-    var labelText = f.labels[String(val)] || 'Neutral';
+    if (fsInputs[f.id] === undefined) { fsInputs[f.id] = 0; fsDefaults[f.id] = 0; }
+    var notch = fsInputs[f.id];
+    var actualVal = formatFsValue(f.id, notch);
+    var changeDesc = '';
+    if (notch !== 0) {
+      var dir = notch > 0 ? '+' : '';
+      var delta = Math.abs(notch) * f.stepSize;
+      if (f.format === 'dollar') changeDesc = dir + notch + ' (' + (notch > 0 ? '+' : '-') + '$' + delta.toFixed(0) + ')';
+      else if (f.id === 'fed') changeDesc = dir + notch + ' (' + (notch > 0 ? '+' : '-') + (delta * 100).toFixed(0) + 'bp)';
+      else changeDesc = dir + notch + ' (' + (notch > 0 ? '+' : '-') + delta.toFixed(2) + 'pp)';
+    }
+    var labelText = notch === 0 ? actualVal + ' (current)' : actualVal + ' ' + changeDesc;
     html += '<div style="display:flex;flex-direction:column;gap:4px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:center">';
     html += '<span style="font-size:11px;font-weight:600;color:var(--text)">' + f.label + '</span>';
     html += '<span id="fs-label-' + f.id + '" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;' +
-      (val > 0 ? 'color:#0ea5e9;background:rgba(14,165,233,0.15)' : val < 0 ? 'color:#f97316;background:rgba(249,115,22,0.15)' : 'color:var(--dim);background:var(--card)') + '">' + labelText + '</span>';
+      (notch > 0 ? 'color:#0ea5e9;background:rgba(14,165,233,0.15)' : notch < 0 ? 'color:#f97316;background:rgba(249,115,22,0.15)' : 'color:var(--dim);background:var(--card)') + '">' + labelText + '</span>';
     html += '</div>';
-    html += '<input type="range" id="fs-slider-' + f.id + '" min="' + f.min + '" max="' + f.max + '" step="' + f.step + '" value="' + val + '" ' +
+    html += '<input type="range" id="fs-slider-' + f.id + '" min="' + f.min + '" max="' + f.max + '" step="' + f.step + '" value="' + notch + '" ' +
       'oninput="updateMacroInput(\'' + f.id + '\', this.value)" ' +
       'style="width:100%;accent-color:var(--accent);cursor:pointer">';
+    // Show min/max actual values
     html += '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dim)">';
-    html += '<span>' + f.labels[String(f.min)] + '</span><span>' + f.labels[String(f.max)] + '</span></div>';
+    html += '<span>' + formatFsValue(f.id, f.min) + '</span>';
+    html += '<span style="color:var(--accent);font-weight:600">' + formatFsValue(f.id, 0) + '</span>';
+    html += '<span>' + formatFsValue(f.id, f.max) + '</span></div>';
     html += '</div>';
   });
   container.innerHTML = html;
 }
 
 function updateMacroInput(id, value) {
-  fsInputs[id] = parseInt(value);
+  var notch = parseInt(value);
+  fsInputs[id] = notch;
   var factor = MACRO_FACTORS.find(function(f) { return f.id === id; });
   if (!factor) return;
-  var labelText = factor.labels[String(value)] || 'Neutral';
+  var actualVal = formatFsValue(id, notch);
+  var changeDesc = '';
+  if (notch !== 0) {
+    var dir = notch > 0 ? '+' : '';
+    var delta = Math.abs(notch) * factor.stepSize;
+    if (factor.format === 'dollar') changeDesc = dir + notch + ' (' + (notch > 0 ? '+' : '-') + '$' + delta.toFixed(0) + ')';
+    else if (factor.id === 'fed') changeDesc = dir + notch + ' (' + (notch > 0 ? '+' : '-') + (delta * 100).toFixed(0) + 'bp)';
+    else changeDesc = dir + notch + ' (' + (notch > 0 ? '+' : '-') + delta.toFixed(2) + 'pp)';
+  }
+  var labelText = notch === 0 ? actualVal + ' (current)' : actualVal + ' ' + changeDesc;
   var lbl = document.getElementById('fs-label-' + id);
   if (lbl) {
     lbl.textContent = labelText;
-    var v = parseInt(value);
-    lbl.style.color = v > 0 ? '#0ea5e9' : v < 0 ? '#f97316' : 'var(--dim)';
-    lbl.style.background = v > 0 ? 'rgba(14,165,233,0.15)' : v < 0 ? 'rgba(249,115,22,0.15)' : 'var(--card)';
+    lbl.style.color = notch > 0 ? '#0ea5e9' : notch < 0 ? '#f97316' : 'var(--dim)';
+    lbl.style.background = notch > 0 ? 'rgba(14,165,233,0.15)' : notch < 0 ? 'rgba(249,115,22,0.15)' : 'var(--card)';
   }
   fsModified = MACRO_FACTORS.some(function(f) { return fsInputs[f.id] !== fsDefaults[f.id]; });
   var badge = document.getElementById('fs-modified-badge');
@@ -4759,6 +4825,16 @@ function renderDerivedPanel() {
   var container = document.getElementById('fs-derived');
   if (!container) return;
 
+  // Show current actual slider values as a summary bar
+  var summaryHtml = '<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">';
+  MACRO_FACTORS.forEach(function(f) {
+    var notch = fsInputs[f.id] || 0;
+    var color = notch > 0 ? '#0ea5e9' : notch < 0 ? '#f97316' : 'var(--accent)';
+    summaryHtml += '<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:' + color + '18;color:' + color + ';font-weight:600">' +
+      f.label + ': ' + formatFsValue(f.id, notch) + '</span>';
+  });
+  summaryHtml += '</div>';
+
   var items = [
     { label: 'Dollar', value: d.dollar, labels: { '-3':'Crashing','-2':'Weak','-1':'Soft','0':'Stable','1':'Firm','2':'Strong','3':'Surging' } },
     { label: 'Inflation', value: d.inflation, labels: { '-3':'Deflation','-2':'Falling','-1':'Cooling','0':'Stable','1':'Warming','2':'Hot','3':'Runaway' } },
@@ -4766,7 +4842,7 @@ function renderDerivedPanel() {
     { label: 'Gold', value: d.gold, labels: { '-3':'Crashing','-2':'Falling','-1':'Soft','0':'Flat','1':'Rising','2':'Rally','3':'Surging' } },
   ];
 
-  var html = '';
+  var html = summaryHtml;
   items.forEach(function(item) {
     var v = item.value;
     var color = v > 0 ? '#0ea5e9' : v < 0 ? '#f97316' : 'var(--dim)';
@@ -4782,9 +4858,10 @@ function renderDerivedPanel() {
 
 function resetForeshadow() {
   MACRO_FACTORS.forEach(function(f) {
-    fsInputs[f.id] = fsDefaults[f.id];
+    fsInputs[f.id] = 0;  // 0 = current reality
+    fsDefaults[f.id] = 0;
     var slider = document.getElementById('fs-slider-' + f.id);
-    if (slider) slider.value = fsDefaults[f.id];
+    if (slider) slider.value = 0;
   });
   fsModified = false;
   var badge = document.getElementById('fs-modified-badge');
@@ -4796,12 +4873,13 @@ function resetForeshadow() {
 
 function computeNarrativeShift(group, symbol) {
   // 3 causal inputs → derive 4 downstream variables → apply all 7 to instrument weights
+  // Notch values (-5 to +5) scaled to internal (-3 to +3) range
   var sens = (symbol && SYMBOL_SENSITIVITY[symbol]) ? SYMBOL_SENSITIVITY[symbol] : DEFAULT_SENSITIVITY;
-  var fed = fsInputs.fed || 0;
-  var oil = fsInputs.oil || 0;
-  var growth = fsInputs.growth || 0;
+  var fed = (fsInputs.fed || 0) * 0.6;      // ±5 notches → ±3 internal
+  var oil = (fsInputs.oil || 0) * 0.6;
+  var growth = (fsInputs.growth || 0) * 0.6;
 
-  // Derive downstream variables from the 3 inputs
+  // Derive downstream variables from the 3 inputs (computeDerived already scales)
   var derived = computeDerived();
 
   // Build the full 7-factor input vector from 3 causes + 4 derived

@@ -14,6 +14,7 @@ interface Instrument {
 declare const INSTRUMENTS: Instrument[];
 declare function refreshMorningLens(): Promise<void>;
 declare function fetchTickerBars(symbol: string, years?: number): Promise<OHLCVBar[]>;
+declare function getOilPrice(): number | null;
 export default router;
-export { INSTRUMENTS, refreshMorningLens, fetchTickerBars };
+export { INSTRUMENTS, refreshMorningLens, fetchTickerBars, getOilPrice };
 //# sourceMappingURL=morning-lens.d.ts.map

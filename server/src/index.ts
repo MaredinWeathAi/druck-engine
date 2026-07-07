@@ -13,7 +13,7 @@ import geoEventsRouter, { setGeoEventKeys } from './geo-events';
 import burrySubstackRouter, { initBurryTables, startRSSPolling } from './burry-substack';
 import { computeVolumeBreakdown, computeWatchlistVolumeBadge } from './volume-analysis';
 import { fetchCreditDashboard, initCreditTables, getCreditForCommandCenter } from './credit-analysis';
-import { fetchTickerBars } from './morning-lens';
+import { fetchTickerBars, getOilPrice } from './morning-lens';
 import {
   initDatabase, getDbStats, getSymbolHistory, getSymbolPhaseTimeline,
   getSymbolTransitions, getRecentTransitions, getLatestSnapshots,
@@ -144,6 +144,7 @@ interface FredDataSet {
   unrate: number[];
   cpiaucsl: number[];
   napm: number[];
+  dfedtaru: number[];
   dates: string[];
   raw: Record<string, FredSeriesRaw>;
 }
@@ -152,7 +153,7 @@ async function fetchAllFredData(): Promise<FredDataSet | null> {
   if (!FRED_API_KEY) return null;
 
   try {
-    const [walcl, wtregen, rrpontsyd, m2sl, pcepilfe, gdp, tcu, dgs2, dgs10, bamlh0a0hym2, unrate, cpiaucsl, napm] = await Promise.all([
+    const [walcl, wtregen, rrpontsyd, m2sl, pcepilfe, gdp, tcu, dgs2, dgs10, bamlh0a0hym2, unrate, cpiaucsl, napm, dfedtaru] = await Promise.all([
       fetchFredSeries('WALCL', 1100),      // weekly, ~21 years
       fetchFredSeries('WTREGEN', 1100),     // weekly
       fetchFredSeries('RRPONTSYD', 1100),   // daily (cap at ~3 years for RRP, newer series)
@@ -166,6 +167,7 @@ async function fetchAllFredData(): Promise<FredDataSet | null> {
       fetchFredSeries('UNRATE', 360),       // monthly, ~30 years
       fetchFredSeries('CPIAUCSL', 360),     // monthly, ~30 years
       fetchFredSeries('NAPM', 360),         // monthly, ~30 years
+      fetchFredSeries('DFEDTARU', 100),     // daily, Fed Funds upper target rate
     ]);
 
     // Check if all key series were fetched
@@ -190,6 +192,7 @@ async function fetchAllFredData(): Promise<FredDataSet | null> {
       unrate: unrate?.values || [],
       cpiaucsl: cpiaucsl?.values || [],
       napm: napm?.values || [],
+      dfedtaru: dfedtaru?.values || [],
       dates: baseDates,
       raw: {
         pcepilfe: pcepilfe || { dates: [], values: [] },
@@ -286,6 +289,7 @@ let ismMfg = 50.2;
 let m2Yoy = 1.2;
 let yieldCurveBps = 25;
 let dgs2Latest = 4.3;
+let fedFundsRate = 4.50;  // Fed Funds upper target rate (DFEDTARU)
 
 // Trifecta calculation
 let mod1 = (latV4 > latV13 && latV4 > 0) ? 1 : (latV4 < latV13 && latV4 < 0) ? -1 : 0;
@@ -620,6 +624,12 @@ async function refreshLiveData() {
       console.log(`[FRED] ISM Mfg: ${ismMfg}`);
     }
 
+    // ── Fed Funds Upper Target Rate (DFEDTARU) ──
+    if (fredData.dfedtaru.length > 0) {
+      fedFundsRate = fredData.dfedtaru[fredData.dfedtaru.length - 1];
+      console.log(`[FRED] Fed Funds Rate: ${fedFundsRate}%`);
+    }
+
     // ── Treasury Yields ──
     if (fredData.dgs10.length > 0) {
       us10y = padToN(fredData.dgs10, N);
@@ -785,7 +795,7 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '16.5.0',
+    version: '16.6.0',
     build: '2026-07-07T12:00:00Z',
     BUILD_CANARY: 'CREDIT_BELLWETHER_OVERHAUL',
     name: 'Druck Engine — Structural Regime Intelligence',
@@ -1061,6 +1071,17 @@ app.get('/api/macro', (_req, res) => {
       is_stagflation: isStag,
       data_source: dataSource,
     },
+  });
+});
+
+// ─── FORESHADOW DEFAULTS — real-time macro values for slider anchoring ───
+app.get('/api/foreshadow/defaults', (_req, res) => {
+  const oilPrice = getOilPrice() || 70;  // fallback if CL=F not loaded yet
+  res.json({
+    fedRate: fedFundsRate,
+    oilPrice: +oilPrice.toFixed(2),
+    gdpGrowth: gdp,
+    dataSource,
   });
 });
 
@@ -2014,7 +2035,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v16.5.0 — Structural Regime Intelligence + Credit Bellwether Monitor`);
+  console.log(`\n  DRUCK ENGINE v16.6.0 — Foreshadow Real-Data Anchoring + Credit Bellwether Monitor`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);
