@@ -1290,6 +1290,7 @@ button:disabled{opacity:0.5;cursor:not-allowed}
                 <th data-sort="name">Name</th>
                 <th data-sort="price">Price</th>
                 <th data-sort="phase">Phase</th>
+                <th data-sort="burry" title="Burry Framework Evaluator score (0-100)">Burry</th>
                 <th data-sort="signal">Verdict</th>
                 <th data-sort="archetype">Archetype</th>
                 <th data-sort="updown">Up/Down Vol</th>
@@ -3417,6 +3418,12 @@ function renderInstrumentTable(bucket) {
     html += '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">' + (inst.name || '') + '</td>';
     html += '<td style="font-size:12px">$' + (price ? price.toFixed(2) : '—') + '</td>';
     html += '<td>' + phasePill + '</td>';
+    // Burry Framework score cell
+    var bfScore = inst.burryScore != null ? inst.burryScore : null;
+    var bfVerdict = inst.burryVerdict || '';
+    var bfVColors = { ATTRACTIVE: '#1D9E75', INTERESTING: '#22c55e', NEUTRAL: '#f59e0b', UNATTRACTIVE: '#E24B4A', AVOID: '#dc2626' };
+    var bfCol = bfVColors[bfVerdict] || 'var(--dim)';
+    html += '<td title="' + (bfVerdict || 'No data') + '"><span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;background:' + bfCol + '18;color:' + bfCol + '">' + (bfScore !== null ? bfScore : '—') + '</span></td>';
     html += '<td style="font-size:11px;font-weight:500;color:' + vc + ';max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + verdict + '</td>';
     html += '<td style="font-size:10px;color:var(--dim)">' + archetype + '</td>';
     html += '<td style="font-size:12px;color:var(--dim)">' + udDisplay + '</td>';
@@ -3426,7 +3433,7 @@ function renderInstrumentTable(bucket) {
     html += '<td style="font-size:10px;color:var(--dim);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + opinion.replace(/"/g, '&quot;') + '">' + opinion + '</td>';
     html += '</tr>';
   });
-  tbody.innerHTML = html || '<tr><td colspan="10" style="text-align:center;padding:30px;color:var(--dim)">No instruments</td></tr>';
+  tbody.innerHTML = html || '<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--dim)">No instruments</td></tr>';
 }
 
 // Table sorting
@@ -3439,6 +3446,7 @@ document.addEventListener('click', function(e) {
       if (sortKey === 'symbol') { av = a.symbol; bv = b.symbol; return av < bv ? -1 : av > bv ? 1 : 0; }
       if (sortKey === 'name') { av = a.name || ''; bv = b.name || ''; return av < bv ? -1 : av > bv ? 1 : 0; }
       if (sortKey === 'phase') { av = a.phaseData ? a.phaseData.phaseNum : 99; bv = b.phaseData ? b.phaseData.phaseNum : 99; return av - bv; }
+      if (sortKey === 'burry') { av = a.burryScore != null ? a.burryScore : -1; bv = b.burryScore != null ? b.burryScore : -1; return bv - av; }
       if (sortKey === 'signal') { av = a.phaseData ? a.phaseData.overallSignal : ''; bv = b.phaseData ? b.phaseData.overallSignal : ''; return av < bv ? -1 : av > bv ? 1 : 0; }
       if (sortKey === 'chg30d') { av = a.changePct30d || 0; bv = b.changePct30d || 0; return bv - av; }
       if (sortKey === 'roc20') { av = (a.daily || {}).roc20d || 0; bv = (b.daily || {}).roc20d || 0; return bv - av; }

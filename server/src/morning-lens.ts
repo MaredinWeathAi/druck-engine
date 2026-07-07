@@ -462,6 +462,8 @@ let phaseTransitions: PhaseTransition[] = [];                   // detected tran
 let currentSignals: SignalState | null = null;
 let previousSignals: SignalState | null = null;
 let whatChanged: DiffEntry[] = [];
+// Burry Framework score cache — populated when tickers are individually analyzed
+let burryScoreCache: Map<string, { score: number; verdict: string }> = new Map();
 let ariaLatestNarrative: string = '';
 let ariaTimestamp: string = '';
 let lensLastRefresh: number = 0;
@@ -1322,6 +1324,9 @@ async function refreshMorningLens(): Promise<void> {
       }
     }
 
+    // Attach cached Burry Framework score if available
+    const cachedBurry = burryScoreCache.get(inst.symbol.toUpperCase());
+
     newSnapshots.set(inst.symbol, {
       symbol: inst.symbol,
       name: inst.name,
@@ -1334,8 +1339,10 @@ async function refreshMorningLens(): Promise<void> {
       changePct1d,
       changePct30d,
       phaseData,
+      burryScore: cachedBurry?.score ?? null,
+      burryVerdict: cachedBurry?.verdict ?? null,
       lastUpdated: new Date().toISOString(),
-    });
+    } as any);
   }
 
   // ── STALE DATA PRESERVATION ──
@@ -3522,6 +3529,11 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
       console.error(`[TICKER] Burry framework eval failed for ${symbol}: ${err?.message?.slice(0, 80)}`);
       return null;
     });
+
+    // Cache Burry score for Chart Grid display
+    if (burryFramework) {
+      burryScoreCache.set(symbol.toUpperCase(), { score: burryFramework.overallScore, verdict: burryFramework.overallVerdict });
+    }
 
     // Build the response and cache it
     const responseData: any = {
