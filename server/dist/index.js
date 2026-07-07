@@ -50,6 +50,7 @@ const alert_system_1 = __importDefault(require("./alert-system"));
 const geo_events_1 = __importStar(require("./geo-events"));
 const burry_substack_1 = __importStar(require("./burry-substack"));
 const volume_analysis_1 = require("./volume-analysis");
+const credit_analysis_1 = require("./credit-analysis");
 const morning_lens_2 = require("./morning-lens");
 const history_store_1 = require("./history-store");
 // mtrp-client bridge removed — Market Intel lives entirely in Druck Engine
@@ -746,9 +747,9 @@ app.get('/api/health', (_req, res) => {
     recalcDerived();
     res.json({
         status: 'ok',
-        version: '16.2.0',
+        version: '16.3.0',
         build: '2026-07-06T20:00:00Z',
-        BUILD_CANARY: 'BURRY_FRAMEWORK_EVALUATOR',
+        BUILD_CANARY: 'CREDIT_MARKET_DASHBOARD',
         name: 'Druck Engine — Structural Regime Intelligence',
         timestamp: new Date().toISOString(),
         fred_key: !!FRED_API_KEY,
@@ -1830,6 +1831,19 @@ app.use('/api/industry', industry_drivers_1.default);
 app.use('/api/alerts', alert_system_1.default);
 app.use('/api/geo-events', geo_events_1.default);
 app.use('/api', burry_substack_1.default);
+// ─── CREDIT MARKET ROUTE ───
+app.get('/api/credit', async (_req, res) => {
+    try {
+        const data = await (0, credit_analysis_1.fetchCreditDashboard)(FRED_API_KEY, GURUFOCUS_API_KEY);
+        if (!data) {
+            return res.status(503).json({ error: 'Credit data not available — FRED key may be missing' });
+        }
+        res.json(data);
+    }
+    catch (err) {
+        res.status(500).json({ error: err?.message || 'Credit analysis failed' });
+    }
+});
 // ─── VOLUME ANALYSIS ROUTES ───
 app.get('/api/volume/:symbol', async (req, res) => {
     try {
@@ -1873,7 +1887,7 @@ app.get('*', (req, res) => {
     }
 });
 app.listen(PORT, () => {
-    console.log(`\n  DRUCK ENGINE v16.2.0 — Structural Regime Intelligence + Burry Framework Evaluator`);
+    console.log(`\n  DRUCK ENGINE v16.3.0 — Structural Regime Intelligence + Credit Market Dashboard`);
     console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
     if (FRED_API_KEY)
         console.log(`  FRED API: Configured (4-hour cache)`);

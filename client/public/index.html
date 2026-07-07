@@ -1569,7 +1569,7 @@ function loadPageData(page) {
   else if (page === 'settings') loadSettings();
 }
 
-// API Calls
+// API Calls — resilient: returns null on error instead of throwing
 function apiCall(endpoint, method, data) {
   var options = {
     method: method || 'GET',
@@ -1577,7 +1577,14 @@ function apiCall(endpoint, method, data) {
   };
   if (data) options.body = JSON.stringify(data);
   return fetch(endpoint, options).then(function(res) {
+    if (!res.ok) {
+      console.warn('[API] ' + endpoint + ' returned ' + res.status);
+      return null;
+    }
     return res.json();
+  }).catch(function(err) {
+    console.warn('[API] ' + endpoint + ' failed:', err);
+    return null;
   });
 }
 
@@ -1728,6 +1735,7 @@ function loadDashboard() {
   loadCreditDashboard();
 
   apiCall('/api/trifecta').then(function(data) {
+    if (!data || !data.modules) return;
     var tri = data.trifecta_score;
     var m1 = data.modules.m1_liquidity;
     var m2 = data.modules.m2_conviction;
@@ -1735,20 +1743,21 @@ function loadDashboard() {
     var regime = data.regime;
 
     document.getElementById('trifecta-score').textContent = tri;
-    document.getElementById('trifecta-regime').textContent = regime.label;
-    document.getElementById('mod1-score').textContent = (m1.score > 0 ? '+' : '') + m1.score;
-    document.getElementById('mod1-signal').textContent = m1.signal;
-    document.getElementById('mod2-score').textContent = (m2.score > 0 ? '+' : '') + m2.score;
-    document.getElementById('mod2-signal').textContent = m2.signal;
-    document.getElementById('mod3-score').textContent = (m3.score > 0 ? '+' : '') + m3.score;
-    document.getElementById('mod3-signal').textContent = m3.signal;
-    document.getElementById('hedge-rec').textContent = data.hedge.recommendation;
-    document.getElementById('spxu-alloc').textContent = data.hedge.spxu_allocation;
-    document.getElementById('stag-flag').textContent = regime.is_stagflation ? 'YES' : 'NO';
-    document.getElementById('pce-value').textContent = regime.pce.toFixed(1);
-  });
+    document.getElementById('trifecta-regime').textContent = regime ? regime.label : '—';
+    document.getElementById('mod1-score').textContent = m1 ? (m1.score > 0 ? '+' : '') + m1.score : '—';
+    document.getElementById('mod1-signal').textContent = m1 ? m1.signal : '—';
+    document.getElementById('mod2-score').textContent = m2 ? (m2.score > 0 ? '+' : '') + m2.score : '—';
+    document.getElementById('mod2-signal').textContent = m2 ? m2.signal : '—';
+    document.getElementById('mod3-score').textContent = m3 ? (m3.score > 0 ? '+' : '') + m3.score : '—';
+    document.getElementById('mod3-signal').textContent = m3 ? m3.signal : '—';
+    document.getElementById('hedge-rec').textContent = data.hedge ? data.hedge.recommendation : '—';
+    document.getElementById('spxu-alloc').textContent = data.hedge ? data.hedge.spxu_allocation : '—';
+    document.getElementById('stag-flag').textContent = (regime && regime.is_stagflation) ? 'YES' : 'NO';
+    document.getElementById('pce-value').textContent = (regime && regime.pce != null) ? regime.pce.toFixed(1) : '—';
+  }).catch(function(err) { console.warn('[Dashboard] Trifecta load failed:', err); });
 
   apiCall('/api/macro').then(function(data) {
+    if (!data || !data.indicators) return;
     var indicators = data.indicators;
     var indicatorList = ['pce', 'gdp', 'unemployment', 'cpi_yoy', 'ism_mfg', 'cap_util', 'yield_curve_bps', 'm2_yoy'];
     var meta = {
@@ -1786,12 +1795,13 @@ function loadDashboard() {
       html += '</div>';
     });
     document.getElementById('regime-indicators').innerHTML = html;
-  });
+  }).catch(function(err) { console.warn('[Dashboard] Macro load failed:', err); });
 }
 
 // Liquidity
 function loadLiquidity() {
   apiCall('/api/liquidity').then(function(data) {
+    if (!data || !data.latest) return;
     var latest = data.latest;
     document.getElementById('nl-value').textContent = latest.net_liquidity.toFixed(4);
     document.getElementById('vel4w-value').textContent = latest.velocity_4w.toFixed(2) + '%';
@@ -2493,7 +2503,7 @@ function loadCommandCenter() {
     var leading = results[9];
 
     // 1. Phase Transitions
-    renderPhaseTransitions(transitions, 'cc-');
+    if (transitions) renderPhaseTransitions(transitions, 'cc-');
 
     // 2. Trifecta status pills
     if (trifecta) {
@@ -2586,11 +2596,14 @@ function loadCommandCenter() {
     // 5. Aria narrative
     var ariaBody = document.getElementById('cc-aria-body');
     var ariaTs = document.getElementById('cc-aria-ts');
-    if (narrative && narrative.text) {
-      ariaBody.textContent = narrative.text;
-      if (narrative.generatedAt) {
-        var d = new Date(narrative.generatedAt);
-        ariaTs.textContent = 'Generated ' + d.toLocaleString();
+    if (narrative && (narrative.narrative || narrative.text)) {
+      ariaBody.textContent = narrative.narrative || narrative.text;
+      if (narrative.generatedAt || narrative.timestamp) {
+        var ts = narrative.generatedAt || narrative.timestamp;
+        if (ts) {
+          var d = new Date(ts);
+          ariaTs.textContent = 'Generated ' + d.toLocaleString();
+        }
       }
     } else {
       ariaBody.textContent = 'Aria narrative not yet generated. Visit Morning Brief and click Refresh.';
@@ -2599,7 +2612,7 @@ function loadCommandCenter() {
 
     // 6. Headlines — compact rendering
     var hlList = document.getElementById('cc-headline-list');
-    var hlData = headlines.headlines || [];
+    var hlData = (headlines && headlines.headlines) ? headlines.headlines : [];
     if (hlData.length === 0) {
       hlList.innerHTML = '<div style="text-align:center;padding:20px;color:var(--dim);font-size:12px">No headlines available</div>';
     } else {
@@ -2608,8 +2621,9 @@ function loadCommandCenter() {
         var hl = hlData[i];
         var dirIcon = hl.direction === 'positive' ? '▲' : hl.direction === 'negative' ? '▼' : '◆';
         var dirColor = hl.direction === 'positive' ? '#0ea5e9' : hl.direction === 'negative' ? '#f97316' : '#94a3b8';
-        var rxClass = hl.marketReactionPct >= 0 ? 'pos' : 'neg';
-        var rxStr = (hl.marketReactionPct >= 0 ? '+' : '') + hl.marketReactionPct.toFixed(1) + '%';
+        var rxPct = (hl.marketReactionPct != null) ? hl.marketReactionPct : 0;
+        var rxClass = rxPct >= 0 ? 'pos' : 'neg';
+        var rxStr = (rxPct >= 0 ? '+' : '') + rxPct.toFixed(1) + '%';
 
         hlHtml += '<div class="cc-hl-item">';
         hlHtml += '<span class="cc-hl-dir" style="color:' + dirColor + '">' + dirIcon + '</span>';
@@ -2902,12 +2916,12 @@ function loadMorningLens() {
     var wc = results[3];
     var narrative = results[4];
     var transitions = results[5];
-    renderPhaseTransitions(transitions, '');
-    renderDeathNails(dn);
-    renderSignalStrip(signals);
+    if (transitions) renderPhaseTransitions(transitions, '');
+    if (dn) renderDeathNails(dn);
+    if (signals) renderSignalStrip(signals);
     renderAria(narrative);
-    renderWhatChanged(wc);
-    renderLeadingGroups(lg);
+    if (wc) renderWhatChanged(wc);
+    if (lg) renderLeadingGroups(lg);
   }).catch(function(err) {
     console.error('Morning Lens load error:', err);
   });
@@ -2994,14 +3008,16 @@ function renderSignalStrip(signals) {
 function renderAria(narrative) {
   var body = document.getElementById('aria-body');
   var ts = document.getElementById('aria-timestamp');
-  if (!narrative || !narrative.text) {
+  var text = narrative ? (narrative.narrative || narrative.text) : null;
+  if (!text) {
     body.textContent = 'Aria narrative not yet generated. Click Refresh to trigger generation.';
     ts.textContent = '';
     return;
   }
-  body.textContent = narrative.text;
-  if (narrative.generatedAt) {
-    var d = new Date(narrative.generatedAt);
+  body.textContent = text;
+  var genTs = narrative.generatedAt || narrative.timestamp;
+  if (genTs) {
+    var d = new Date(genTs);
     ts.textContent = 'Generated ' + d.toLocaleString();
   }
 }
