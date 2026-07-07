@@ -6,3 +6,5 @@ cmds = ["cd server && rm -rf dist && npx tsc"]
 
 [start]
 cmd = "node server/dist/index.js"
+
+# Deploy trigger: 2026-07-07T15:30:22Z
