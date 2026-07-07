@@ -1171,13 +1171,13 @@ button:disabled{opacity:0.5;cursor:not-allowed}
               <th data-wl-sort="ticker" style="cursor:pointer">Ticker <span class="sort-arrow"></span></th>
               <th data-wl-sort="price" style="cursor:pointer">Price <span class="sort-arrow"></span></th>
               <th data-wl-sort="phase" style="cursor:pointer">Phase <span class="sort-arrow"></span></th>
+              <th data-wl-sort="burry" style="cursor:pointer" title="Burry Framework Evaluator score (0-100)">Burry <span class="sort-arrow"></span></th>
               <th data-wl-sort="verdict" style="cursor:pointer">Verdict <span class="sort-arrow"></span></th>
               <th data-wl-sort="archetype" style="cursor:pointer">Archetype <span class="sort-arrow"></span></th>
               <th data-wl-sort="sizing" style="cursor:pointer">Sizing <span class="sort-arrow"></span></th>
               <th data-wl-sort="udVol" style="cursor:pointer">Up/Down Vol <span class="sort-arrow"></span></th>
               <th data-wl-sort="vs200d" style="cursor:pointer">vs 200d <span class="sort-arrow"></span></th>
               <th data-wl-sort="failedBd" style="cursor:pointer">Failed BD <span class="sort-arrow"></span></th>
-              <th data-wl-sort="turnover" style="cursor:pointer" title="Shareholder Turnover — cumulative volume / shares outstanding since peak">TO% <span class="sort-arrow"></span></th>
               <th style="max-width:250px">Druckenmiller Opinion</th>
             </tr>
           </thead>
@@ -5203,6 +5203,7 @@ function loadWatchlist() {
           sizingRegime: item.sizing_regime ? { regime: item.sizing_regime, label: item.sizing_label, conviction: item.sizing_conviction, conflictsWithVerdict: !!item.sizing_conflicts, conflictNote: item.sizing_conflict_note, sizing: item.sizing_detail } : null,
           sectorDetected: item.sector,
           narrative: item.narrative,
+          burryFramework: item.full_data ? (function() { try { var fd = JSON.parse(item.full_data); return fd.burryFramework || null; } catch(e) { return null; } })() : null,
           _fromServer: true,
           _lastAnalyzed: item.last_analyzed,
           _prevPhase: item.prev_phase_short,
@@ -5290,7 +5291,7 @@ function renderWatchlistTable() {
       else if (wlSortKey === 'udVol') { av = (aD.volumeDemand || {}).upDownRatio || 0; bv = (bD.volumeDemand || {}).upDownRatio || 0; }
       else if (wlSortKey === 'vs200d') { av = (aD.anchors || {}).priceVs200d !== null && (aD.anchors || {}).priceVs200d !== undefined ? (aD.anchors || {}).priceVs200d : -9999; bv = (bD.anchors || {}).priceVs200d !== null && (bD.anchors || {}).priceVs200d !== undefined ? (bD.anchors || {}).priceVs200d : -9999; }
       else if (wlSortKey === 'failedBd') { av = (aD.failedBreakdowns || {}).count || 0; bv = (bD.failedBreakdowns || {}).count || 0; }
-      else if (wlSortKey === 'turnover') { var aVb = aD.volumeBreakdown; var bVb = bD.volumeBreakdown; av = aVb && aVb.shareholderTurnover ? aVb.shareholderTurnover.turnoverPct : -1; bv = bVb && bVb.shareholderTurnover ? bVb.shareholderTurnover.turnoverPct : -1; }
+      else if (wlSortKey === 'burry') { av = (aD.burryFramework || {}).overallScore || 0; bv = (bD.burryFramework || {}).overallScore || 0; }
       else return 0;
       if (typeof av === 'string') return wlSortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
       return wlSortAsc ? av - bv : bv - av;
@@ -5354,6 +5355,13 @@ function renderWatchlistTable() {
     var changeBorder = phaseChanged ? (d._phaseChangeDirection === 'IMPROVING' ? ';box-shadow:0 0 8px rgba(29,158,117,0.5);animation:pulse 2s infinite' : ';box-shadow:0 0 8px rgba(226,75,74,0.5);animation:pulse 2s infinite') : '';
     var changeArrow = phaseChanged ? (d._phaseChangeDirection === 'IMPROVING' ? ' <span style="color:#1D9E75;font-size:9px">▲ from ' + (d._prevPhase || '?') + '</span>' : ' <span style="color:#E24B4A;font-size:9px">▼ from ' + (d._prevPhase || '?') + '</span>') : '';
     html += '<td><span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:500;background:' + pc + '18;color:' + pc + changeBorder + '">' + (phase.phaseShort || '—') + '</span>' + changeArrow + '</td>';
+    // Burry Framework score cell
+    var bf = d.burryFramework || {};
+    var bfScore = bf.overallScore || null;
+    var bfVerdict = bf.overallVerdict || '';
+    var bfVColors = { ATTRACTIVE: '#1D9E75', INTERESTING: '#22c55e', NEUTRAL: '#f59e0b', UNATTRACTIVE: '#E24B4A', AVOID: '#dc2626' };
+    var bfCol = bfVColors[bfVerdict] || 'var(--dim)';
+    html += '<td title="' + (bfVerdict || 'No data') + '"><span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;background:' + bfCol + '18;color:' + bfCol + '">' + (bfScore !== null ? bfScore : '—') + '</span></td>';
     html += '<td style="font-size:11px;font-weight:500;color:' + vc + '">' + (v.verdict || '—') + '</td>';
     var archLabels = { BROKEN_GROWTH: 'Broken Growth', EVENT_OVERCORRECTION: 'Over-Correction', STRUCTURAL_TURNAROUND: 'Turnaround', CONFIRMED_UPTREND: 'Uptrend', LATE_CYCLE: 'Late Cycle', COILED_SPRING: 'Coiled Spring', CAPITULATION_FORMING: 'Capitulation', BULLISH_TAPE: 'Bullish', BEARISH_TAPE: 'Bearish', NEUTRAL: 'Neutral' };
     html += '<td style="font-size:10px;color:var(--dim)">' + (archLabels[v.archetype] || v.archetype || '—') + (v.subPhase ? ' <span style="color:var(--accent);font-weight:500">· ' + v.subPhase + '</span>' : '') + '</td>';
@@ -5370,13 +5378,6 @@ function renderWatchlistTable() {
     html += '<td style="font-size:11px;color:' + extColor + '">' + (a.priceVs200d !== null ? (a.priceVs200d > 0 ? '+' : '') + a.priceVs200d.toFixed(1) + '%' : '—') + '</td>';
     var fbColor = fb.count >= 2 ? '#1D9E75' : fb.count >= 1 ? '#BA7517' : 'var(--dim)';
     html += '<td style="font-size:12px;font-weight:500;color:' + fbColor + '">' + (fb.count !== undefined ? fb.count : '—') + '</td>';
-    // Shareholder Turnover badge
-    var volBk = d.volumeBreakdown;
-    var toVal = volBk && volBk.shareholderTurnover ? volBk.shareholderTurnover.turnoverPct : null;
-    var toColor = toVal !== null ? (toVal >= 200 ? '#1D9E75' : toVal >= 100 ? '#f59e0b' : '#E24B4A') : 'var(--dim)';
-    var toLabel = toVal !== null ? toVal + '%' : '—';
-    var toTitle = toVal !== null ? 'Shareholder turnover: ' + toVal + '% | ' + (volBk.shareholderTurnover.turnoverLabel || '') + ' | Peak: $' + (volBk.peak ? volBk.peak.price : '?') + ' | Decline: ' + (volBk.peak ? volBk.peak.declineFromPeak : '?') + '%' : 'No significant decline detected';
-    html += '<td title="' + toTitle.replace(/"/g, '&quot;') + '"><span style="display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600;background:' + toColor + '18;color:' + toColor + '">' + toLabel + '</span></td>';
     html += '<td style="font-size:10px;color:var(--dim);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + opinion.replace(/"/g, '&quot;') + '">' + opinion + '</td>';
     html += '</tr>';
   });
