@@ -40,12 +40,6 @@ export interface BurryFrameworkResult {
         hardSellTriggered: boolean;
         metrics: Record<string, any>;
     };
-    moat: {
-        stone: string;
-        aictTier: number;
-        detail: string;
-        score: number;
-    };
     volumeSignal: {
         score: number;
         detail: string;

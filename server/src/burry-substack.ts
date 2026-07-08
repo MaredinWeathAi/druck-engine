@@ -1614,10 +1614,9 @@ router.get('/burry/comments', (req, res) => {
 //   1. Valuation (P/S percentile, P/E vs historical, IV15 proxy)
 //   2. SBC & Dilution (share count trend, buyback effectiveness)
 //   3. Balance Sheet (Debt/EBITDA, interest coverage — HARD SELLS)
-//   4. Moat Durability (Stone Classification + AI threat tier)
-//   5. Volume Signal (shareholder turnover — Burry's key technical)
-//   6. Contrarian Opportunity (whale-fall, mean reversion potential)
-//   7. Capital Cycle Position (where in capex boom/bust)
+//   4. Volume Signal (shareholder turnover — Burry's key technical)
+//   5. Contrarian Opportunity (whale-fall, mean reversion potential)
+//   6. Capital Cycle Position (where in capex boom/bust)
 //
 // SILO: This module reads data passed in; it does NOT import from
 // morning-lens.ts or any other analysis module.
@@ -1655,7 +1654,6 @@ export interface BurryFrameworkResult {
   // Dimension scores (each 0-100, higher = more Burry-attractive)
   valuation: { score: number; grade: string; detail: string; metrics: Record<string, any> };
   balanceSheet: { score: number; grade: string; detail: string; hardSellTriggered: boolean; metrics: Record<string, any> };
-  moat: { stone: string; aictTier: number; detail: string; score: number };
   volumeSignal: { score: number; detail: string };
   contrarianOpportunity: { score: number; detail: string };
   capitalCycle: { position: string; detail: string; score: number };
@@ -1671,58 +1669,6 @@ export interface BurryFrameworkResult {
 
   dataAvailable: boolean;  // false = GuruFocus fetch failed, scores are partial
 }
-
-// ─── STONE CLASSIFICATION (Moat Durability) ───
-// Burry's framework: Granite > Marble > Limestone > Sandstone > Chalk
-const STONE_MAP: Record<string, { stone: string; score: number }> = {
-  // Granite: Regulatory/mission-critical moats
-  'Healthcare': { stone: 'Granite', score: 90 },
-  'Biotech/Pharma': { stone: 'Marble', score: 75 },
-  'Insurance': { stone: 'Marble', score: 75 },
-  'Utilities': { stone: 'Granite', score: 85 },
-  // Marble: Strong brand/switching costs
-  'Consumer Staples': { stone: 'Marble', score: 70 },
-  'Aerospace & Defense': { stone: 'Marble', score: 75 },
-  'Banks': { stone: 'Limestone', score: 60 },
-  'Financials': { stone: 'Limestone', score: 60 },
-  'Transports': { stone: 'Limestone', score: 55 },
-  'Industrials': { stone: 'Limestone', score: 55 },
-  // Limestone: Competitive but defensible
-  'Materials': { stone: 'Limestone', score: 50 },
-  'Energy': { stone: 'Limestone', score: 50 },
-  'Real Estate': { stone: 'Limestone', score: 55 },
-  'Consumer Discretionary': { stone: 'Sandstone', score: 40 },
-  'Retail': { stone: 'Sandstone', score: 35 },
-  'Communications': { stone: 'Sandstone', score: 40 },
-  // Limestone: Established tech with switching costs (ADBE, FISV, CRM etc.)
-  'Software': { stone: 'Limestone', score: 55 },
-  'Technology': { stone: 'Limestone', score: 50 },
-  'Semiconductors': { stone: 'Limestone', score: 50 }, // Burry sees these as cyclical, not chalk
-};
-
-// ─── AI COMPETITIVE THREAT (AICT) Tiers ───
-// Tier 1 = Existential, Tier 5 = Minimal
-const AICT_MAP: Record<string, number> = {
-  'Software': 3,     // Moderate — established software has switching costs; new entrants face disruption
-  'Technology': 3,
-  'Communications': 3,
-  'Retail': 3,
-  'Consumer Discretionary': 3,
-  'Semiconductors': 3,  // Cyclical risk, not displacement
-  'Banks': 3,
-  'Financials': 3,
-  'Industrials': 4,
-  'Transports': 4,
-  'Materials': 4,
-  'Energy': 4,
-  'Real Estate': 4,
-  'Healthcare': 4,
-  'Biotech/Pharma': 4,
-  'Insurance': 4,
-  'Consumer Staples': 5,
-  'Utilities': 5,
-  'Aerospace & Defense': 5,
-};
 
 // ─── CAPITAL CYCLE — Sectors currently in capex boom (per Burry's 2025-2026 analysis) ───
 // Only Semiconductors are in the actual AI capex boom (data centers, fabs)
@@ -1749,7 +1695,7 @@ export async function evaluateBurryFramework(input: BurryFrameworkInput): Promis
   const sector = general.supersector || general.sector || '';
   const group = general.group || general.subindustry || '';
 
-  // Detect normalized sector name for stone/AICT mapping
+  // Detect normalized sector name for capital cycle mapping
   const sectorName = detectSectorName(sector, group);
 
   // ═══ 1. VALUATION SCORE ═══
@@ -1892,20 +1838,7 @@ export async function evaluateBurryFramework(input: BurryFrameworkInput): Promis
 
   sbcScore = Math.max(0, Math.min(100, sbcScore));
 
-  // ═══ 4. MOAT DURABILITY (Stone Classification + AICT) ═══
-  const stoneData = STONE_MAP[sectorName] || { stone: 'Limestone', score: 50 };
-  const aictTier = AICT_MAP[sectorName] || 3;
-  let moatScore = stoneData.score;
-
-  // Adjust moat score by AICT tier
-  if (aictTier <= 2) moatScore -= 15; // Severe/existential AI threat
-  else if (aictTier >= 5) moatScore += 10; // AI is additive
-
-  moatScore = Math.max(0, Math.min(100, moatScore));
-
-  const moatDetail = `${stoneData.stone} moat (${sectorName}) — AICT Tier ${aictTier}: ${aictTier <= 2 ? 'AI poses significant competitive threat' : aictTier >= 4 ? 'Low AI disruption risk — regulatory/switching cost moats protect' : 'Moderate AI impact — company can adapt'}`;
-
-  // ═══ 5. VOLUME SIGNAL ═══
+  // ═══ 4. VOLUME SIGNAL ═══
   let volScore = 50;
   let volDetail = '';
   const to = volumeBreakdown?.shareholderTurnover;
@@ -2054,7 +1987,7 @@ export async function evaluateBurryFramework(input: BurryFrameworkInput): Promis
   }
 
   // Contrarian whale fall
-  if (pctFrom52wHigh !== null && pctFrom52wHigh < -25 && moatScore >= 50) {
+  if (pctFrom52wHigh !== null && pctFrom52wHigh < -25) {
     principlesTriggered.push({
       principle: 'Whale Fall',
       applies: 'BULLISH',
@@ -2094,15 +2027,15 @@ export async function evaluateBurryFramework(input: BurryFrameworkInput): Promis
   }
 
   // ═══ OVERALL SCORE ═══
-  // Weights: Valuation 25%, Volume 25%, Contrarian 15%, Balance Sheet 10%, Moat 10%, SBC 10%, Capital Cycle 5%
+  // Weights (proportional after removing Moat):
+  //   Valuation ~28%, Volume ~28%, Contrarian ~17%, BS ~11%, SBC ~11%, Capital Cycle ~6%
   const overall = Math.round(
-    valScore * 0.25 +
+    (valScore * 0.25 +
     volScore * 0.25 +
     contrScore * 0.15 +
     bsScore * 0.10 +
-    moatScore * 0.10 +
     sbcScore * 0.10 +
-    cycleScore * 0.05
+    cycleScore * 0.05) / 0.90
   );
 
   // Hard sells override everything
@@ -2138,7 +2071,6 @@ export async function evaluateBurryFramework(input: BurryFrameworkInput): Promis
     summary: summaryParts.join(' '),
     valuation: { score: valScore, grade: valGrade, detail: valNotes.join('. ') || 'Insufficient valuation data', metrics: valMetrics },
     balanceSheet: { score: bsScore, grade: bsGrade, detail: bsNotes.join('. ') || 'Insufficient balance sheet data', hardSellTriggered: hardSells.length > 0, metrics: bsMetrics },
-    moat: { stone: stoneData.stone, aictTier, detail: moatDetail, score: moatScore },
     volumeSignal: { score: volScore, detail: volDetail || 'No volume signal' },
     contrarianOpportunity: { score: contrScore, detail: contrDetail },
     capitalCycle: { position: cyclePosition, detail: cycleDetail, score: cycleScore },

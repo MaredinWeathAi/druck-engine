@@ -5708,13 +5708,12 @@ function analyzeTickerFn() {
       html += '<div style="font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.5px;color:var(--dim);margin-bottom:8px">Dimension Scores</div>';
 
       var dimensions = [
-        { key: 'valuation', label: 'Valuation', weight: '25%', data: bf.valuation },
-        { key: 'balanceSheet', label: 'Balance Sheet', weight: '10%', data: bf.balanceSheet },
-        { key: 'volumeSignal', label: 'Volume Signal', weight: '25%', data: bf.volumeSignal },
-        { key: 'contrarianOpportunity', label: 'Contrarian Opp.', weight: '15%', data: bf.contrarianOpportunity },
-        { key: 'moat', label: 'Moat Durability', weight: '10%', data: bf.moat },
-        { key: 'sbcDilution', label: 'SBC / Dilution', weight: '10%', data: bf.sbcDilution },
-        { key: 'capitalCycle', label: 'Capital Cycle', weight: '5%', data: bf.capitalCycle }
+        { key: 'valuation', label: 'Valuation', weight: '28%', data: bf.valuation },
+        { key: 'balanceSheet', label: 'Balance Sheet', weight: '11%', data: bf.balanceSheet },
+        { key: 'volumeSignal', label: 'Volume Signal', weight: '28%', data: bf.volumeSignal },
+        { key: 'contrarianOpportunity', label: 'Contrarian Opp.', weight: '17%', data: bf.contrarianOpportunity },
+        { key: 'sbcDilution', label: 'SBC / Dilution', weight: '11%', data: bf.sbcDilution },
+        { key: 'capitalCycle', label: 'Capital Cycle', weight: '6%', data: bf.capitalCycle }
       ];
 
       dimensions.forEach(function(dim) {
@@ -5729,12 +5728,6 @@ function analyzeTickerFn() {
         html += '<div style="font-size:11px;color:var(--text);font-weight:500">' + dim.label + ' <span style="font-size:9px;color:var(--dim);font-weight:400">(' + dim.weight + ')</span>';
         if (isHardSell) html += ' <span style="color:#dc2626;font-size:9px;font-weight:600">HARD SELL</span>';
         html += '</div>';
-
-        // Stone classification badge for moat
-        if (dim.key === 'moat' && dim.data.stone) {
-          var stoneColors = { Granite: '#1D9E75', Marble: '#22c55e', Limestone: '#f59e0b', Sandstone: '#E24B4A', Chalk: '#dc2626' };
-          html += '<span style="font-size:9px;padding:1px 6px;border-radius:3px;background:' + (stoneColors[dim.data.stone] || 'var(--dim)') + '18;color:' + (stoneColors[dim.data.stone] || 'var(--dim)') + ';font-weight:500">' + dim.data.stone + '</span>';
-        }
 
         html += '<span style="font-size:11px;color:' + barColor + ';font-weight:600">' + score + '</span>';
         html += '</div>';
