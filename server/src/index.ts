@@ -795,7 +795,7 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '16.6.0',
+    version: '16.7.0',
     build: '2026-07-07T12:00:00Z',
     BUILD_CANARY: 'CREDIT_BELLWETHER_OVERHAUL',
     name: 'Druck Engine — Structural Regime Intelligence',
@@ -2035,7 +2035,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v16.6.0 — Foreshadow Real-Data Anchoring + Credit Bellwether Monitor`);
+  console.log(`\n  DRUCK ENGINE v16.7.0 — Burry Framework Recalibration`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);

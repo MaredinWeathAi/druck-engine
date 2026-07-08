@@ -1440,16 +1440,16 @@ const STONE_MAP = {
     'Consumer Discretionary': { stone: 'Sandstone', score: 40 },
     'Retail': { stone: 'Sandstone', score: 35 },
     'Communications': { stone: 'Sandstone', score: 40 },
-    // Sandstone/Chalk: Disruption-vulnerable
-    'Software': { stone: 'Sandstone', score: 30 },
-    'Technology': { stone: 'Sandstone', score: 35 },
+    // Limestone: Established tech with switching costs (ADBE, FISV, CRM etc.)
+    'Software': { stone: 'Limestone', score: 55 },
+    'Technology': { stone: 'Limestone', score: 50 },
     'Semiconductors': { stone: 'Limestone', score: 50 }, // Burry sees these as cyclical, not chalk
 };
 // ─── AI COMPETITIVE THREAT (AICT) Tiers ───
 // Tier 1 = Existential, Tier 5 = Minimal
 const AICT_MAP = {
-    'Software': 2, // Severe — AI directly disrupts seat-based models
-    'Technology': 2,
+    'Software': 3, // Moderate — established software has switching costs; new entrants face disruption
+    'Technology': 3,
     'Communications': 3,
     'Retail': 3,
     'Consumer Discretionary': 3,
@@ -1469,7 +1469,9 @@ const AICT_MAP = {
     'Aerospace & Defense': 5,
 };
 // ─── CAPITAL CYCLE — Sectors currently in capex boom (per Burry's 2025-2026 analysis) ───
-const CAPEX_BOOM_SECTORS = new Set(['Semiconductors', 'Technology', 'Software', 'Communications']);
+// Only Semiconductors are in the actual AI capex boom (data centers, fabs)
+// ADBE, FISV, PYPL etc. are NOT building $100B infrastructure — don't penalize them
+const CAPEX_BOOM_SECTORS = new Set(['Semiconductors']);
 async function fetchGFSummary(symbol) {
     try {
         const url = `https://api.gurufocus.com/public/user/${GF_API_KEY}/stock/${encodeURIComponent(symbol)}/summary`;
@@ -1617,16 +1619,29 @@ async function evaluateBurryFramework(input) {
             bsScore += 5;
         }
     }
-    // Burry HARD SELL: "Never ok with interest coverage under 4.0x"
+    // Interest coverage assessment — Burry prefers strong coverage but context matters
+    // Hard sell only at truly dangerous levels (< 2.0x), penalty zone 2.0-4.0x
     if (interestCov !== null) {
-        if (interestCov < 4.0 && interestCov > 0) {
+        if (interestCov < 2.0 && interestCov > 0) {
             bsScore = Math.min(bsScore, 10);
-            hardSells.push(`HARD SELL: Interest Coverage = ${interestCov.toFixed(1)}x (Burry threshold: 4.0x min — non-negotiable)`);
-            bsNotes.push('CRITICAL: Below Burry\'s absolute interest coverage floor');
+            hardSells.push(`HARD SELL: Interest Coverage = ${interestCov.toFixed(1)}x — dangerously thin debt service capacity`);
+            bsNotes.push('CRITICAL: Interest coverage below survival threshold');
+        }
+        else if (interestCov < 3.0 && interestCov > 0) {
+            bsScore -= 15;
+            bsNotes.push(`Interest coverage ${interestCov.toFixed(1)}x — tight but manageable for stable-revenue businesses`);
+        }
+        else if (interestCov < 4.0) {
+            bsScore -= 5;
+            bsNotes.push(`Interest coverage ${interestCov.toFixed(1)}x — adequate, not a red flag for recurring-revenue models`);
         }
         else if (interestCov > 10) {
             bsScore += 10;
             bsNotes.push('Strong interest coverage — ample debt service capacity');
+        }
+        else if (interestCov > 6) {
+            bsScore += 5;
+            bsNotes.push('Comfortable interest coverage');
         }
     }
     if (currentRatio !== null) {
@@ -1642,30 +1657,17 @@ async function evaluateBurryFramework(input) {
     const bsGrade = hardSells.length > 0 ? 'FAIL — Hard Sell' : bsScore >= 70 ? 'Strong' : bsScore >= 50 ? 'Adequate' : bsScore >= 30 ? 'Weak' : 'Dangerous';
     // ═══ 3. SBC & DILUTION ═══
     // Burry's "Tragic Algebra of SBC" — even 1% dilution dramatically reduces intrinsic value
-    const sbcRevenue = parseFloat(ratios['SBC (% of Revenue)']?.value) || null;
-    const sharesGrowth = parseFloat(ratios['Shares Outstanding Growth (%)']?.value) || null;
-    const buybackYield = parseFloat(ratios['Buyback Ratio (%)']?.value) || null;
+    // GuruFocus actual keys: "Share Buyback Rate" (positive = shrinking shares = good),
+    //                        "Buyback Yield %" (buyback $ as % of market cap)
+    const sbcRevenue = null; // Not available from GF summary API
+    const sharesBuybackRate = parseFloat(ratios['Share Buyback Rate']?.value) || null; // positive = shares shrinking
+    const sharesGrowth = sharesBuybackRate !== null ? -sharesBuybackRate : null; // invert: positive growth = bad
+    const buybackYield = parseFloat(ratios['Buyback Yield %']?.value) || null;
     let sbcScore = 60;
-    const sbcMetrics = { sbcRevenue, sharesGrowth, buybackYield };
+    const sbcMetrics = { sbcRevenue, sharesGrowth, buybackYield, sharesBuybackRate };
     const sbcNotes = [];
-    if (sbcRevenue !== null) {
-        if (sbcRevenue > 15) {
-            sbcScore -= 30;
-            sbcNotes.push(`SBC = ${sbcRevenue.toFixed(1)}% of revenue — Burry: "Growth at any cost and SBC at any price is not the path"`);
-        }
-        else if (sbcRevenue > 8) {
-            sbcScore -= 15;
-            sbcNotes.push(`SBC = ${sbcRevenue.toFixed(1)}% of revenue — material dilution`);
-        }
-        else if (sbcRevenue > 3) {
-            sbcScore -= 10;
-            sbcNotes.push(`SBC = ${sbcRevenue.toFixed(1)}% of revenue — Burry: "Tragic Algebra" applies even at moderate levels`);
-        }
-        else if (sbcRevenue < 1) {
-            sbcScore += 15;
-            sbcNotes.push('Minimal SBC — Burry prefers companies without significant dilution');
-        }
-    }
+    // Note: SBC as % of revenue not available from GF summary API
+    // Scoring driven by share count changes and buyback yield instead
     if (sharesGrowth !== null) {
         if (sharesGrowth > 2) {
             sbcScore -= 20;
@@ -1681,6 +1683,17 @@ async function evaluateBurryFramework(input) {
         }
         else if (sharesGrowth < 0) {
             sbcScore += 5;
+        }
+    }
+    // Buyback yield bonus — Burry loves companies returning capital via buybacks
+    if (buybackYield !== null) {
+        if (buybackYield > 8) {
+            sbcScore += 10;
+            sbcNotes.push(`Buyback yield ${buybackYield.toFixed(1)}% — aggressive capital return`);
+        }
+        else if (buybackYield > 4) {
+            sbcScore += 5;
+            sbcNotes.push(`Buyback yield ${buybackYield.toFixed(1)}% — solid capital return`);
         }
     }
     sbcScore = Math.max(0, Math.min(100, sbcScore));
@@ -1721,17 +1734,17 @@ async function evaluateBurryFramework(input) {
     }
     else if (decline !== undefined && decline < -5) {
         volDetail = `Stock in decline (${decline?.toFixed(1)}% from peak) but no significant turnover data`;
-        volScore = 35;
+        volScore = 45;
     }
     else {
-        // No decline pattern — but context matters
+        // No decline pattern — volume analysis is neutral, not a penalty
         if (pctFrom52wHigh !== null && pctFrom52wHigh > -5) {
-            // Stock near ATH with no washout = no buying opportunity for Burry
-            volScore = 30;
-            volDetail = 'Near highs with no washout — Burry waits for capitulation, not momentum. No turnover reset = weak hands still holding';
+            // Stock near ATH with no washout = not a Burry setup, but only mild penalty
+            volScore = 35;
+            volDetail = 'Near highs with no washout — limited contrarian entry signal';
         }
         else {
-            volDetail = 'No significant decline pattern — turnover analysis not applicable';
+            volDetail = 'No significant decline pattern — volume neutral';
             volScore = 50;
         }
     }
@@ -1752,13 +1765,21 @@ async function evaluateBurryFramework(input) {
     const contrNotes = [];
     // "Whale fall" — quality stocks dragged down by sector panic
     const nearATH = pctFrom52wHigh !== null && pctFrom52wHigh > -3;
+    const isExpensive = fwdPe !== null && fwdPe > 35;
     if (pctFrom52wHigh !== null && pctFrom52wHigh < -30) {
         contrScore += 25;
         contrNotes.push(`${pctFrom52wHigh.toFixed(0)}% below 52-week high — potential whale-fall opportunity`);
     }
     else if (pctFrom52wHigh !== null && pctFrom52wHigh < -15) {
-        contrScore += 15;
-        contrNotes.push(`${pctFrom52wHigh.toFixed(0)}% below 52-week high — meaningful pullback`);
+        // For expensive stocks, a 15-30% pullback isn't truly contrarian — still consensus-rich
+        if (isExpensive) {
+            contrScore += 5;
+            contrNotes.push(`${pctFrom52wHigh.toFixed(0)}% below highs but Forward P/E still ${fwdPe.toFixed(0)}x — pullback from extreme isn't contrarian`);
+        }
+        else {
+            contrScore += 15;
+            contrNotes.push(`${pctFrom52wHigh.toFixed(0)}% below 52-week high — meaningful pullback`);
+        }
     }
     else if (nearATH) {
         contrScore -= 25;
@@ -1839,14 +1860,14 @@ async function evaluateBurryFramework(input) {
         });
         greenFlags.push('Low debt + active share reduction — matches Burry\'s ideal profile');
     }
-    // SBC concern
-    if (sbcRevenue !== null && sbcRevenue > 10) {
+    // SBC/dilution concern — flag if shares are growing despite buybacks
+    if (sharesGrowth !== null && sharesGrowth > 2) {
         principlesTriggered.push({
             principle: 'Tragic Algebra of SBC',
             applies: 'BEARISH',
             quote: '"Even sub-1% dilution dramatically reduces present value. Growth at any cost and SBC at any price is not the path to acceptable long-term returns."',
         });
-        redFlags.push(`SBC at ${sbcRevenue.toFixed(1)}% of revenue — Burry's "Tragic Algebra" applies`);
+        redFlags.push(`Share count growing ${sharesGrowth.toFixed(1)}%/yr — Burry's "Tragic Algebra" applies`);
     }
     // Capital cycle warning
     if (inCapexBoom) {
