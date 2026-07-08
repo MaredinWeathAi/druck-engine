@@ -2023,6 +2023,13 @@ startRSSPolling();
 // Initialize geo-event keys
 setGeoEventKeys(anthropicApiKey, GURUFOCUS_API_KEY);
 
+// Warm credit cache so Command Center card shows immediately
+if (FRED_API_KEY) {
+  fetchCreditDashboard(FRED_API_KEY, GURUFOCUS_API_KEY)
+    .then(d => console.log(`[STARTUP] Credit cache warmed — ${d ? d.healthStatus : 'no data'}`))
+    .catch(e => console.warn('[STARTUP] Credit warm-up failed:', e.message));
+}
+
 // ─── SERVE STATIC FILES ───
 const clientPath = path.join(__dirname, '../../client/public');
 app.use(express.static(clientPath));
@@ -2035,7 +2042,7 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n  DRUCK ENGINE v16.8.0 — Burry Framework: Moat Removed`);
+  console.log(`\n  DRUCK ENGINE v16.9.0 — Credit Warm-Up`);
   console.log(`  Data Source: ${dataSource === 'live' ? 'FRED + GuruFocus APIs' : 'Simulated Data'}`);
   if (FRED_API_KEY) console.log(`  FRED API: Configured (4-hour cache)`);
   if (GURUFOCUS_API_KEY) console.log(`  GuruFocus API: Configured (24-hour cache)`);
