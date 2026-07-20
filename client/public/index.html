@@ -5583,8 +5583,10 @@ function analyzeTickerFn() {
           { key: 'valuation', label: 'Valuation' }
         ];
         bucketDefs.forEach(function(b) {
-          var bv = comp.buckets[b.key];
-          if (bv !== undefined && bv !== null) {
+          var bucket = comp.buckets[b.key];
+          if (bucket !== undefined && bucket !== null) {
+            var bv = (typeof bucket === 'object') ? bucket.score : bucket;
+            if (bv === undefined || bv === null) return;
             var bColor = bv >= 70 ? '#1D9E75' : bv >= 50 ? '#f59e0b' : '#E24B4A';
             html += '<div style="flex:1;min-width:90px;padding:14px 16px;border-radius:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);text-align:center">';
             html += '<div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">' + b.label + '</div>';
