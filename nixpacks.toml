@@ -2,7 +2,7 @@
 cmds = ["npm install && cd server && npm install"]
 
 [phases.build]
-cmds = ["echo 'CACHE_BUST_v16_9_0_20260708' && cd server && rm -rf dist && npx tsc"]
+cmds = ["echo 'CACHE_BUST_v17_0_0_20260720' && cd server && rm -rf dist && npx tsc"]
 
 [start]
 cmd = "node server/dist/index.js"

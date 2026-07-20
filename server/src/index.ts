@@ -795,7 +795,7 @@ app.get('/api/health', (_req, res) => {
   recalcDerived();
   res.json({
     status: 'ok',
-    version: '16.9.0',
+    version: '17.0.0',
     build: '2026-07-07T12:00:00Z',
     BUILD_CANARY: 'CREDIT_BELLWETHER_OVERHAUL',
     name: 'Druck Engine — Structural Regime Intelligence',

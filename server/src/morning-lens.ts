@@ -13,6 +13,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getBurryTickerInsight, evaluateBurryFramework } from './burry-substack';
 import { computeVolumeBreakdown } from './volume-analysis';
+import { getFullIV15Analysis } from './burry-iv15';
 
 // ── LLM PROVIDER ABSTRACTION ──
 // Auto-detects Anthropic vs OpenAI key and routes accordingly
@@ -3535,6 +3536,12 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
       burryScoreCache.set(symbol.toUpperCase(), { score: burryFramework.overallScore, verdict: burryFramework.overallVerdict });
     }
 
+    // IV15 Intrinsic Value Analysis — Burry's full methodology
+    const iv15Analysis = await getFullIV15Analysis(symbol, price).catch((err: any) => {
+      console.error(`[TICKER] IV15 analysis failed for ${symbol}: ${err?.message?.slice(0, 80)}`);
+      return null;
+    });
+
     // Build the response and cache it
     const responseData: any = {
       symbol,
@@ -3609,6 +3616,9 @@ router.get('/lens/ticker/:symbol', async (req: Request, res: Response) => {
 
       // Burry Lens — siloed read-only reference from Substack analysis
       burryInsight: burryInsight || null,
+
+      // IV15 Intrinsic Value Analysis — Burry's full methodology
+      iv15Analysis: iv15Analysis || null,
 
       // Burry Framework Evaluation — applies his analytical principles to this stock
       burryFramework: burryFramework || null,

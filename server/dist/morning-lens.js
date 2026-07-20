@@ -54,6 +54,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const burry_substack_1 = require("./burry-substack");
 const volume_analysis_1 = require("./volume-analysis");
+const burry_iv15_1 = require("./burry-iv15");
 // ── LLM PROVIDER ABSTRACTION ──
 // Auto-detects Anthropic vs OpenAI key and routes accordingly
 // Tracks consecutive failures to avoid hammering a broken API
@@ -3268,6 +3269,11 @@ router.get('/lens/ticker/:symbol', async (req, res) => {
         if (burryFramework) {
             burryScoreCache.set(symbol.toUpperCase(), { score: burryFramework.overallScore, verdict: burryFramework.overallVerdict });
         }
+        // IV15 Intrinsic Value Analysis — Burry's full methodology
+        const iv15Analysis = await (0, burry_iv15_1.getFullIV15Analysis)(symbol, price).catch((err) => {
+            console.error(`[TICKER] IV15 analysis failed for ${symbol}: ${err?.message?.slice(0, 80)}`);
+            return null;
+        });
         // Build the response and cache it
         const responseData = {
             symbol,
@@ -3331,6 +3337,8 @@ router.get('/lens/ticker/:symbol', async (req, res) => {
             sectorDetected: sectorName,
             // Burry Lens — siloed read-only reference from Substack analysis
             burryInsight: burryInsight || null,
+            // IV15 Intrinsic Value Analysis — Burry's full methodology
+            iv15Analysis: iv15Analysis || null,
             // Burry Framework Evaluation — applies his analytical principles to this stock
             burryFramework: burryFramework || null,
             // Institutional Volume Breakdown — Burry-informed shareholder turnover
