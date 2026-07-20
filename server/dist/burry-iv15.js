@@ -44,22 +44,17 @@ async function gfFetch(endpoint) {
     }
 }
 async function fetchAllGFData(symbol) {
-    // Fetch summary + financials in parallel
-    const [summary, financials] = await Promise.all([
-        gfFetch(`/stock/${encodeURIComponent(symbol)}/summary`),
-        gfFetch(`/stock/${encodeURIComponent(symbol)}/financials`),
-    ]);
+    // Only need summary — company_data has everything
+    const summary = await gfFetch(`/stock/${encodeURIComponent(symbol)}/summary`);
     if (!summary)
         return null;
     const s = summary?.summary ?? summary;
-    const ratios = s?.ratio || {};
-    const general = s?.general || {};
-    const growth = s?.growth || {};
-    const profit = s?.profitability || {};
-    const fs = s?.financial_strength || {};
-    const val = s?.valuation || {};
-    const perShare = s?.per_share || {};
+    const cd = s?.company_data || {}; // 1200+ flat keys — the main data source
+    const ratios = s?.ratio || {}; // 75 keys with .value, .his, .indu
+    const general = s?.general || {}; // company, sector, etc.
     const pf = (v) => {
+        if (v === null || v === undefined || v === '' || v === 'N/A' || v === 'None')
+            return null;
         const n = parseFloat(v);
         return isNaN(n) ? null : n;
     };
@@ -67,66 +62,56 @@ async function fetchAllGFData(symbol) {
         const v = ratios[key]?.value;
         return pf(v);
     };
-    // Try to extract SBC from financials
+    // SBC per share derived from: fcf_per_share - fcf_net_sbc_per_share
     let sbcPerShare = null;
-    if (financials) {
-        try {
-            const incStmt = financials?.financials?.income ?? financials?.income_statement ?? {};
-            const annuals = Array.isArray(incStmt) ? incStmt : Object.values(incStmt);
-            if (annuals.length > 0) {
-                const latest = annuals[0];
-                const sbc = pf(latest?.stock_based_compensation ?? latest?.sbc);
-                const shares = pf(latest?.shares_outstanding ?? latest?.diluted_shares);
-                if (sbc !== null && shares !== null && shares > 0) {
-                    sbcPerShare = sbc / shares;
-                }
-            }
-        }
-        catch { }
+    const fcfPS = pf(cd.ttm_fcf_per_share);
+    const fcfNetSbc = pf(cd.fcf_net_sbc_per_share);
+    if (fcfPS !== null && fcfNetSbc !== null) {
+        sbcPerShare = fcfPS - fcfNetSbc;
     }
     return {
-        company: general.company || symbol,
+        company: general.company || cd.company || symbol,
         sector: general.supersector || general.sector || '',
-        industry: general.industry || '',
+        industry: general.industry || cd.industry || '',
         group: general.group || general.subindustry || '',
-        mktcap: pf(general.mktcap),
-        sharesOutstanding: pf(general.shares_outstanding),
-        pe: pfr('P/E(ttm)'),
+        mktcap: pf(cd.mktcap) || pf(cd.cap),
+        sharesOutstanding: pf(cd.shares),
+        pe: pfr('P/E(ttm)') ?? pf(cd.pe),
         fwdPe: pfr('Forward P/E'),
         ps: pfr('P/S'),
         pb: pfr('P/B'),
         evEbitda: pfr('EV-to-EBITDA'),
-        fcfYield: pfr('FCF Yield (%)'),
-        priceToFcf: pf(val.price_to_fcf),
-        revGrowthYoY: pf(growth.revenue_growth),
-        revGrowth3yr: pf(growth.revenue_3y_growth),
-        epsGrowthYoY: pf(growth.eps_growth),
-        epsGrowth3yr: pf(growth.eps_3y_growth),
-        grossMargin: pf(profit.grossmargin),
-        opMargin: pf(profit.operatingmargin),
-        netMargin: pf(profit.netmargin),
-        roic: pf(profit.roic),
-        roe: pf(profit.roe),
-        roa: pf(profit.roa),
-        fcfMargin: pf(profit.fcf_margin),
-        fcfPerShare: pf(perShare.fcf_per_share),
-        epsBasic: pf(perShare.eps_basic),
-        epsDiluted: pf(perShare.eps_diluted),
-        revenuePerShare: pf(perShare.revenue_per_share),
-        bookValuePerShare: pf(perShare.book_value_per_share),
-        debtToEbitda: pfr('Debt-to-EBITDA'),
-        debtToEquity: pf(fs.debt_to_equity),
+        fcfYield: pf(cd.FCFyield),
+        priceToFcf: pfr('PFCF'),
+        revGrowthYoY: pf(cd.rvn_growth_1y),
+        revGrowth3yr: pf(cd.rvn_growth_3y),
+        epsGrowthYoY: pf(cd.earning_growth_1y),
+        epsGrowth3yr: pf(cd.earning_growth_3y),
+        grossMargin: pf(cd.grossmargin),
+        opMargin: pfr('Operating margin (%)'),
+        netMargin: pfr('Net-margin (%)'),
+        roic: pf(cd.roic) ?? pfr('ROIC (%)'),
+        roe: pf(cd.roe) ?? pfr('ROE (%)'),
+        roa: pf(cd.roa) ?? pfr('ROA (%)'),
+        fcfMargin: pf(cd.FCFmargin),
+        fcfPerShare: pf(cd.ttm_fcf_per_share),
+        epsBasic: pf(cd.eps),
+        epsDiluted: pf(cd.ttm_eps),
+        revenuePerShare: pf(cd.ttm_revenue_per_share),
+        bookValuePerShare: pf(cd.book),
+        debtToEbitda: pfr('Debt-to-Ebitda'),
+        debtToEquity: pf(cd.debt2equity),
         interestCoverage: pfr('Interest Coverage'),
-        currentRatio: pf(fs.current_ratio),
-        piotroskiF: pf(fs.piotroski_f_score),
-        altmanZ: pf(fs.altman_z_score),
+        currentRatio: pf(cd.current_ratio),
+        piotroskiF: pfr('F-Score') ?? pf(cd.fscore),
+        altmanZ: pf(cd.zscore),
         sharesBuybackRate: pfr('Share Buyback Rate'),
         buybackYield: pfr('Buyback Yield %'),
         sbcPerShare,
-        gfValue: pf(val.gf_value),
-        gfValueMargin: pf(val.gf_value_margin),
-        peLow5yr: pf(val.pe_low_5y),
-        peHigh5yr: pf(val.pe_high_5y),
+        gfValue: pf(cd.gf_value),
+        gfValueMargin: pf(cd.margin_gf_value),
+        peLow5yr: pf(cd.pelow),
+        peHigh5yr: pf(cd.pehigh),
         psMed: ratios['P/S']?.his?.med ? pf(ratios['P/S'].his.med) : null,
     };
 }
